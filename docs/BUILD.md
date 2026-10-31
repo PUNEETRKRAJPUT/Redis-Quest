@@ -18,11 +18,11 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 
 | id | task | wave | status | model | spec | check | handoff |
 |---|---|---|---|---|---|---|---|
-| P0-01 | Repo skeleton: pnpm workspace, TS base, lint, package layout | 1 | todo | sonnet | specs/P0-01 | check/P0-01.sh | |
-| P0-02 | Docker: node Dockerfile, compose, Caddyfile, start + preflight scripts | 2 | todo | sonnet | specs/P0-02 | check/P0-02.sh | |
-| P0-03 | Fiction bible | 1 | todo | sonnet | specs/P0-03 | check/P0-03.sh | |
+| P0-01 | Repo skeleton: pnpm workspace, TS base, lint, package layout | 1 | done | sonnet | specs/P0-01 | check/P0-01.sh | handoffs/P0-01 |
+| P0-02 | Docker: node Dockerfile, compose, Caddyfile, start + preflight scripts | 2 | in progress | sonnet | specs/P0-02 | check/P0-02.sh | |
+| P0-03 | Fiction bible | 1 | in progress | sonnet | specs/P0-03 | check/P0-03.sh | |
 | P0-04 | Postgres schema, seed generator, outbox triggers, slow query | 2 | todo | sonnet | specs/P0-04 | check/P0-04.sh | |
-| P0-05 | Level file schema, loader, validator | 2 | todo | opus | specs/P0-05 | check/P0-05.sh | |
+| P0-05 | Level file schema, loader, validator | 2 | in progress | opus | specs/P0-05 | check/P0-05.sh | |
 | P0-06 | Engine skeleton: health, progress file + Redis mirror, WebSocket, CLI proxy | 3 | todo | sonnet | specs/P0-06 | check/P0-06.sh | |
 | P0-07 | App skeleton: baseline routes, slot registry, target switching | 3 | todo | opus | specs/P0-07 | check/P0-07.sh | |
 | P0-08 | Runner: load workspace module, call with deps, metrics, crash isolation | 3 | todo | sonnet | specs/P0-08 | check/P0-08.sh | |
