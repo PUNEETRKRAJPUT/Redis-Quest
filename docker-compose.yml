@@ -71,6 +71,22 @@ services:
     ports: ["127.0.0.1:${INSIGHT_PORT:-5540}:5540"]
     volumes: ["insight-data:/data"]
     mem_limit: 512m
+    # --- P0-11 note: no first-run env is needed. The EULA and other agreements are accepted through
+    # --- the REST API by insight-init (see docker/insight/README.md), so no env block lives here.
+
+  # --- P0-11 insight-init start
+  # One-shot: accepts Insight's agreements and adds the "Redis Quest" database. Idempotent.
+  insight-init:
+    image: curlimages/curl:latest
+    platform: linux/arm64
+    entrypoint: ["sh", "/scripts/provision.sh"]
+    volumes: ["./docker/insight:/scripts:ro"]
+    depends_on:
+      redis: { condition: service_healthy }
+      insight: { condition: service_started }
+    restart: "no"
+    mem_limit: 32m
+  # --- P0-11 insight-init end
 
   postgres:
     image: postgres:16

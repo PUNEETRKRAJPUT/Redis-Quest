@@ -27,4 +27,5 @@ and open http://localhost:3000.
 ## Licence
 
 MIT for the game. Redis 8 is tri-licensed RSALv2 / SSPLv1 / AGPLv3 and Redis Insight is SSPL; both are
-pulled as Docker images and run only on your machine.
+pulled as Docker images and run only on your machine. Starting the stack accepts Redis Insight's terms
+on your behalf so you never see a first-run dialog; analytics and notifications are left off.
