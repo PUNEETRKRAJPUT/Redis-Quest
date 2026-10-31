@@ -18,7 +18,12 @@
     "levels:validate": "node dist/levels/cli.js"
   },
   "dependencies": {
+    "pg": "^8.23.1",
+    "redis": "^5.12.1",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
   }
 }

@@ -9,6 +9,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@quest/shared": "workspace:*"
+    "@quest/shared": "workspace:*",
+    "fastify": "^5.12.7",
+    "pino": "^10.4.0"
   }
 }
