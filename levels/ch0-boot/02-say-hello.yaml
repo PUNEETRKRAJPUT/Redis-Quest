@@ -1,0 +1,71 @@
+id: ch0-02-say-hello
+chapter: ch0
+title: "Say hello"
+mode: cli
+
+story: |
+  The app is up on both laptops. Teja leans over: "ok but is Redis actually in there, or are we
+  just trusting the green tick?"
+
+  Fair question. You have never talked to this Redis directly. The game has a terminal built in, and
+  it is wired to the same Redis the app uses.
+
+brainstorm:
+  prompt: "How would you check that a database is alive, and how big it is, without opening any app code?"
+  options:
+    - id: ask-it-directly
+      label: "Connect a client to it and send it a command"
+      is_reasonable: true
+    - id: read-the-logs
+      label: "Read its log file and look for errors"
+      is_reasonable: true
+    - id: not-redis
+      label: "Not Redis: trust that the app loads, so the database must be fine"
+      is_reasonable: false
+
+teach: |
+  Redis is a server that answers commands. You send one, it sends one reply. The in-game terminal
+  is a Redis client, much like `redis-cli`.
+
+  Three commands for a first hello:
+
+  - `PING` asks "are you there?". A healthy server replies `PONG`.
+  - `INFO server` prints a block of facts about the server. Look for `redis_version`.
+  - `DBSIZE` replies with the number of keys in the current database.
+
+  Example, with the numbers a fresh instance might give:
+
+      DBSIZE
+      (integer) 0
+
+  Yours will not be zero: the game has already stored your save file here. You will meet it in the
+  next level.
+
+task: |
+  In the terminal below, run `PING`, then `INFO server`, then `DBSIZE`. The game only needs to see
+  the `PING`, but run all three: you will use them every time something feels wrong.
+
+hints:
+  - "Type the command into the terminal and press Enter. One command per line."
+  - "INFO takes a section name, so INFO server prints only the server facts."
+
+verify:
+  - type: event
+    kind: custom
+    match: { name: cli_ping }
+    timeoutMs: 120000
+    message: "The game has not seen a PING from the terminal yet. Run PING by itself and press Enter."
+
+show_me: kv_card
+docs:
+  - https://redis.io/docs/latest/develop/get-started/data-store/
+
+reward:
+  xp: 10
+
+solutions:
+  reference: solutions/02-reference.redis
+  wrong:
+    - path: solutions/02-wrong-info-only.redis
+      expect: wrong
+      because: "INFO server is useful, but it is not a PING. The game waits for a PING to come through the terminal."

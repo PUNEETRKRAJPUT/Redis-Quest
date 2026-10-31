@@ -1,0 +1,77 @@
+id: ch0-04-the-second-window
+chapter: ch0
+title: "The second window"
+mode: ops
+
+story: |
+  Teja likes the terminal, but he is a frontend person. "Is there a way to just look at the keys?
+  Click on them? I process things with my eyes."
+
+  There is a second tool in this stack: Redis Insight, a visual browser for whatever is inside Redis.
+  It is already connected to your Redis, so you only need to open it.
+
+brainstorm:
+  prompt: "When something looks wrong in Redis, when would you reach for a visual tool instead of the terminal?"
+  options:
+    - id: browse-and-inspect
+      label: "To browse keys and values quickly, especially when you do not know what to look for yet"
+      is_reasonable: true
+    - id: only-terminal
+      label: "Never: the terminal is always faster"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: look at the app's own logs instead"
+      is_reasonable: true
+
+teach: |
+  Redis Insight is the official graphical client for Redis. In this project it runs as its own
+  container and listens on port 5540, so you open it at `http://localhost:5540`.
+
+  The setup has already added a database called "Redis Quest" that points at your Redis, so you do
+  not need to type a host or a port.
+
+  Port numbers are an easy place to go wrong. Older Redis Stack bundles shipped Insight inside the
+  Redis container and used port 8001. Here Insight is a separate image on 5540, and nothing is
+  listening on 8001.
+
+  Insight and the in-game terminal talk to the same Redis. Whatever you see in one, you can see
+  in the other.
+
+  One more key to know: `game:welcome:gift` expires on its own. `TTL <key>` replies with the
+  seconds left before a key disappears.
+
+task: |
+  Open Redis Insight at `http://localhost:5540` and open the "Redis Quest" database. Find the key
+  `game:welcome:gift` and read its time to live.
+
+  Then type that number, in seconds, in the box below. It counts down, so anything within ten
+  minutes of the real value is accepted.
+
+hints:
+  - "The address is http://localhost:5540. Port 5540, not 8001."
+  - "Use the database already listed in Insight. You do not need to add a new one."
+  - "If you cannot spot the TTL in Insight, TTL game:welcome:gift in the game terminal gives the same number in seconds."
+
+verify:
+  - type: answer
+    prompt: "How many seconds does the game:welcome:gift key have left to live?"
+    expected:
+      cmd: [TTL, "game:welcome:gift"]
+      transform: number
+    compare: numeric_within
+    tolerance: 600
+    message: "That is not close to the TTL Redis reports right now. It is in seconds, and it counts down."
+
+show_me: ttl_timer
+docs:
+  - https://redis.io/docs/latest/develop/tools/insight/
+
+reward:
+  xp: 20
+
+solutions:
+  reference: solutions/04-reference.sh
+  wrong:
+    - path: solutions/04-wrong-port-8001.sh
+      expect: wrong
+      because: "Port 8001 was where Insight lived inside the old Redis Stack bundle. This project runs Insight on its own, on 5540, so nothing answers on 8001."

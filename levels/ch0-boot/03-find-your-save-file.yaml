@@ -1,0 +1,78 @@
+id: ch0-03-find-your-save-file
+chapter: ch0
+title: "Find your save file"
+mode: cli
+
+story: |
+  Teja is poking at the terminal now. "DBSIZE says there is already something in here. We have not
+  written anything. What is it?"
+
+  The game keeps your save file in Redis, under keys that start with `game:`. Finding it is your
+  first real look at how Redis stores something.
+
+brainstorm:
+  prompt: "Your player record has a name, an XP total and a few counts. What shape would you give it in Redis?"
+  options:
+    - id: one-hash
+      label: "One key holding named fields"
+      is_reasonable: true
+    - id: one-key-per-field
+      label: "A separate key for each field, like game:player:name and game:player:xp"
+      is_reasonable: true
+    - id: not-redis
+      label: "Not Redis: keep it in a file on disk"
+      is_reasonable: true
+
+teach: |
+  Redis keys are names, and by convention they look like `object-type:id`, for example
+  `user:1000`. The colon is just a habit, not a namespace feature.
+
+  - `KEYS game:*` lists every key matching the pattern.
+  - `TYPE <key>` tells you what kind of value a key holds. A missing key gives `none`.
+  - Different types have different read commands. A hash is a record of field-value pairs, read
+    with `HGET <key> <field>` for one field or `HGETALL <key>` for all of them.
+
+  Ask the wrong command for a type and Redis refuses with `WRONGTYPE`. That error is Redis telling you
+  to check `TYPE` first.
+
+  A warning: `KEYS` walks the whole keyspace in one go and blocks the server while it does. The docs
+  say not to use it in regular application code; it is for debugging only. In Chapter 1 you will meet
+  `SCAN`, which does the same job a little at a time and is safe on a busy server.
+
+task: |
+  Find your save file. List the keys that start with `game:`, check the type of the one that ends
+  with your player id (`game:player:{{player.id}}`), and read its fields.
+
+  Then type back the value of its `name` field in the box below.
+
+hints:
+  - "Start with KEYS game:* and look for the key that contains your player id."
+  - "TYPE game:player:{{player.id}} tells you which read command to use."
+  - "HGETALL prints field, value, field, value. The value right after name is the one you need."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "game:player:{{player.id}}"]
+        equals: hash
+        message: "game:player:{{player.id}} is not a hash any more. Did a command overwrite it?"
+  - type: answer
+    prompt: "What is the value of the name field in your save file?"
+    expected:
+      cmd: [HGET, "game:player:{{player.id}}", name]
+    compare: equals
+    message: "That is not the name stored in your save file. Run HGET game:player:{{player.id}} name and copy what it prints."
+
+show_me: hash_card
+docs:
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+
+reward:
+  xp: 15
+
+solutions:
+  reference: solutions/03-reference.redis
+  wrong:
+    - path: solutions/03-wrong-get-on-a-hash.redis
+      expect: wrong
+      because: "GET only reads strings. Your save file is a hash, so Redis answers WRONGTYPE and you never see the name. TYPE first, then HGET or HGETALL."

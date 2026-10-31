@@ -1,0 +1,78 @@
+id: ch0-05-roommate-ran-down
+chapter: ch0
+title: "Roommate ran down"
+mode: ops
+
+story: |
+  Teja's laptop got hot again, so he ran `docker compose down` to cool it. Then he asked the
+  question out loud. "So... is the save file gone? Is everything we just looked at gone?"
+
+  You do not know yet. Redis keeps its data in memory, and the container it lived in has just been
+  removed. Time to find out, safely, on your own laptop.
+
+brainstorm:
+  prompt: "The Redis container is removed and a new one is created. What decides whether your keys are still there?"
+  options:
+    - id: data-volume
+      label: "Whether Redis wrote its data to disk, and whether that disk (the volume) survived"
+      is_reasonable: true
+    - id: always-lost
+      label: "Nothing survives, because Redis is only memory"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: the game keeps a copy of your progress somewhere else"
+      is_reasonable: true
+
+teach: |
+  `docker compose down` stops and removes the containers. It leaves named volumes alone unless you
+  add `-v`.
+
+  Redis in this project keeps its data directory, `/data`, on a named volume. So there are two
+  separate things: the container is only the process, and the volume is the disk.
+
+  - `docker compose down` removes the process, keeps the disk.
+  - `docker compose down -v` removes the process and the disk.
+
+  Whether Redis actually writes anything into `/data` depends on persistence settings. That is a
+  whole chapter later in the game, so for now just watch what happens.
+
+  There is also a safety net here. The game keeps your progress in a file on your Mac, and it
+  mirrors it into Redis under `game:*`. If Redis comes back empty, the game can rebuild the mirror
+  from that file. A real service often has no such file, which is why this matters.
+
+  The engine counts every time it boots in `game:engine:boots`, so you can prove a restart happened.
+
+task: |
+  In the repo folder, stop the stack with `docker compose down`, then bring it back with
+  `./scripts/start`. Reload this page. The game checks that the engine has now booted at least twice
+  and that your save file, `game:player:{{player.id}}`, still exists.
+
+hints:
+  - "Plain docker compose down, with no flags. Then ./scripts/start to bring everything back."
+  - "The game page will lose its connection while the stack is down. Reload it once ./scripts/start finishes."
+  - "If your save file is gone, you probably ran down with -v, which also removes the volumes."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [GET, "game:engine:boots"]
+        gte: 2
+        message: "The engine has booted only once. Did the stack really go down and come back up?"
+      - cmd: [EXISTS, "game:player:{{player.id}}"]
+        equals: 1
+        message: "Your save file is gone from Redis. Did you run down with -v? That deletes the volumes too."
+
+show_me: hash_card
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+
+reward:
+  xp: 30
+  badge: "Booted"
+
+solutions:
+  reference: solutions/05-reference.sh
+  wrong:
+    - path: solutions/05-wrong-down-volumes.sh
+      expect: wrong
+      because: "down -v removes the named volumes, so the data directory and your save file in Redis are gone. The game can restore them from its progress file, but a service without that file would have lost everything."

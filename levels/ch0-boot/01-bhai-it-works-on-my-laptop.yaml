@@ -1,0 +1,77 @@
+id: ch0-01-bhai-it-works-on-my-laptop
+chapter: ch0
+title: "Bhai, it works on my laptop"
+mode: ops
+
+story: |
+  Teja closed the terminal window that was running the server, and now his browser shows a blank
+  refused-connection page. You never wrote down how the app starts, so he cannot start it either.
+
+  Harry Bhaiya has already told the whole mess hall it launches tonight. The app, the database
+  and Redis all need to be up on one laptop, started by one command, and the game has to see them.
+
+brainstorm:
+  prompt: "Redis, the database and the app all have to run together on a laptop. How would you start them so Teja can do it too?"
+  options:
+    - id: one-command
+      label: "One command that starts everything, the same on every laptop"
+      is_reasonable: true
+    - id: install-by-hand
+      label: "Install Redis and Postgres on each laptop by hand, then start each one"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: skip the database, keep the data in the app's memory for now"
+      is_reasonable: true
+
+teach: |
+  This project runs as a set of containers described in one `docker-compose.yml`: Redis, Postgres,
+  the app, Redis Insight and the game's own server (the engine). One file, so every laptop gets the
+  same setup.
+
+  - `docker compose up -d` starts the services in the background.
+  - `./scripts/start` is a thin wrapper that checks your machine first (Docker running, ports free),
+    then runs compose and waits until the services are healthy.
+  - Redis listens on port 6379, the default Redis port. Here it is published on `127.0.0.1` only,
+    so only your own Mac can reach it.
+
+  Starting only the `redis` service gives you a database and nothing else. The game never comes up,
+  because the engine and the web page are separate services.
+
+  You do not report anything by hand: when this page loads and talks to the engine, the game
+  notices on its own.
+
+task: |
+  Open a terminal in the repo folder and run `./scripts/start`. Wait until it prints that the
+  services are healthy, then reload the game in your browser. The game checks that its page reached
+  the engine and that the engine has booted at least once.
+
+hints:
+  - "Run it from the repo folder, the one that contains docker-compose.yml."
+  - "If the script prints a FAIL line, fix that first (Docker not running, or a port already in use) and run it again."
+  - "Docker Desktop must be open and running before the script can start anything."
+
+verify:
+  - type: event
+    kind: custom
+    match: { name: ui_connected }
+    timeoutMs: 5000
+    message: "The game page has not reached the engine yet. Is the stack up, and did you reload this page after it started?"
+  - type: redis
+    checks:
+      - cmd: [GET, "game:engine:boots"]
+        gte: 1
+        message: "The engine has not recorded a boot yet. Check that ./scripts/start finished without a FAIL line."
+
+show_me: kv_card
+docs:
+  - https://redis.io/docs/latest/develop/get-started/data-store/
+
+reward:
+  xp: 10
+
+solutions:
+  reference: solutions/01-reference.sh
+  wrong:
+    - path: solutions/01-wrong-redis-only.sh
+      expect: wrong
+      because: "That starts the redis service alone. The engine and the web page are separate services, so the game never comes up and nothing records a boot."

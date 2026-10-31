@@ -1,0 +1,36 @@
+id: ch0
+title: "Boot"
+incident:
+  - from: roommate
+    time: "19:24"
+    text: "bhai the app is not opening on my laptop. it works on yours?"
+  - from: you
+    time: "19:25"
+    text: "works on mine. what does it say"
+  - from: roommate
+    time: "19:27"
+    text: "ERR_CONNECTION_REFUSED. screenshot attached. 12 screenshots actually"
+  - from: roommate
+    time: "19:33"
+    text: "I did not touch the backend I swear. ok I touched ONE thing"
+  - from: you
+    time: "19:34"
+    text: "which thing"
+  - from: roommate
+    time: "19:36"
+    text: "closed the terminal. was that the server"
+  - from: senior
+    time: "20:06"
+    text: "I told the whole mess hall it launches tonight. Do not make me a liar 🙏"
+  - from: you
+    time: "20:07"
+    text: "one command brings the whole thing up. then we look at what is inside it"
+  - from: roommate
+    time: "20:09"
+    text: "ok. and if I ever run docker compose down again, is our data gone? asking for a friend 😅"
+levels:
+  - ch0-01-bhai-it-works-on-my-laptop
+  - ch0-02-say-hello
+  - ch0-03-find-your-save-file
+  - ch0-04-the-second-window
+  - ch0-05-roommate-ran-down

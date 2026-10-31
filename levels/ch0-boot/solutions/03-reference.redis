@@ -1,0 +1,8 @@
+# Debugging only: KEYS blocks the server while it scans. SCAN comes in Chapter 1.
+KEYS game:*
+# What is it? A hash: a record of field-value pairs.
+TYPE game:player:{{player.id}}
+# All fields and values, flat: field, value, field, value.
+HGETALL game:player:{{player.id}}
+# Just the one field you need to type back.
+HGET game:player:{{player.id}} name

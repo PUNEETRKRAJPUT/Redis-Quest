@@ -1,0 +1,2 @@
+# Wrong: GET is for strings. On a hash it replies WRONGTYPE.
+GET game:player:{{player.id}}

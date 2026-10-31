@@ -1,0 +1,6 @@
+# Is anyone there? Replies PONG.
+PING
+# Facts about the server, including redis_version.
+INFO server
+# How many keys are in this database right now.
+DBSIZE
