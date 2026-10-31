@@ -1,7 +1,6 @@
 # P0-06: Engine skeleton: health, levels API, progress file + Redis mirror, WebSocket, CLI proxy, log tail
 
-> DRAFT until the P0-05 handoff lands; the level types and loader names below must match what
-> `docs/handoffs/P0-05.md` reports. The orchestrator finalises this spec before spawning.
+> Finalised against `docs/handoffs/P0-05.md` (read its "Exported API" and "What P0-06 must know").
 
 **Goal.** The single-instance game server that the UI talks to: it knows the levels, owns the learner's
 progress, runs the in-browser Redis CLI, streams events and logs, and tells the app which Redis target
@@ -19,6 +18,14 @@ Chapter 0 must be playable from `curl`.
 **Must not touch.** `app/`, `runner/`, `ui/`, `packages/`, `levels/` content, `docker/`, `postgres/`.
 
 **Interfaces to honour.**
+- Levels come from `@quest/shared`: `loadAllLevels(LEVELS_DIR)` returns ordered chapters plus `errors`;
+  if `errors` is non-empty the engine logs each with `formatLevelError` and serves `503` with the error
+  list on every `/api` route instead of starting half-broken. `LoadedChapter.id` is the short id (`ch0`),
+  `dirName` the directory (`ch0-boot`). Level ids look like `ch0-03-find-your-save-file`. Render
+  `story`, `teach`, `task`, hints and brainstorm text with `renderTemplates(value, ctx)` where
+  `ctx = { player, level, chapter, env }`; it throws on unknown variables, so catch and return 500 with the
+  message. Paths inside a level resolve with `resolveLevelPath`.
+- A level's `brainstorm` always has a `not-redis` option and the learner always writes one line.
 - Fastify on `PORT` 4200. Serves `ui/dist` statically at `/` (if present) with SPA fallback; everything
   under `/api` and `/ws` is the engine. Env from the P0-02 spec plus `LEVELS_DIR`.
 - **Progress file is the source of truth:** `${PROGRESS_DIR}/progress.json`, schema versioned
@@ -37,14 +44,23 @@ Chapter 0 must be playable from `curl`.
   - `GET /api/chapters` (ordered, with level summaries and statuses); `GET /api/levels/:id` (rendered
     markdown fields with templating applied, hints hidden until requested)
   - `POST /api/levels/:id/start`, `POST /api/levels/:id/brainstorm { optionId, text }`,
-    `POST /api/levels/:id/hint` (reveals next hint, records it), `POST /api/levels/:id/verify` (runs
-    `setup` once, then returns `{ verdict: 'not_implemented' }` for now; P0-09 fills it),
+    `POST /api/levels/:id/hint` (reveals next hint, records it), `POST /api/levels/:id/verify` with body
+    `{ answers?: { [verifyIndex]: string | string[] } }` for quiz and typed answers (runs the level's
+    `setup` steps once per level start, refusing anything `SETUP_FORBIDDEN_COMMANDS` or `game:*` as the
+    schema does, then returns `{ verdict: 'not_implemented' }`; P0-09 replaces the body of this handler, so
+    put it behind one function `runVerification(level, ctx, answers)` in its own module),
     `POST /api/levels/:id/complete` (dev-only shortcut behind `ENGINE_DEV=1`, used by the check)
   - `POST /api/cli { command }` → `{ reply, type, ms }`: split like a shell (quotes), run with
     `redis.sendCommand`, format replies like `redis-cli` (integers, bulk, arrays with indices, nil,
     errors). Never refuse a command (it is the learner's machine) but emit a `cli.dangerous` event for
     `KEYS`, `FLUSHALL`, `FLUSHDB`, `MONITOR`, `DEBUG`.
   - `GET /api/target`, `PUT /api/target { redisUrl }`; `GET /api/slots`, `PUT /api/slots { active: [] }`
+  - `GET /api/workspace/tree` and `GET|PUT /api/workspace/file?path=<rel>` for the UI editor: paths are
+    resolved inside `WORKSPACE_DIR` only (reject `..`, absolute paths and symlinks escaping it); `PUT`
+    writes atomically; only `.js`, `.mjs`, `.md`, `.redis`, `.sh`, `.yaml`, `.json` are allowed
+  - `POST /api/events { kind: 'custom', name, data? }` lets the UI report `custom` events the schema
+    expects for Chapter 0 (`ui_connected`, `cli_ping`); the engine also emits `cli_ping` itself when a
+    `PING` goes through `/api/cli`
   - `GET /internal/app-config` → `{ target, activeSlots, dbExtraLatencyMs, etag }` (polled by every
     app instance every 2 s; include `ETag`/`If-None-Match` support)
   - `POST /internal/metrics` (app instances push per-second route metrics; keep the last 5 minutes in
@@ -57,8 +73,8 @@ Chapter 0 must be playable from `curl`.
   `redis.state` events on connect/disconnect. Switching target reconnects cleanly.
 - Structured logs (pino) to stdout and `${LOG_DIR}/engine/engine.log`.
 
-**Work.** Build the above; vitest for progress file atomicity and restore, CLI parsing and formatting,
-app-config ETag; `scripts/check/P0-06.sh`: build, `docker compose up -d --build redis postgres engine`
+**Work.** Build the above; vitest (in `engine/test/`) for progress file atomicity and restore, CLI
+parsing and formatting, workspace path containment, app-config ETag; `scripts/check/P0-06.sh`: build, `docker compose up -d --build redis postgres engine`
 (use the repo `.env`), then via curl: health; create player; chapters list contains `ch0-boot` levels
 from `levels/` (if Chapter 0 content is not written yet, the check creates a temporary chapter from
 `levels/_examples` in a temp `LEVELS_DIR`); start level, brainstorm, hint, `complete` with `ENGINE_DEV=1`;
