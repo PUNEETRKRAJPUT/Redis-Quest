@@ -40,7 +40,24 @@ services:
   engine:
     <<: *node
     command: ["node", "engine/dist/main.js"]
-    environment: { <<: *node-env, PORT: "4200" }
+    # --- P0-06 engine mounts start
+    # The QUEST_* overrides let scripts/check/P0-06.sh run against scratch directories; unset, they are the real ones.
+    environment:
+      <<: *node-env
+      PORT: "4200"
+      LEVELS_DIR: /levels
+      ENGINE_DEV: "${ENGINE_DEV:-}"
+      # host ports, readable from levels as {{env.NAME}}
+      REDIS_PORT: "${REDIS_PORT:-6379}"
+      PROXY_PORT: "${PROXY_PORT:-3000}"
+      INSIGHT_PORT: "${INSIGHT_PORT:-5540}"
+      PG_PORT: "${PG_PORT:-5432}"
+    volumes:
+      - ${QUEST_WORKSPACE_DIR:-./workspace}:/workspace
+      - ./logs:/logs
+      - ${QUEST_PROGRESS_DIR:-./.progress}:/progress
+      - ${QUEST_LEVELS_DIR:-./levels}:/levels:ro
+    # --- P0-06 engine mounts end
     mem_limit: 512m
 
   app:

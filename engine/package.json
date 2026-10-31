@@ -9,6 +9,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@quest/shared": "workspace:*"
+    "@fastify/static": "^10.1.8",
+    "@fastify/websocket": "^11.3.6",
+    "@quest/shared": "workspace:*",
+    "fastify": "^5.12.7",
+    "pino": "^10.4.0",
+    "redis": "^5.12.1"
   }
 }

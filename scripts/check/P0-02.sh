@@ -58,8 +58,8 @@ done
 
 section "node image contents"
 NODE_IMG=redis-quest-node:latest
-OUT="$(docker run --rm --platform linux/arm64 "$NODE_IMG" node engine/dist/main.js 2>&1)"
-if [ "$OUT" = "@quest/engine" ]; then ok "node engine/dist/main.js prints $OUT"; else bad "engine main printed: $OUT"; fi
+OUT="$(docker run --rm --platform linux/arm64 "$NODE_IMG" node runner/dist/main.js 2>&1)"
+if [ "$OUT" = "@quest/runner" ]; then ok "node runner/dist/main.js prints $OUT"; else bad "engine main printed: $OUT"; fi
 for pkg in app runner; do
   OUT="$(docker run --rm --platform linux/arm64 "$NODE_IMG" node $pkg/dist/main.js 2>&1)"
   if [ "$OUT" = "@quest/$pkg" ]; then ok "node $pkg/dist/main.js prints $OUT"; else bad "$pkg main printed: $OUT"; fi

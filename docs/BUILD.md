@@ -23,11 +23,11 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 | P0-03 | Fiction bible | 1 | done | sonnet | specs/P0-03 | check/P0-03.sh | handoffs/P0-03 |
 | P0-04 | Postgres schema, seed generator, outbox triggers, slow query | 2 | done | sonnet | specs/P0-04 | check/P0-04.sh | handoffs/P0-04 |
 | P0-05 | Level file schema, loader, validator | 2 | done | opus | specs/P0-05 | check/P0-05.sh | handoffs/P0-05 |
-| P0-06 | Engine skeleton: health, progress file + Redis mirror, WebSocket, CLI proxy | 3 | in progress | sonnet | specs/P0-06 | check/P0-06.sh | |
+| P0-06 | Engine skeleton: health, progress file + Redis mirror, WebSocket, CLI proxy | 3 | done | sonnet | specs/P0-06 | check/P0-06.sh | handoffs/P0-06 |
 | P0-07 | App skeleton: baseline routes, slot registry, target switching | 3 | in progress | opus | specs/P0-07 | check/P0-07.sh | |
 | P0-08 | Runner: load workspace module, call with deps, metrics, crash isolation | 3 | done | sonnet | specs/P0-08 | check/P0-08.sh | handoffs/P0-08 |
 | P0-09 | Verifier engine: redis, antipattern, quiz, event; traffic + behavior wiring | 4 | todo | opus | specs/P0-09 | check/P0-09.sh | |
-| P0-10 | UI shell: chapter map, level view (seven beats), terminal, editor, logs, show-me | 4 | todo | sonnet | specs/P0-10 | check/P0-10.sh | |
+| P0-10 | UI shell: chapter map, level view (seven beats), terminal, editor, logs, show-me | 4 | in progress | sonnet | specs/P0-10 | check/P0-10.sh | |
 | P0-11 | Redis Insight auto-provisioning via its API | 3 | done | sonnet | specs/P0-11 | check/P0-11.sh | handoffs/P0-11 |
 | P0-12 | CI: build, lint, level validation, checks, Playwright Chapter 0 | 5 | todo | sonnet | specs/P0-12 | check/P0-12.sh | |
 
@@ -44,6 +44,7 @@ start early if everything it depends on is `done`.
 | T1 | Five-tester playtest, findings, fixes | todo |
 
 ## Decisions log (newest first)
+- 2026-11-01 Engine refuses to start on invalid levels by design; content agents must keep chapters valid at every save (write level files before listing them in chapter.yaml).
 - 2026-11-01 Schema rulings: `traffic.baseline: true` means graded against a baseline the engine records itself (scenario run with the learner's slots off); antipattern checks describe the healthy state and a failing check is the hit; behavior assertions have `repeat`/`expectCount`; antipattern may be behavior-shaped (additive change requested); decision `wrong` entries use `option:`.
 - 2026-11-01 Seed is committed gzipped (`002-seed.sql.gz`, 11 MB); the Postgres image loads it natively. `player_stats()` p50 measured 175-290 ms here.
 - 2026-11-01 Verified: arm64 `redis:8` (8.10.3) loads search, ReJSON, timeseries, bf with no flags. Docker Desktop here has 7.7 GiB. `.dockerignore` lives next to the Dockerfile.
