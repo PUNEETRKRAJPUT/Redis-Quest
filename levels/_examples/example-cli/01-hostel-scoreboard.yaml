@@ -76,6 +76,13 @@ verify:
       - cmd: [ZREVRANK, "lb:hostel:h-c-02-2", "user:{{player.id}}"]
         equals: 0
         message: "With 150 points you should be at the top (rank 0)."
+  - type: answer        # a typed answer; the expected value is read from Redis when verify runs
+    prompt: "What did ZREVRANK return for you?"
+    expected:
+      cmd: [ZREVRANK, "lb:hostel:h-c-02-2", "user:{{player.id}}"]
+      transform: number
+    compare: equals
+    message: "That is not the rank Redis has for you right now. Run ZREVRANK again and type exactly what it returns."
   - type: antipattern   # checks describe the healthy state; a failing check is a hit
     checks:
       - cmd: [EXISTS, "lb:hostel:h-c-02-2:list"]

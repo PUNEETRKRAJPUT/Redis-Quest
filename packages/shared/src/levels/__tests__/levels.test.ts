@@ -66,13 +66,22 @@ function schemaErrors(level: unknown): string[] {
 }
 
 describe('valid examples', () => {
-  for (const name of ['example-cli', 'example-code', 'example-decision', 'example-ops']) {
+  const levelCounts: Record<string, number> = { 'example-cli': 1, 'example-code': 2, 'example-decision': 1, 'example-ops': 1 };
+  for (const [name, count] of Object.entries(levelCounts)) {
     test(`${name} loads with no errors`, async () => {
       const r = await loadChapter(join(EXAMPLES, name));
       expect(messages(r.errors)).toEqual([]);
-      expect(r.chapter?.levels).toHaveLength(1);
+      expect(r.chapter?.levels).toHaveLength(count);
     });
   }
+
+  test('the token bucket example uses a behavior-shaped antipattern', async () => {
+    const r = await loadChapter(join(EXAMPLES, 'example-code'));
+    const level = r.chapter!.levels[1]!.level;
+    const anti = level.verify.find((v) => v.type === 'antipattern');
+    expect(anti && 'slot' in anti && anti.slot).toBe('ratelimit.allow');
+    expect(anti && 'concurrency' in anti && anti.concurrency).toBe(100);
+  });
 
   test('markdown from { file } is inlined and its source recorded', async () => {
     const r = await loadChapter(join(EXAMPLES, 'example-cli'));
@@ -119,6 +128,7 @@ describe('invalid examples fail with file:line:col and the right message', () =>
     'id-mismatch': { path: 'id', message: 'id must be id-mismatch-01-scoreboard' },
     'unknown-template-variable': { path: 'task', message: 'unknown template variable {{player.email}}' },
     'bad-docs-url': { path: 'docs[0]', message: 'must be official pages starting with https://redis.io/docs/' },
+    'antipattern-both-shapes': { path: 'verify[1]', message: 'an antipattern uses either checks or slot/fixtures/assertions, not both' },
   };
 
   test('every invalid directory has an expectation', async () => {
@@ -396,5 +406,84 @@ describe('loader rules (file system)', () => {
     await writeFile(fixture, 'steps:\n  - cmd: [FLUSHDB]\n');
     const [e] = await validateLevels(dir);
     expect(e).toMatchObject({ file: fixture, line: 2, path: 'steps[0].cmd[0]' });
+  });
+});
+
+describe('follow-up 1: behavior-shaped antipatterns, absolute traffic, answer', () => {
+  const antiBehavior = (extra: Record<string, unknown> = {}) => ({
+    type: 'antipattern',
+    slot: 'ratelimit.allow',
+    fixtures: 'f.yaml',
+    concurrency: 100,
+    assertions: [{ call: { args: ['u'] }, repeat: 100, expectCount: { value: true, lte: 10 }, message: 'races' }],
+    ...extra,
+  });
+  const withAnti = (anti: Record<string, unknown>) => {
+    const l = baseLevel();
+    l.verify = [(l.verify as unknown[])[0], anti];
+    return schemaErrors(l);
+  };
+
+  test('a behavior-shaped antipattern is valid', () => {
+    expect(withAnti(antiBehavior())).toEqual([]);
+  });
+
+  test('both shapes, or a partial behavior shape, are errors', () => {
+    expect(withAnti(antiBehavior({ checks: [{ cmd: ['EXISTS', 'x'], equals: 0, message: 'm' }] }))[0]).toContain('not both');
+    expect(withAnti({ type: 'antipattern', slot: 'ratelimit.allow' })).toEqual([
+      'verify.1: a behavior-shaped antipattern needs slot, fixtures and assertions (missing: fixtures, assertions)',
+    ]);
+    expect(withAnti({ type: 'antipattern' })).toEqual(['verify.1: an antipattern needs checks, or slot + fixtures + assertions']);
+  });
+
+  test('behavior-shaped antipattern assertions need a message', () => {
+    expect(withAnti(antiBehavior({ assertions: [{ call: { args: [] }, expect: true }] }))).toEqual([
+      'verify.1.assertions.0: antipattern assertions need a message (it is the "works, but wrong" feedback)',
+    ]);
+  });
+
+  test('a missing antipattern fixtures file is reported', async () => {
+    const root = await tempTree();
+    const dir = join(root, 'example-code');
+    await cp(join(EXAMPLES, 'example-code'), dir, { recursive: true });
+    const file = join(dir, '02-token-bucket.yaml');
+    await writeFile(file, readFileSync(file, 'utf8').replace(/(concurrency: 100)/, '$1').replace(/(type: antipattern[\s\S]*?)fixtures: fixtures\/02-reset-buckets\.yaml/, '$1fixtures: fixtures/nope.yaml'));
+    expect(messages(await validateLevels(dir))).toEqual(['verify[1].fixtures: file not found: fixtures/nope.yaml']);
+  });
+
+  test('absolute traffic assertions need no baseline', () => {
+    const traffic = (assertions: Record<string, unknown>) =>
+      withAnti({ type: 'traffic', scenario: 'toss-time-100', baseline: false, assertions }).filter((e) => !e.includes('works_but_wrong'));
+    expect(traffic({ db_queries_lte: 2, p99_ms_lte: 50 })).toEqual([]);
+    expect(traffic({ db_queries_lte: 2.5 })[0]).toContain('verify.1.assertions.db_queries_lte');
+  });
+
+  const answer = (extra: Record<string, unknown> = {}) => ({
+    type: 'answer',
+    prompt: 'How many users did SCAN find?',
+    expected: { cmd: ['SCARD', 'users:{{player.id}}'], transform: 'number' },
+    message: 'Not the count Redis has.',
+    ...extra,
+  });
+  const withAnswer = (a: Record<string, unknown>) => {
+    const l = plainLevel();
+    l.verify = [a];
+    return schemaErrors(l);
+  };
+
+  test('answer verifiers', () => {
+    expect(withAnswer(answer())).toEqual([]);
+    expect(withAnswer(answer({ compare: 'numeric_within', tolerance: 5, expected: { cmd: ['TTL', 'k'], transform: 'number' } }))).toEqual([]);
+    expect(withAnswer(answer({ compare: 'numeric_within' }))).toEqual(['verify.0.compare: numeric_within needs a tolerance']);
+    expect(withAnswer(answer({ tolerance: 1 }))).toEqual(['verify.0.tolerance: tolerance is only used with compare: numeric_within']);
+    expect(withAnswer(answer({ expected: { cmd: ['DEL', 'k'] } }))[0]).toContain('DEL is not on the read-only allowlist');
+    expect(withAnswer(answer({ expected: { cmd: ['{{env.C}}'] } }))[0]).toContain('must be literal');
+    expect(withAnswer(answer({ message: undefined }))).toEqual(['verify.0.message: Invalid input: expected string, received undefined']);
+  });
+
+  test('the cli example carries an answer verifier', async () => {
+    const r = await loadChapter(join(EXAMPLES, 'example-cli'));
+    const a = r.chapter!.levels[0]!.level.verify.find((v) => v.type === 'answer');
+    expect(a && a.type === 'answer' && a.expected.cmd).toEqual(['ZREVRANK', 'lb:hostel:h-c-02-2', 'user:{{player.id}}']);
   });
 });

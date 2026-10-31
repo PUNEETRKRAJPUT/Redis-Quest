@@ -9,7 +9,7 @@ describe('verdict', () => {
   });
 
   test('any failing non-antipattern verifier is wrong', () => {
-    for (const t of ['redis', 'behavior', 'traffic', 'event', 'quiz'] as const) {
+    for (const t of ['redis', 'behavior', 'traffic', 'event', 'quiz', 'answer'] as const) {
       expect(verdict([r('redis', true), r(t, false)])).toBe('wrong');
     }
   });

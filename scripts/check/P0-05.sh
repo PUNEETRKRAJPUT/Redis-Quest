@@ -75,15 +75,29 @@ missing-solution-file|solutions.reference: file not found: solutions/does-not-ex
 id-mismatch|id: id must be id-mismatch-01-scoreboard
 unknown-template-variable|task: unknown template variable {{player.email}}
 bad-docs-url|docs[0]: docs links must be official pages starting with https://redis.io/docs/
+antipattern-both-shapes|verify[1]: an antipattern uses either checks or slot/fixtures/assertions, not both
 CASES
 
 step "the whole $EX tree fails (it contains the invalid cases)"
 OUT=$(node "$CLI" "$EX" 2>&1); RC=$?
 N=$(printf '%s\n' "$OUT" | grep -cE '^levels/_examples/invalid/[^ ]+:[0-9]+:[0-9]+ ')
-[ $RC -eq 1 ] && [ "$N" -ge 7 ] && pass "$EX: exit 1 with $N positioned errors" || { fail "$EX (exit $RC, $N errors)"; echo "$OUT"; }
+[ $RC -eq 1 ] && [ "$N" -ge 8 ] && pass "$EX: exit 1 with $N positioned errors" || { fail "$EX (exit $RC, $N errors)"; echo "$OUT"; }
+
+step "follow-up 1: behavior-shaped antipattern, absolute traffic, answer"
+if node --input-type=module -e '
+  const m = await import("./packages/shared/dist/index.js");
+  const r = await m.loadChapter("levels/_examples/example-code");
+  const tb = r.chapter.levels.find((l) => l.level.id === "example-code-02-token-bucket");
+  const anti = tb && tb.level.verify.find((v) => v.type === "antipattern");
+  if (!anti || !("slot" in anti)) process.exit(1);
+  if (!m.TRAFFIC_ASSERTION_KEYS.includes("db_queries_lte") || !m.TRAFFIC_ASSERTION_KEYS.includes("p99_ms_lte")) process.exit(1);
+  if (!m.VERIFY_TYPES.includes("answer")) process.exit(1);
+  const cli = await m.loadChapter("levels/_examples/example-cli");
+  if (!cli.chapter.levels[0].level.verify.some((v) => v.type === "answer")) process.exit(1);
+'; then pass "token bucket level has a behavior-shaped antipattern; db_queries_lte, p99_ms_lte and answer exist; cli example uses answer"; else fail "follow-up 1 features"; fi
 
 step "authoring guide"
-for h in "## The seven beats" "## The verdict rule" "## Templating" "## Running the validator"; do
+for h in "## The seven beats" "## The verdict rule" "## Templating" "## Running the validator" "### \`answer\`"; do
   grep -qF "$h" levels/README.md && pass "levels/README.md has '$h'" || fail "levels/README.md lacks '$h'"
 done
 

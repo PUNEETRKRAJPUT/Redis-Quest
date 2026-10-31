@@ -192,9 +192,28 @@ allowlist (`packages/shared/src/levels/commands.ts`); anything else, including c
 not know, is refused. `CONFIG GET` is allowed, `CONFIG SET` is not. If a check truly has to
 write, say so: `allowWrite: true` plus a `reason`.
 
-`antipattern` has the same shape, but its checks describe the healthy state and every check
-needs a `message`. When a check fails, the antipattern is a hit and its message is the
-"works, but wrong" feedback. Write it as "This passes today, but ..." and say how it fails at scale.
+`antipattern` comes in two shapes, exactly one per entry. Either way its checks or assertions
+describe the **healthy** state, each one needs a `message`, and a failing one is the hit: its
+message is the "works, but wrong" feedback. Write it as "This passes today, but ..." and say how
+it fails at scale.
+
+- **`checks`**, the same shape as `redis` (no list copy of the leaderboard, a TTL on the cache key).
+- **behavior shape**: `slot`, `fixtures`, `assertions`, optional `concurrency`, exactly like a
+  `behavior` verifier, for antipatterns that only show in how the code behaves. The classic case is
+  a read-then-write from JavaScript that is correct one request at a time and races under load
+  (`_examples/example-code/02-token-bucket.yaml`):
+
+```yaml
+- type: antipattern
+  slot: ratelimit.allow
+  fixtures: fixtures/02-reset-buckets.yaml
+  concurrency: 100
+  assertions:
+    - call: { args: ["u-limit-2"] }
+      repeat: 100
+      expectCount: { value: true, lte: 10 }
+      message: "This passes one request at a time, but 100 concurrent requests got more than 10 through ..."
+```
 
 ### `behavior`
 
@@ -237,9 +256,14 @@ steps:
     db_calls_ratio_lte: 0.1   # 90% fewer Postgres calls
     hit_ratio_gte: 0.9        # absolute, not a ratio against baseline
     error_rate_lte: 0         # absolute
+    db_queries_lte: 2         # absolute: total Postgres queries during the run (integer)
+    p99_ms_lte: 50            # absolute: p99 latency in milliseconds
 ```
 
-The three `*_ratio_*` assertions need `baseline: true`.
+`baseline: true` means the check is graded against a baseline: the engine records it itself by
+running the same scenario with the level's learner slots deactivated (levels never record one).
+The three `*_ratio_*` assertions need `baseline: true`; the absolute ones (`hit_ratio_gte`,
+`error_rate_lte`, `db_queries_lte`, `p99_ms_lte`) do not.
 
 ### `event`
 
@@ -265,6 +289,29 @@ The three `*_ratio_*` assertions need `baseline: true`.
   explanation: "It needs ordering by a score, which a sorted set maintains."
 ```
 
+### `answer`
+
+A typed answer whose expected value is read from Redis when verify runs: "type back the value
+of one field", "the TTL you saw", "how many users did SCAN find".
+
+```yaml
+- type: answer
+  prompt: "What did ZREVRANK return for you?"
+  expected:
+    cmd: [ZREVRANK, "lb:hostel:h-c-02-2", "user:{{player.id}}"]   # read-only, templated like any check
+    transform: number          # string (default) | number | length (list length or string length)
+  compare: equals              # equals (default) | numeric_within
+  # tolerance: 5               # required with numeric_within, not allowed otherwise
+  message: "That is not the rank Redis has for you right now."
+```
+
+The engine runs `expected.cmd`, applies `transform`, and compares it with the learner's trimmed
+text: `equals` compares as strings (as numbers when the transform is `number` or `length`);
+`numeric_within` passes when the difference is at most `tolerance` (use it for values that move,
+like a TTL). The command follows the same read-only allowlist as `redis` checks, with no
+`allowWrite`. Use `answer` in `cli` and `ops` levels; a `decision` level still needs a `quiz`,
+because its solutions name quiz options.
+
 ## Solutions
 
 | mode | `reference` | `wrong[]` |
@@ -286,7 +333,7 @@ its declared verdict) and an empty stub (must be `wrong`).
 
 Verifiers run in list order, then:
 
-1. any failing `redis`, `behavior`, `traffic`, `event` or `quiz` verifier: **wrong**;
+1. any failing `redis`, `behavior`, `traffic`, `event`, `quiz` or `answer` verifier: **wrong**;
 2. otherwise, any `antipattern` hit: **works, but wrong**;
 3. otherwise: **right**.
 

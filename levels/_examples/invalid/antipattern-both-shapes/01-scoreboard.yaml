@@ -1,0 +1,40 @@
+# Deliberately invalid: an antipattern with both the checks shape and the behavior shape. The line marked INVALID is where the validator must point.
+id: antipattern-both-shapes-01-scoreboard
+chapter: antipattern-both-shapes
+title: "Invalid example"
+mode: cli
+story: "A minimal level that is valid except for one deliberate mistake."
+brainstorm:
+  prompt: "Which structure?"
+  options:
+    - { id: sorted-set, label: "Sorted set", is_reasonable: true }
+    - { id: not-redis, label: "Not Redis", is_reasonable: false }
+teach: "Sorted sets keep members ordered by score."
+task: "Add yourself to `lb:example` with ZADD."
+verify:
+  - type: redis
+    checks:
+      - cmd: [ZCARD, "lb:example"]
+        gte: 1
+  - type: antipattern   # INVALID: checks and slot/fixtures/assertions together
+    checks:
+      - cmd: [EXISTS, "lb:example:list"]
+        equals: 0
+        message: "Keeps a list copy."
+    slot: leaderboard.top
+    fixtures: fixtures.yaml
+    assertions:
+      - call: { args: [] }
+        expect: []
+        message: "Wrong top list."
+reward:
+  xp: 10
+solutions:
+  reference: solutions/reference.redis
+  wrong:
+    - path: solutions/wrong.redis
+      expect: wrong
+      because: "Never adds anything."
+    - path: solutions/works-but-wrong.redis
+      expect: works_but_wrong
+      because: "Keeps a list copy."

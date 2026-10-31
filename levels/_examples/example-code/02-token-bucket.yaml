@@ -1,0 +1,99 @@
+# A code level whose antipattern is only visible under concurrency, so the antipattern verifier
+# is behavior-shaped (slot + fixtures + assertions) instead of redis checks.
+id: example-code-02-token-bucket
+chapter: example-code
+title: "The OTP limiter, properly"
+
+mode: code
+
+story: |
+  TextTara Sir's invoice says 41,880 OTPs this month, and a few numbers got 600 OTP requests in one
+  hour. The Gomti Gang is scripting the "send OTP" button from Lucknow.
+
+  The app already calls `ratelimit.allow(userId)` before sending an OTP. Right now that slot
+  allows everything. It runs on more than one app server, so whatever you build has to live in Redis.
+
+brainstorm:
+  prompt: "Ten OTPs per user, then one more per minute, enforced across every app server. What would you reach for?"
+  options:
+    - id: token-bucket-lua
+      label: "A token bucket in a hash, read and updated in one Lua script"
+      is_reasonable: true
+    - id: token-bucket-js
+      label: "A token bucket in a hash: HMGET, do the maths in JavaScript, then HSET"
+      is_reasonable: false
+    - id: in-process-map
+      label: "A Map in the app process"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: let the SMS vendor block abusers"
+      is_reasonable: false
+
+teach: |
+  A **token bucket** gives each user `capacity` tokens. Every request spends one; tokens come back
+  at a fixed rate. One hash per user holds two fields: `tokens` and `last_refill`.
+
+  The read, the decision and the write must happen as **one atomic step**, or two concurrent
+  requests both read "1 token left" and both get through. A Lua script run with `EVAL` executes
+  atomically: nothing else runs on the server while it does. Pass every key the script touches in
+  `KEYS`, and everything else in `ARGV`.
+
+  A worked example of the call shape (not your task):
+
+  ```
+  EVAL "return redis.call('SET', KEYS[1], ARGV[1])" 1 foo bar
+  ```
+
+task: |
+  Fill in `allow(deps, userId)` in `workspace/ch3/ratelimit.js`. It returns `true` if the request
+  may go ahead, `false` if not.
+
+  - Key: `ratelimit:<userId>`, a hash with fields `tokens` and `last_refill`.
+  - Capacity **10**, refill **1 token every 60 seconds**.
+  - Read, decide and update in a single Lua script (`redis.sendCommand(['EVAL', script, '1', key, ...])`).
+
+hints:
+  - "HMGET inside the script reads both fields at once; a missing hash means a full bucket."
+  - "Pass the current time in milliseconds as an argument so the script stays a pure function of its inputs."
+
+verify:
+  - type: behavior   # one request at a time: any correct bucket allows exactly 10 of 15
+    slot: ratelimit.allow
+    fixtures: fixtures/02-reset-buckets.yaml
+    assertions:
+      - call: { args: ["u-limit-1"] }
+        repeat: 15
+        expectCount: { value: true, equals: 10 }
+        message: "Sent 15 requests one after another; exactly 10 should be allowed."
+        sideEffect:
+          - cmd: [TYPE, "ratelimit:u-limit-1"]
+            equals: hash
+            message: "The bucket for u-limit-1 should be a hash at ratelimit:u-limit-1."
+  - type: antipattern   # 100 requests at once: a read-then-write in JavaScript races and lets more through
+    slot: ratelimit.allow
+    fixtures: fixtures/02-reset-buckets.yaml
+    concurrency: 100
+    assertions:
+      - call: { args: ["u-limit-2"] }
+        repeat: 100
+        expectCount: { value: true, lte: 10 }
+        message: "This passes one request at a time, but 100 concurrent requests got more than 10 through. Your read and your write are separate commands, so requests interleave between them. At the IPL final that is the Gomti Gang's script and your SMS bill."
+
+show_me: otp_limiter_panel
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/rate-limiter
+  - https://redis.io/docs/latest/develop/programmability/
+
+reward:
+  xp: 120
+  badge: "Atomic"
+
+solutions:
+  reference: solutions/02-reference.js
+  wrong:
+    - path: solutions/02-wrong-allow-all.js
+      expect: wrong
+      because: "Allows every request; 15 of 15 get through."
+    - path: solutions/02-works-but-wrong-js-race.js
+      expect: works_but_wrong
+      because: "Correct one at a time, but HMGET then HSET from JavaScript races under concurrency."

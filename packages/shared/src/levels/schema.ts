@@ -261,26 +261,76 @@ const redisVerifier = z.strictObject({
   checks: z.array(redisCheckSchema).min(1, 'must list at least one check'),
 });
 
+const slotName = z.string().regex(SLOT_NAME, 'must be a slot name like cache.getPlayerStats');
+const concurrency = z.number().int().min(1).max(1000);
+const ANTIPATTERN_BEHAVIOR_KEYS = ['slot', 'fixtures', 'assertions', 'concurrency'] as const;
+
+/**
+ * An antipattern verifier comes in two shapes, exactly one per entry:
+ * - `checks`: redis checks describing the healthy state (e.g. no list copy of a leaderboard);
+ * - `slot` + `fixtures` + `assertions` (+ `concurrency`): a behavior run describing healthy behavior
+ *   (e.g. at most 10 of 100 concurrent requests allowed), for antipatterns only visible in code,
+ *   such as a non-atomic read-then-write that races under load.
+ * Either way a failing check or assertion is the hit, and each needs a message.
+ */
+export type AntipatternVerifier =
+  | { type: 'antipattern'; checks: RedisCheck[] }
+  | { type: 'antipattern'; slot: string; fixtures: string; concurrency?: number; assertions: BehaviorAssertion[] };
+
 const antipatternVerifier = z
   .strictObject({
     type: z.literal('antipattern'),
-    checks: z.array(redisCheckSchema).min(1, 'must list at least one check'),
+    checks: z.array(redisCheckSchema).min(1, 'must list at least one check').optional(),
+    slot: slotName.optional(),
+    fixtures: relPath.optional(),
+    concurrency: concurrency.optional(),
+    assertions: z.array(behaviorAssertionSchema).min(1, 'must list at least one assertion').optional(),
   })
   .superRefine((v, ctx) => {
+    const behaviorKeys = present(v, ANTIPATTERN_BEHAVIOR_KEYS);
+    if (v.checks && behaviorKeys.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [],
+        message: `an antipattern uses either checks or slot/fixtures/assertions, not both (found checks and ${behaviorKeys.join(', ')})`,
+      });
+      return;
+    }
+    if (!v.checks) {
+      const missing = present({ slot: 1, fixtures: 1, assertions: 1 }, ['slot', 'fixtures', 'assertions']).filter(
+        (k) => !behaviorKeys.includes(k as (typeof ANTIPATTERN_BEHAVIOR_KEYS)[number]),
+      );
+      if (missing.length) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [],
+          message: behaviorKeys.length
+            ? `a behavior-shaped antipattern needs slot, fixtures and assertions (missing: ${missing.join(', ')})`
+            : 'an antipattern needs checks, or slot + fixtures + assertions',
+        });
+        return;
+      }
+    }
     // The "works, but wrong" message is the most valuable feedback in the game; never let
     // the engine fall back to a generic sentence for it.
-    v.checks.forEach((c, i) => {
+    v.checks?.forEach((c, i) => {
       if (!c.message) {
         ctx.addIssue({ code: 'custom', path: ['checks', i], message: 'antipattern checks need a message (it is the "works, but wrong" feedback)' });
       }
     });
-  });
+    v.assertions?.forEach((a, i) => {
+      if (!a.message) {
+        ctx.addIssue({ code: 'custom', path: ['assertions', i], message: 'antipattern assertions need a message (it is the "works, but wrong" feedback)' });
+      }
+    });
+  })
+  .transform((v) => v as AntipatternVerifier);
 
 const behaviorVerifier = z.strictObject({
   type: z.literal('behavior'),
-  slot: z.string().regex(SLOT_NAME, 'must be a slot name like cache.getPlayerStats'),
+  slot: slotName,
   fixtures: relPath,
-  concurrency: z.number().int().min(1).max(1000).optional(),
+  concurrency: concurrency.optional(),
   assertions: z.array(behaviorAssertionSchema).min(1, 'must list at least one assertion'),
   message: text.optional(),
 });
@@ -291,6 +341,8 @@ export const TRAFFIC_ASSERTION_KEYS = [
   'db_calls_ratio_lte',
   'hit_ratio_gte',
   'error_rate_lte',
+  'db_queries_lte',
+  'p99_ms_lte',
 ] as const;
 const BASELINE_RATIO_KEYS = ['p99_ratio_lte', 'rps_ratio_gte', 'db_calls_ratio_lte'] as const;
 
@@ -305,6 +357,9 @@ const trafficVerifier = z
       db_calls_ratio_lte: z.number().min(0).optional(),
       hit_ratio_gte: z.number().min(0).max(1).optional(),
       error_rate_lte: z.number().min(0).max(1).optional(),
+      // Absolute: total Postgres queries during the run, and p99 latency in milliseconds.
+      db_queries_lte: z.number().int().min(0).optional(),
+      p99_ms_lte: z.number().positive().optional(),
     }),
     message: text.optional(),
   })
@@ -383,7 +438,47 @@ const quizVerifier = z
   // Normalised so consumers never branch on string vs list.
   .transform((q) => ({ ...q, correct: typeof q.correct === 'string' ? [q.correct] : q.correct }));
 
-export const VERIFY_TYPES = ['redis', 'antipattern', 'behavior', 'traffic', 'event', 'quiz'] as const;
+/**
+ * A typed answer whose expected value is read from Redis at verification time (e.g. "type back the
+ * value of one field", "how many users did SCAN find", "the TTL you saw"). The engine runs
+ * `expected.cmd` (read-only, templated like any check), applies `transform`, and compares it with the
+ * learner's trimmed text: `equals` as strings (numbers when transform is number or length),
+ * `numeric_within` as |answer - expected| <= tolerance.
+ */
+const answerVerifier = z
+  .strictObject({
+    type: z.literal('answer'),
+    prompt: text,
+    expected: z.strictObject({
+      cmd: command,
+      transform: z.enum(['string', 'number', 'length']).optional(),
+    }),
+    compare: z.enum(['equals', 'numeric_within']).optional(),
+    tolerance: z.number().min(0).optional(),
+    message: text,
+  })
+  .superRefine((a, ctx) => {
+    if (!hasLiteralCommandName(a.expected.cmd)) {
+      ctx.addIssue({ code: 'custom', path: ['expected', 'cmd', 0], message: 'the command name must be literal, not a template' });
+    } else if (!isReadOnlyCommand(a.expected.cmd)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['expected', 'cmd', 0],
+        message: `${commandKey(a.expected.cmd)} is not on the read-only allowlist; an answer's expected value must be read without changing the learner's data`,
+      });
+    }
+    if (a.compare === 'numeric_within' && a.tolerance === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['compare'], message: 'numeric_within needs a tolerance' });
+    }
+    if (a.tolerance !== undefined && a.compare !== 'numeric_within') {
+      ctx.addIssue({ code: 'custom', path: ['tolerance'], message: 'tolerance is only used with compare: numeric_within' });
+    }
+    if (a.compare === 'numeric_within' && a.expected.transform === 'string') {
+      ctx.addIssue({ code: 'custom', path: ['expected', 'transform'], message: 'numeric_within compares numbers; use transform number or length' });
+    }
+  });
+
+export const VERIFY_TYPES = ['redis', 'antipattern', 'behavior', 'traffic', 'event', 'quiz', 'answer'] as const;
 export type VerifyType = (typeof VERIFY_TYPES)[number];
 
 export const verifySpecSchema = z.discriminatedUnion('type', [
@@ -393,6 +488,7 @@ export const verifySpecSchema = z.discriminatedUnion('type', [
   trafficVerifier,
   eventVerifier,
   quizVerifier,
+  answerVerifier,
 ]);
 
 // ---------------------------------------------------------------------------------------------
@@ -503,6 +599,8 @@ type LevelUnion = z.output<typeof levelUnion>;
 function checkLevel(level: LevelUnion, ctx: z.RefinementCtx): void {
   const types = level.verify.map((v) => v.type);
 
+  // Decision solutions name quiz option ids, so a decision level needs a quiz; `answer`
+  // verifiers belong in cli and ops levels (typed values read back from Redis).
   if (level.mode === 'decision' && !types.includes('quiz')) {
     ctx.addIssue({ code: 'custom', path: ['verify'], message: 'a decision level needs at least one quiz verifier' });
   }
@@ -611,9 +709,9 @@ export type RedisCheck = z.output<typeof redisCheckSchema>;
 export type BehaviorAssertion = z.output<typeof behaviorAssertionSchema>;
 export type FixtureFile = z.output<typeof fixtureFileSchema>;
 export type RedisVerifier = Extract<VerifySpec, { type: 'redis' }>;
-export type AntipatternVerifier = Extract<VerifySpec, { type: 'antipattern' }>;
 export type BehaviorVerifier = Extract<VerifySpec, { type: 'behavior' }>;
 export type TrafficVerifier = Extract<VerifySpec, { type: 'traffic' }>;
 export type EventVerifier = Extract<VerifySpec, { type: 'event' }>;
 export type QuizVerifier = Extract<VerifySpec, { type: 'quiz' }>;
+export type AnswerVerifier = Extract<VerifySpec, { type: 'answer' }>;
 export type EventKind = (typeof EVENT_KINDS)[number];

@@ -12,3 +12,4 @@ incident:
     text: "Postgres is doing the same slow query for the same three players. Give me ten minutes."
 levels:
   - example-code-01-cache-aside
+  - example-code-02-token-bucket

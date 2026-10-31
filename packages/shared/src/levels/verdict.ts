@@ -7,8 +7,8 @@ export type Verdict = 'right' | 'works_but_wrong' | 'wrong';
  * One verifier's outcome, in the order the level lists its `verify` entries.
  *
  * `passed` means "every check in this verifier held". For an `antipattern` verifier the checks
- * describe the healthy state (e.g. `EXISTS lb:hostel:h-c-02-1:list` equals 0), so `passed: false`
- * is a hit: the antipattern was detected.
+ * (or behavior assertions) describe the healthy state (e.g. `EXISTS lb:hostel:h-c-02-1:list` equals 0),
+ * so `passed: false` is a hit: the antipattern was detected.
  */
 export interface VerifierResult {
   type: VerifyType;
@@ -17,7 +17,7 @@ export interface VerifierResult {
 
 /**
  * The verdict rule, as a pure function:
- * any failing `redis | behavior | traffic | event | quiz` verifier gives `wrong`;
+ * any failing `redis | behavior | traffic | event | quiz | answer` verifier gives `wrong`;
  * otherwise any `antipattern` hit gives `works_but_wrong`; otherwise `right`.
  *
  * An empty result list is `wrong`: a level always has at least one verifier, so "nothing ran"

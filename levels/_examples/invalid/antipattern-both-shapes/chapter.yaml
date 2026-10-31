@@ -1,0 +1,6 @@
+id: antipattern-both-shapes
+title: "Invalid example: antipattern-both-shapes"
+incident:
+  - { from: roommate, time: "12:00", text: "bhai this one is broken on purpose" }
+levels:
+  - antipattern-both-shapes-01-scoreboard

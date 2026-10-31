@@ -349,7 +349,7 @@ export async function loadLevel(file: string, opts: LoadLevelOptions = {}): Prom
     if ('script' in step) await resolveRef(source, ['setup', i, 'script'], step.script, root, errors);
   }
   for (const [i, v] of level.verify.entries()) {
-    if (v.type !== 'behavior') continue;
+    if (v.type !== 'behavior' && !(v.type === 'antipattern' && 'fixtures' in v)) continue;
     const abs = await resolveRef(source, ['verify', i, 'fixtures'], v.fixtures, root, errors);
     if (abs) errors.push(...(await validateFixtureFile(abs, root, source, ['verify', i, 'fixtures'])));
   }
