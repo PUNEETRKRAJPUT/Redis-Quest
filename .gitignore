@@ -9,3 +9,5 @@ logs/
 .pnpm-store/
 postgres/init/002-seed.sql
 postgres/init/*.tmp
+.env.*
+!.env.example

@@ -64,16 +64,22 @@ the mechanism the whole game stands on; design it so a level author never touche
   learner's subscribe/blocking needs later; `error` handler; reconnect; never crash when Redis is down
   (baselines do not need it).
 
+**Isolation for your check (binding).** Other agents use the default compose project. Your check runs
+its own: `docker compose -p quest-p07 --env-file .env.p07 ...` with `.env.p07` (gitignored, create it)
+setting `PROXY_PORT=3100`, `REDIS_PORT=6391`, `PG_PORT=5433`, `INSIGHT_PORT=5541`, and only the
+services `redis postgres engine app proxy`. Finish with `docker compose -p quest-p07 down -v`. Never run
+plain `docker compose down`/`stop` against the default project.
+
 **Work.** Build the above with vitest covering: slot fallback to baseline, learner override, error
 isolation, timeout, hot reload after file change, config pull with ETag, metrics push shape. 
-`scripts/check/P0-07.sh`: build; `docker compose up -d --build redis postgres engine app`; curl each
+`scripts/check/P0-07.sh`: build; `docker compose -p quest-p07 --env-file .env.p07 up -d --build redis postgres engine app proxy`; curl each
 baseline route with ids from `docs/handoffs/P0-04.md`; `/app/players/<hot id>/stats` takes over 100 ms
 (print it); activate `cache.getPlayerStats` via the engine (`PUT /api/slots`) with a learner file copied
 into `workspace/ch2/cache.js` from `workspace/_examples` (a 10-line cache-aside using `HGETALL`/`HSET`/
 `EXPIRE`); second call is under 20 ms and `redisCommands` rises in `GET /api/metrics`; replace the file
-with one that throws → `500` with the header, app still healthy; `docker compose up -d --scale app=2`,
-`/app/health` through the proxy shows two different `instance` values across 20 calls; metrics in the
-engine list two instances; `docker compose down`; clean the copied workspace file.
+with one that throws → `500` with the header, app still healthy; `docker compose -p quest-p07 --env-file .env.p07 up -d --scale app=2 app`,
+`/app/health` through the proxy on 3100 shows two different `instance` values across 20 calls; metrics in the
+engine list two instances; `docker compose -p quest-p07 down -v`; clean the copied workspace file.
 
 **Acceptance check.** `scripts/check/P0-07.sh` exits 0.
 
