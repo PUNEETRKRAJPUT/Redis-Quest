@@ -1,0 +1,340 @@
+{
+  "hostels": [
+    {
+      "id": "h-c-01-1",
+      "college_id": "c-01",
+      "name": "Avvaiyar Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-01-2",
+      "college_id": "c-01",
+      "name": "Bharathi Hall",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-01-3",
+      "college_id": "c-01",
+      "name": "Pykara Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-01-4",
+      "college_id": "c-01",
+      "name": "Kaveri Hostel",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-02-1",
+      "college_id": "c-02",
+      "name": "Savitribai Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-02-2",
+      "college_id": "c-02",
+      "name": "Shivneri Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-02-3",
+      "college_id": "c-02",
+      "name": "Sinhagad Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-02-4",
+      "college_id": "c-02",
+      "name": "Bhima Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-03-1",
+      "college_id": "c-03",
+      "name": "Ahilya Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-03-2",
+      "college_id": "c-03",
+      "name": "Mandu Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-03-3",
+      "college_id": "c-03",
+      "name": "Kshipra Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-03-4",
+      "college_id": "c-03",
+      "name": "Holkar Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-04-1",
+      "college_id": "c-04",
+      "name": "Kanaklata Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-04-2",
+      "college_id": "c-04",
+      "name": "Lachit Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-04-3",
+      "college_id": "c-04",
+      "name": "Majuli Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-04-4",
+      "college_id": "c-04",
+      "name": "Kaziranga Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-05-1",
+      "college_id": "c-05",
+      "name": "Kuntala Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-05-2",
+      "college_id": "c-05",
+      "name": "Konark Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-05-3",
+      "college_id": "c-05",
+      "name": "Nalabana Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-05-4",
+      "college_id": "c-05",
+      "name": "Mahanadi Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-06-1",
+      "college_id": "c-06",
+      "name": "Begum Hazrat Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-06-2",
+      "college_id": "c-06",
+      "name": "Awadh Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-06-3",
+      "college_id": "c-06",
+      "name": "Gomti Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-06-4",
+      "college_id": "c-06",
+      "name": "Chowk Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-07-1",
+      "college_id": "c-07",
+      "name": "Ammu Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-07-2",
+      "college_id": "c-07",
+      "name": "Vypin Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-07-3",
+      "college_id": "c-07",
+      "name": "Periyar Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-07-4",
+      "college_id": "c-07",
+      "name": "Munnar Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-08-1",
+      "college_id": "c-08",
+      "name": "Amrita Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-08-2",
+      "college_id": "c-08",
+      "name": "Kasauli Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-08-3",
+      "college_id": "c-08",
+      "name": "Sukhna Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-08-4",
+      "college_id": "c-08",
+      "name": "Pinjore Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-09-1",
+      "college_id": "c-09",
+      "name": "Sarojini Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-09-2",
+      "college_id": "c-09",
+      "name": "Golconda Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-09-3",
+      "college_id": "c-09",
+      "name": "Nizam Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-09-4",
+      "college_id": "c-09",
+      "name": "Hussain Sagar Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-10-1",
+      "college_id": "c-10",
+      "name": "Maitri Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-10-2",
+      "college_id": "c-10",
+      "name": "Pavagadh Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-10-3",
+      "college_id": "c-10",
+      "name": "Sayaji Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-10-4",
+      "college_id": "c-10",
+      "name": "Dabhoi Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-11-1",
+      "college_id": "c-11",
+      "name": "Kadambini Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-11-2",
+      "college_id": "c-11",
+      "name": "Tagore Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-11-3",
+      "college_id": "c-11",
+      "name": "Howrah Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-11-4",
+      "college_id": "c-11",
+      "name": "Ganga Hall",
+      "kind": "boys",
+      "capacity": 220
+    },
+    {
+      "id": "h-c-12-1",
+      "college_id": "c-12",
+      "name": "Kittur Bhawan",
+      "kind": "girls",
+      "capacity": 340
+    },
+    {
+      "id": "h-c-12-2",
+      "college_id": "c-12",
+      "name": "Hampi Hostel",
+      "kind": "boys",
+      "capacity": 280
+    },
+    {
+      "id": "h-c-12-3",
+      "college_id": "c-12",
+      "name": "Dharwad Block",
+      "kind": "boys",
+      "capacity": 310
+    },
+    {
+      "id": "h-c-12-4",
+      "college_id": "c-12",
+      "name": "Unkal Hall",
+      "kind": "boys",
+      "capacity": 220
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "Nukkad Cricket League",
+  "short": "NCL",
+  "name_meaning": "Nukkad is the street corner where gully cricket starts.",
+  "season": {
+    "number": 7,
+    "name": "Season 7: The Monsoon Edition"
+  },
+  "format": {
+    "teams": 8,
+    "league_stage": "double round robin",
+    "league_matches": 56,
+    "matches_per_team": 14,
+    "playoffs": [
+      "Qualifier 1",
+      "Eliminator",
+      "Qualifier 2",
+      "Final"
+    ],
+    "playoff_teams": 4,
+    "overs_per_side": 20
+  },
+  "final": {
+    "name": "The Nukkad Cup Final",
+    "venue": "Sabarmati Bowl",
+    "city": "Ahmedabad",
+    "when_in_story": "Night 3, Chapter 5, the match where Redis restarts mid-innings",
+    "stakes": "Hostel and college bragging rights; contests are for points, never money."
+  },
+  "tone_note": "Fictional league. Never name or imply a real tournament, franchise, player or sponsor."
+}

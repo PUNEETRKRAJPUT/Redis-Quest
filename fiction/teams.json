@@ -1,0 +1,84 @@
+{
+  "teams": [
+    {
+      "id": "t-01",
+      "name": "Mumbai Monsoon",
+      "city": "Mumbai",
+      "code": "MMO",
+      "primary_colour": "#1F4E79",
+      "secondary_colour": "#F2B134",
+      "home_ground": "Bandra Bandstand Oval",
+      "personality": "Never panics until the 18th over, then panics beautifully."
+    },
+    {
+      "id": "t-02",
+      "name": "Chennai Lighthouse",
+      "city": "Chennai",
+      "code": "CLH",
+      "primary_colour": "#F2C230",
+      "secondary_colour": "#0B3C5D",
+      "home_ground": "Marina Lantern Ground",
+      "personality": "Slow burn, long beam. Wins matches by being there at the end."
+    },
+    {
+      "id": "t-03",
+      "name": "Kolkata Riverhawks",
+      "city": "Kolkata",
+      "code": "KRH",
+      "primary_colour": "#4B2E83",
+      "secondary_colour": "#E0B84C",
+      "home_ground": "Hooghly Ghat Stadium",
+      "personality": "Artists first, accountants never. Crowd noise is a seventh fielder."
+    },
+    {
+      "id": "t-04",
+      "name": "Delhi Dust Devils",
+      "city": "Delhi",
+      "code": "DDD",
+      "primary_colour": "#C0392B",
+      "secondary_colour": "#2C3E50",
+      "home_ground": "Yamuna Khadar Oval",
+      "personality": "Loud, aggressive, a little rough on the edges. Sledges in two languages."
+    },
+    {
+      "id": "t-05",
+      "name": "Bengaluru Gulmohars",
+      "city": "Bengaluru",
+      "code": "BGM",
+      "primary_colour": "#D9432B",
+      "secondary_colour": "#1E1E1E",
+      "home_ground": "Cubbon Canopy Ground",
+      "personality": "All the batting talent in the world, bowling attack on a notice period."
+    },
+    {
+      "id": "t-06",
+      "name": "Hyderabad Charminars",
+      "city": "Hyderabad",
+      "code": "HCM",
+      "primary_colour": "#E67E22",
+      "secondary_colour": "#2D3436",
+      "home_ground": "Musi Riverside Stadium",
+      "personality": "Patient, spin-friendly, and fed very well on match days."
+    },
+    {
+      "id": "t-07",
+      "name": "Jaipur Havelis",
+      "city": "Jaipur",
+      "code": "JHV",
+      "primary_colour": "#E75480",
+      "secondary_colour": "#3B2F63",
+      "home_ground": "Amer Gate Arena",
+      "personality": "Pink-and-gold, sells out every home game, nobody leaves early."
+    },
+    {
+      "id": "t-08",
+      "name": "Pune Sahyadris",
+      "city": "Pune",
+      "code": "PSY",
+      "primary_colour": "#1E8449",
+      "secondary_colour": "#F4D03F",
+      "home_ground": "Katraj Ghat Oval",
+      "personality": "Academic, tactical, argues about field placings like it is a viva."
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "cast": [
+    {
+      "slug": "roommate",
+      "name": "Sai Teja Vemuri",
+      "nickname": "Teja",
+      "role": "Hostel roommate and co-founder. Does the frontend. Panics.",
+      "college_id": "c-02",
+      "bio": "Sai Teja is from Vijayawada and treats every red console line as a personal insult. He built the whole React UI in one weekend on filter coffee and chai, and he is genuinely brilliant at it. His flaw is that he screenshots every error and posts it in the group before reading it. He is loyal, funny under pressure, and always the first to say sorry when the bug is his. He is never the villain, only the early warning system.",
+      "dialogue": [
+        {
+          "time": "19:31",
+          "text": "bhai bhai bhai the toss is in 2 min and the stats page is just a spinner 😭"
+        },
+        {
+          "time": "19:33",
+          "text": "I did not touch the backend I swear. ok I touched ONE thing"
+        },
+        {
+          "time": "19:52",
+          "text": "yaar it is fast now?? what did you do. teach me later, rn just do not touch it"
+        }
+      ]
+    },
+    {
+      "slug": "senior",
+      "name": "Harjeet Sandhu",
+      "nickname": "Harry Bhaiya",
+      "role": "Final-year senior who runs the college fest and has opinions about servers.",
+      "college_id": "c-02",
+      "bio": "Harry Bhaiya is the fest coordinator who got the app its first thousand users by announcing it in every hostel mess. He has a strong sense of scale and a weaker sense of cost. His answer to every outage is more servers, and he is sure the problem is the traffic, never the design. He means well, has placement season on his mind, and secretly keeps a spreadsheet of every promise he made to sponsors.",
+      "dialogue": [
+        {
+          "time": "20:04",
+          "text": "Scene kya hai? Just add more servers na, fest ka budget hai"
+        },
+        {
+          "time": "20:06",
+          "text": "I told the whole mess hall it launches tonight. Do not make me a liar 🙏"
+        },
+        {
+          "time": "20:41",
+          "text": "ok that fix was clean. Next time tell me BEFORE the 7:30 rush, bhai"
+        }
+      ]
+    },
+    {
+      "slug": "warden",
+      "name": "Suryanarayan Pillai",
+      "nickname": "Warden Sir",
+      "role": "Hostel warden. His nephew found a bug and told him first.",
+      "college_id": "c-02",
+      "bio": "Pillai Sir has run the hostel for twenty-two years and knows which tube light flickers and which room has the fast wifi. He does not understand Redis but he understands rules, curfews and cause and effect very well. His nephew Bunty, a Class 11 student who plays on the app, found a way to claim a gift twice and reported it to him before anyone else. Strict in tone, soft in practice, and he always asks whether the fix will be done before dinner.",
+      "dialogue": [
+        {
+          "time": "21:10",
+          "text": "My nephew Bunty says he got the welcome gift three times. Explain this to me by dinner."
+        },
+        {
+          "time": "21:12",
+          "text": "Lights out is 11. The server may stay awake but you will not, understood?"
+        },
+        {
+          "time": "22:47",
+          "text": "Good. One gift per student, same as the mess token. Now go sleep."
+        }
+      ]
+    },
+    {
+      "slug": "sms-vendor",
+      "name": "Jignesh Zaveri",
+      "nickname": "TextTara Sir",
+      "role": "Account manager at the SMS vendor. Sends OTP invoices.",
+      "college_id": null,
+      "bio": "Jignesh works at TextTara Communications, a small bulk-messaging company in Surat that sends the app's login OTPs. He is always polite, always on time, and his invoices are always larger than you expected. He does not want to fight; he wants the traffic to be genuine and the payment to be on time. When bots hammer the OTP endpoint, his monthly total lands in your inbox with a friendly greeting and a very specific number of messages.",
+      "dialogue": [
+        {
+          "time": "10:02",
+          "text": "Good morning. Kindly find attached this month's invoice. 41,880 OTPs sent, as per our logs."
+        },
+        {
+          "time": "10:05",
+          "text": "Sir, a few numbers received 600 OTP requests in one hour. Is this expected? 🙂"
+        },
+        {
+          "time": "10:30",
+          "text": "Thank you for the rate limit. Invoice revised. Pleasure doing business."
+        }
+      ]
+    },
+    {
+      "slug": "rival-college",
+      "name": "Mukul Awasthi",
+      "nickname": "Gomti Gang",
+      "role": "Student lead of the rival college's team. Their scripts keep hitting your API.",
+      "college_id": "c-06",
+      "bio": "Mukul captains the Gomti College group chat that treats your app as a contest in itself. Their scripts refresh the leaderboard every second, spam the OTP endpoint, and try every id from 1 to 100000 on the player page. He is clever, a little theatrical, and genuinely good at finding the cracks. He says it is only a friendly stress test, and his messages always arrive right after the app slows down.",
+      "dialogue": [
+        {
+          "time": "22:15",
+          "text": "Your leaderboard looks tired, bhai 😏 We only refreshed it a few thousand times."
+        },
+        {
+          "time": "22:17",
+          "text": "Nothing personal. If your server cannot handle Lucknow, how will it handle the final?"
+        },
+        {
+          "time": "22:58",
+          "text": "Rate limit?? ok fair. Well played. We will find another door tomorrow."
+        }
+      ]
+    }
+  ]
+}

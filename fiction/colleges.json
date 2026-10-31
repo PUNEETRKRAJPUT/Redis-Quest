@@ -1,0 +1,125 @@
+{
+  "_note": "All colleges are fictional. Any resemblance to a real institution is accidental; level authors must not add real college names.",
+  "colleges": [
+    {
+      "id": "c-01",
+      "name": "Nilgiri College of Engineering",
+      "short": "NCE",
+      "city": "Coimbatore",
+      "state": "Tamil Nadu",
+      "founded": 1984,
+      "mascot": "Blue Tahr",
+      "story_role": null
+    },
+    {
+      "id": "c-02",
+      "name": "Sahyadri Institute of Technology",
+      "short": "SIT",
+      "city": "Pune",
+      "state": "Maharashtra",
+      "founded": 1991,
+      "mascot": "Ghat Eagles",
+      "story_role": "home"
+    },
+    {
+      "id": "c-03",
+      "name": "Vindhya Institute of Engineering",
+      "short": "VIE",
+      "city": "Indore",
+      "state": "Madhya Pradesh",
+      "founded": 1987,
+      "mascot": "Vindhya Lions",
+      "story_role": null
+    },
+    {
+      "id": "c-04",
+      "name": "Brahmaputra Technical Institute",
+      "short": "BTI",
+      "city": "Guwahati",
+      "state": "Assam",
+      "founded": 1979,
+      "mascot": "River Rhinos",
+      "story_role": null
+    },
+    {
+      "id": "c-05",
+      "name": "Chilika Institute of Technology",
+      "short": "CIT",
+      "city": "Bhubaneswar",
+      "state": "Odisha",
+      "founded": 1996,
+      "mascot": "Lake Herons",
+      "story_role": null
+    },
+    {
+      "id": "c-06",
+      "name": "Gomti College of Engineering",
+      "short": "GCE",
+      "city": "Lucknow",
+      "state": "Uttar Pradesh",
+      "founded": 1982,
+      "mascot": "Nawabi Knights",
+      "story_role": "rival"
+    },
+    {
+      "id": "c-07",
+      "name": "Malabar College of Engineering",
+      "short": "MCE",
+      "city": "Kochi",
+      "state": "Kerala",
+      "founded": 1989,
+      "mascot": "Spice Sailors",
+      "story_role": null
+    },
+    {
+      "id": "c-08",
+      "name": "Shivalik Institute of Technology",
+      "short": "SHT",
+      "city": "Chandigarh",
+      "state": "Chandigarh",
+      "founded": 1993,
+      "mascot": "Hill Hawks",
+      "story_role": null
+    },
+    {
+      "id": "c-09",
+      "name": "Musi Valley Institute of Technology",
+      "short": "MVIT",
+      "city": "Hyderabad",
+      "state": "Telangana",
+      "founded": 1998,
+      "mascot": "Pearl Panthers",
+      "story_role": null
+    },
+    {
+      "id": "c-10",
+      "name": "Narmada College of Engineering",
+      "short": "NRE",
+      "city": "Vadodara",
+      "state": "Gujarat",
+      "founded": 1985,
+      "mascot": "Bandh Bulls",
+      "story_role": null
+    },
+    {
+      "id": "c-11",
+      "name": "Hooghly Institute of Science and Technology",
+      "short": "HIST",
+      "city": "Kolkata",
+      "state": "West Bengal",
+      "founded": 1976,
+      "mascot": "Ferry Foxes",
+      "story_role": null
+    },
+    {
+      "id": "c-12",
+      "name": "Tungabhadra Institute of Technology",
+      "short": "TIT",
+      "city": "Hubballi",
+      "state": "Karnataka",
+      "founded": 1990,
+      "mascot": "Rock Rams",
+      "story_role": null
+    }
+  ]
+}
