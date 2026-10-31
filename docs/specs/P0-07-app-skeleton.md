@@ -1,7 +1,7 @@
 # P0-07: App skeleton: baseline routes, slot registry, target switching, metrics push
 
-> DRAFT until the P0-04, P0-05 and P0-08 handoffs land (hot player ids, level types, the shared learner
-> module). The orchestrator finalises this spec before spawning.
+> Finalised against `docs/handoffs/P0-04.md`; the shared learner module API comes from
+> `docs/handoffs/P0-08.md` (read it first) and the engine endpoints from `docs/handoffs/P0-06.md`.
 
 **Goal.** The pre-built fantasy-cricket backend the learner extends. It serves the slow baseline paths
 out of the box, loads the learner's workspace files into named slots when the engine says a slot is
@@ -37,8 +37,14 @@ the mechanism the whole game stands on; design it so a level author never touche
   same way.
 - **Baseline routes for Milestone 1** (all read from Postgres, none from Redis, by design):
   - `GET /app/players/:id` → player row
-  - `GET /app/players/:id/stats` → `SELECT * FROM player_stats($1)` (the deliberately slow function;
-    slot `cache.getPlayerStats`)
+  - `GET /app/players/:id/stats` → exactly `SELECT * FROM player_stats($1)`, one row with columns
+    player_id, name, team_id, role, matches_played, innings_batted, runs, balls_faced, fours, sixes,
+    dismissals, batting_avg, strike_rate, balls_bowled, runs_conceded, wickets, economy, selected_count,
+    selected_pct, captain_pct, last5_selected_pct, last5_points, avg_team_points, last5_avg_team_points
+    (numerics arrive from `pg` as strings; pass them through as strings, do not round); zero rows → 404
+    `{ error: 'player_not_found' }` (level 2.5 depends on this). Slot `cache.getPlayerStats`. Never add
+    indexes or Postgres-side caching: the slowness is the lesson. Expected 170 to 300 ms single-threaded
+    on this Mac. Hot players for tests: p-028, p-101, p-151; cold control p-001.
   - `POST /app/players/:id/stats/refresh` → recompute marker (slot `cache.invalidatePlayerStats`; the
     baseline is a no-op that touches `players.updated_at`)
   - `GET /app/fixtures` → scheduled and live matches (slot `prefetch.getFixtures`)
@@ -49,6 +55,8 @@ the mechanism the whole game stands on; design it so a level author never touche
   - `GET /app/limits/ping` → a route guarded by slot `ratelimit.allow` (baseline: in-process fixed window
     per `x-user-id`, again on purpose)
   - Optional extra latency on every DB call from `dbExtraLatencyMs` in the app config (one level uses it).
+- Test and check ids from the seed: users u-000001, u-000010 (home college c-02), u-020000; contests 1
+  and 62 (about 3,000 entries each); completed matches m-001 and m-040; live m-041, m-042.
 - Redis client: node-redis v5, one shared client per instance plus one `duplicate()` reserved for the
   learner's subscribe/blocking needs later; `error` handler; reconnect; never crash when Redis is down
   (baselines do not need it).

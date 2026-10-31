@@ -29,8 +29,11 @@ behavior runs through the runner, and traffic runs through autocannon against th
   in depth). Replies are normalised (integers as numbers, bulk as strings, nil as null, arrays as arrays)
   before assertions.
 - `quiz`: compare the submitted option id(s) (from the request body) with `correct`.
-- `event`: subscribe to the engine's own event bus (P0-06 WebSocket events) and resolve when `kind` and
-  `match` fit within `timeoutMs`; `channel_message` subscribes to a Redis channel on a duplicated client.
+- `event`: an event check is satisfied if a matching event (by `kind` and `match`) already happened
+  since the level's `startedAt` (the engine keeps a timestamped ring, `GET /api/events?since=`), or
+  arrives on the engine's event bus within `timeoutMs` after verification begins. `channel_message`
+  subscribes to the Redis channel on a duplicated client for the wait part. Chapter 0 relies on the
+  "already happened" half (the UI connected long before the learner clicks verify).
 - `behavior`: `POST ${RUNNER_URL}/run` with the slot's module path, the fixtures file, and the calls
   from `assertions`; evaluate `expect`, `expectError`, and `sideEffect` (a nested redis check) per call.
   `concurrency` passes through.

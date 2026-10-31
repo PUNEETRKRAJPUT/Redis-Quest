@@ -38,7 +38,7 @@ start early if everything it depends on is `done`.
 
 | id | task | status |
 |---|---|---|
-| C0 | Chapter 0 levels (5) with reference + wrong solutions | todo |
+| C0 | Chapter 0 levels (5) with reference + wrong solutions (spec: specs/C0) | todo |
 | C1 | Chapter 1 levels (16) | todo |
 | C2a | Chapter 2 levels 2.1 to 2.4 | todo |
 | T1 | Five-tester playtest, findings, fixes | todo |
