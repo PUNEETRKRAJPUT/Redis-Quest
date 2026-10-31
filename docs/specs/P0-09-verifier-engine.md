@@ -57,15 +57,21 @@ behavior runs through the runner, and traffic runs through autocannon against th
 - At startup, cross-check `READ_ONLY_COMMANDS` from `@quest/shared` against the live server's `COMMAND INFO` flags (`readonly`) for the current target and log any disagreement as a warning; the allowlist in the schema was written from memory, not from the docs digest.
 - `antipattern` verifiers may be redis-shaped (`checks`) or behavior-shaped (`slot`, `fixtures`, `assertions`); a failing check or assertion is the hit, and its `message` is the feedback.
 
+**Isolation for your check (binding).** Other agents use the default compose project. Your check runs
+its own: `docker compose -p quest-p09 --env-file .env.p09 ...` with that env file (gitignored, create it)
+setting `PROXY_PORT=3200`, `REDIS_PORT=6392`, `PG_PORT=5434`, `INSIGHT_PORT=5542`, and only the services
+`redis postgres engine app runner proxy`. Finish with `docker compose -p quest-p09 down -v`. Never run plain `docker compose down`/`stop`
+against the default project.
+
 **Work.** Implement the above with vitest for assertion evaluation, reply normalisation, scenario
 parsing and distribution sampling (deterministic with a seed), baseline comparison, and verdict wiring.
-`scripts/check/P0-09.sh`: build; `docker compose up -d --build redis postgres engine app runner`; using the
+`scripts/check/P0-09.sh`: build; `docker compose -p quest-p09 --env-file .env.p09 up -d --build redis postgres engine app runner proxy`; using the
 `levels/_examples` levels: a `cli` level passes after the check script runs its reference `.redis` file
 through `/api/cli`, fails before, and returns `works_but_wrong` after running its wrong solution; a `code`
 level passes with the reference module copied into `workspace/`, `wrong` with an empty stub, and
 `works_but_wrong` with the antipattern module; a `decision` level grades both ways; a traffic scenario
 records a baseline against the baseline slot and then an improved ratio with the reference cache module;
-`docker compose down`; clean the workspace copies.
+`docker compose -p quest-p09 down -v`; clean the workspace copies.
 
 **Acceptance check.** `scripts/check/P0-09.sh` exits 0.
 

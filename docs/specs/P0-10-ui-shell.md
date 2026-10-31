@@ -39,9 +39,15 @@ needs a change (say so in the handoff).
   in a new tab.
 - Playwright (`ui/e2e/`): plays Chapter 0 end to end against the real stack.
 
-**Work.** Build the above; `scripts/check/P0-10.sh`: `pnpm --filter @quest/ui build`, `docker compose up
--d --build` (full stack), Playwright run of Chapter 0 (welcome → map → each level → verify → pass), screenshot
-each screen into `ui/e2e/screenshots/` (gitignored), `docker compose down`.
+**Isolation for your check (binding).** Other agents use the default compose project. Your check runs
+its own: `docker compose -p quest-p10 --env-file .env.p10 ...` with that env file (gitignored, create it)
+setting `PROXY_PORT=3300`, `REDIS_PORT=6393`, `PG_PORT=5435`, `INSIGHT_PORT=5543`, and only the services
+the full stack. Finish with `docker compose -p quest-p10 down -v`. Never run plain `docker compose down`/`stop`
+against the default project.
+
+**Work.** Build the above; `scripts/check/P0-10.sh`: `pnpm --filter @quest/ui build`, `docker compose -p quest-p10
+--env-file .env.p10 up -d --build` (full stack), Playwright run of Chapter 0 against port 3300 (welcome → map → each
+level → verify → pass), screenshot each screen into `ui/e2e/screenshots/` (gitignored), `docker compose -p quest-p10 down -v`.
 
 **Acceptance check.** `scripts/check/P0-10.sh` exits 0.
 
