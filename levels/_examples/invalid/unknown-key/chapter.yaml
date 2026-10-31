@@ -1,0 +1,6 @@
+id: unknown-key
+title: "Invalid example: unknown-key"
+incident:
+  - { from: roommate, time: "12:00", text: "bhai this one is broken on purpose" }
+levels:
+  - unknown-key-01-scoreboard

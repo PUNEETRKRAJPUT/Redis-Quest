@@ -1,0 +1,5 @@
+# Works, but wrong: the sorted set is right, but a second copy lives in a list "for display".
+ZADD lb:hostel:h-c-02-2 120 user:{{player.id}}
+ZINCRBY lb:hostel:h-c-02-2 30 user:{{player.id}}
+LPUSH lb:hostel:h-c-02-2:list user:{{player.id}}:150
+ZREVRANK lb:hostel:h-c-02-2 user:{{player.id}}

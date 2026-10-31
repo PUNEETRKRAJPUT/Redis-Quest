@@ -14,6 +14,11 @@
   "scripts": {
     "build": "tsc -b",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "levels:validate": "node dist/levels/cli.js"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
   }
 }

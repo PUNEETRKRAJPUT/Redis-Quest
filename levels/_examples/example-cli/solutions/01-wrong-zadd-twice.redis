@@ -1,0 +1,4 @@
+# Wrong: ZADD sets the score; the second call leaves 30, not 150.
+ZADD lb:hostel:h-c-02-2 120 user:{{player.id}}
+ZADD lb:hostel:h-c-02-2 30 user:{{player.id}}
+ZRANGE lb:hostel:h-c-02-2 0 9 REV WITHSCORES

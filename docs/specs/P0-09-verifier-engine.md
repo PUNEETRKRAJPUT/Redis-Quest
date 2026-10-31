@@ -39,14 +39,20 @@ behavior runs through the runner, and traffic runs through autocannon against th
   autocannon from the engine against `${APP_URL}` with per-request `setupRequest` picking user ids and
   paths from the distribution, collect p50/p99/rps/non2xx/timeouts, read `dbQueries`, `redisCommands` and
   cache hit ratio from the engine's aggregated app metrics for the same window, and compare with the
-  recorded **baseline** for the scenario. Baselines: when a `traffic` check has `baseline: true` it records
-  the run under `${PROGRESS_DIR}/baselines/<scenario>.json`; ratio assertions require a baseline and fail
-  with a clear message if none exists. Hard caps from `.env`: `LOAD_MAX_CONNECTIONS` (default 200),
+  **baseline** for the scenario. Baseline semantics (ruled, matches the P0-05 schema): `baseline: true`
+  means the ratio assertions are graded against a baseline run; the engine records that baseline itself
+  the first time it is needed by running the same scenario with the level's learner slots deactivated
+  (the unmodified app), storing it under `${PROGRESS_DIR}/baselines/<scenario>.json` with the app config
+  it ran under; `POST /api/baselines/<scenario>/refresh` re-records. Levels never "record" anything.
+  Absolute assertions (`hit_ratio_gte`, `error_rate_lte`, and the additive `db_queries_lte`, `p99_ms_lte`)
+  need no baseline. Hard caps from `.env`: `LOAD_MAX_CONNECTIONS` (default 200),
   `LOAD_MAX_DURATION_SEC` (default 30); a `LOW_POWER=1` env halves both.
 - Each check carries its own failure `message` from the level file; the engine appends the observed
   value ("expected zset, got list").
 - Emit `level.event` WebSocket events as checks start and finish so the UI can show progress.
 - Never run two verifications for the same player at once (409 on overlap).
+- At startup, cross-check `READ_ONLY_COMMANDS` from `@quest/shared` against the live server's `COMMAND INFO` flags (`readonly`) for the current target and log any disagreement as a warning; the allowlist in the schema was written from memory, not from the docs digest.
+- `antipattern` verifiers may be redis-shaped (`checks`) or behavior-shaped (`slot`, `fixtures`, `assertions`); a failing check or assertion is the hit, and its `message` is the feedback.
 
 **Work.** Implement the above with vitest for assertion evaluation, reply normalisation, scenario
 parsing and distribution sampling (deterministic with a seed), baseline comparison, and verdict wiring.

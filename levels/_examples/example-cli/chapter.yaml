@@ -1,0 +1,16 @@
+# Example chapter for the cli mode. Chapter ids for the real chapters are short (ch1 for
+# ch1-keyspace); an example chapter uses its full directory name so the four examples never clash.
+id: example-cli
+title: "Example: the keyspace"
+incident:
+  - from: roommate
+    time: "21:58"
+    text: "bhai the hostel group wants a scoreboard by tonight. Harry Bhaiya already announced it 😭"
+  - from: senior
+    time: "22:01"
+    text: "Top ten of Shivneri on the home screen. Live. Fest ka budget hai, just make it work na"
+  - from: you
+    time: "22:03"
+    text: "on it. no new servers needed"
+levels:
+  - example-cli-01-hostel-scoreboard

@@ -1,0 +1,6 @@
+id: id-mismatch
+title: "Invalid example: id-mismatch"
+incident:
+  - { from: roommate, time: "12:00", text: "bhai this one is broken on purpose" }
+levels:
+  - id-mismatch-01-scoreboard

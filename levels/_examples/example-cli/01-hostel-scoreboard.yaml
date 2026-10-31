@@ -1,0 +1,102 @@
+# A complete cli level. Every top-level key is documented in levels/README.md.
+id: example-cli-01-hostel-scoreboard   # = <chapter id>-<file name without .yaml>
+chapter: example-cli                   # = id in chapter.yaml
+title: "The hostel scoreboard"
+mode: cli
+
+# Long markdown can live next to the level; the loader inlines it.
+story: { file: ./01-hostel-scoreboard.story.md }
+
+brainstorm:
+  prompt: "Five people, one score each, and the card needs them ranked. Which structure would you reach for, and why?"
+  options:
+    - id: sorted-set
+      label: "A sorted set: member = user, score = points"
+      is_reasonable: true
+    - id: list-sorted-in-app
+      label: "A list of 'user:points' strings, sorted in the app on every read"
+      is_reasonable: false
+    - id: hash-of-scores
+      label: "One hash, field = user, value = points"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: an ORDER BY query in Postgres"
+      is_reasonable: true
+
+teach: |
+  A **sorted set** keeps unique members ordered by a numeric score. The order is maintained by the
+  data structure itself, so reading the top ten never sorts anything at request time.
+
+  - `ZADD key score member` sets a member's score (it replaces the old score, it does not add to it).
+  - `ZINCRBY key delta member` adds to the score atomically: no read, add, write cycle.
+  - `ZRANGE key 0 9 REV WITHSCORES` reads the top ten, highest first.
+  - `ZREVRANK key member` is the 0-based position counting from the top.
+
+  Ties are broken by member name, byte by byte.
+
+  A worked example with the docs' own sample data (not your task):
+
+  ```
+  ZADD racer_scores 10 "Norem"
+  ZINCRBY racer_scores 50 "Wood"
+  ZRANGE racer_scores 0 -1 REV WITHSCORES
+  ```
+
+task: |
+  The key is `lb:hostel:h-c-02-2` (Shivneri Hostel). Four wingmates are already on it.
+
+  1. Add yourself as member `user:{{player.id}}` with **120** points.
+  2. The last over gave you **30** more points. Add them without reading your score first.
+  3. Read the top ten with their scores, then read your own rank.
+
+setup:   # runs before the level starts; must be safe to run again
+  - cmd: [DEL, "lb:hostel:h-c-02-2", "lb:hostel:h-c-02-2:list"]
+  - cmd: [ZADD, "lb:hostel:h-c-02-2", 140, "user:teja"]
+  - cmd: [ZADD, "lb:hostel:h-c-02-2", 110, "user:ankita"]
+  - cmd: [ZADD, "lb:hostel:h-c-02-2", 95, "user:harry"]
+  - cmd: [ZADD, "lb:hostel:h-c-02-2", 60, "user:bunty"]
+
+hints:
+  - "ZADD takes the score before the member."
+  - "Running ZADD a second time replaces your score. Which command adds to it?"
+  - "REV gives highest first. ZREVRANK counts from the top, starting at 0."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "lb:hostel:h-c-02-2"]
+        equals: zset
+        message: "lb:hostel:h-c-02-2 is not a sorted set any more. Did something delete it and recreate it as another type?"
+      - cmd: [ZCARD, "lb:hostel:h-c-02-2"]
+        gte: 5
+        message: "Expected at least 5 people on the board: the four wingmates and you."
+      - cmd: [ZSCORE, "lb:hostel:h-c-02-2", "user:{{player.id}}"]
+        equals: 150
+        message: "Your score should be 150 (120, then 30 more). If it is 30, the second ZADD replaced it instead of adding."
+      - cmd: [ZREVRANK, "lb:hostel:h-c-02-2", "user:{{player.id}}"]
+        equals: 0
+        message: "With 150 points you should be at the top (rank 0)."
+  - type: antipattern   # checks describe the healthy state; a failing check is a hit
+    checks:
+      - cmd: [EXISTS, "lb:hostel:h-c-02-2:list"]
+        equals: 0
+        message: "This passes today, but you also keep a list copy of the board. Two copies drift apart at the first missed write, and the list has to be sorted on every read. The sorted set already is the scoreboard."
+
+show_me: leaderboard_panel
+docs:
+  - https://redis.io/docs/latest/develop/data-types/sorted-sets/
+  - https://redis.io/docs/latest/develop/use-cases/leaderboard
+
+reward:
+  xp: 50
+  badge: "Ranked"
+
+solutions:
+  reference: solutions/01-reference.redis
+  wrong:
+    - path: solutions/01-wrong-zadd-twice.redis
+      expect: wrong
+      because: "The second ZADD replaces the score with 30 instead of adding to it."
+    - path: solutions/01-works-but-wrong-list-copy.redis
+      expect: works_but_wrong
+      because: "Correct sorted set, plus a list copy that will drift and must be sorted on read."

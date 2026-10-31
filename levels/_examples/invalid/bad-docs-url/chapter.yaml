@@ -1,0 +1,6 @@
+id: bad-docs-url
+title: "Invalid example: bad-docs-url"
+incident:
+  - { from: roommate, time: "12:00", text: "bhai this one is broken on purpose" }
+levels:
+  - bad-docs-url-01-scoreboard

@@ -1,0 +1,6 @@
+id: write-command
+title: "Invalid example: write-command"
+incident:
+  - { from: roommate, time: "12:00", text: "bhai this one is broken on purpose" }
+levels:
+  - write-command-01-scoreboard

@@ -1,0 +1,6 @@
+id: two-assertions
+title: "Invalid example: two-assertions"
+incident:
+  - { from: roommate, time: "12:00", text: "bhai this one is broken on purpose" }
+levels:
+  - two-assertions-01-scoreboard

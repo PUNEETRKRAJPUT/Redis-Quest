@@ -1,0 +1,11 @@
+id: example-ops
+title: "Example: boot"
+incident:
+  - from: roommate
+    time: "23:40"
+    text: "laptop was getting hot so I ran docker compose down. that is fine right?? right??"
+  - from: you
+    time: "23:41"
+    text: "depends which down you ran. checking"
+levels:
+  - example-ops-01-roommate-ran-down

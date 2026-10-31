@@ -1,0 +1,105 @@
+id: example-code-01-cache-aside
+chapter: example-code
+title: "Cache-aside, version one"
+mode: code
+
+story: |
+  It is 7:31 pm. The toss is at 7:30 every match day, and every user opens the same three
+  player pages at once: Ganapathi "Anna Express" Chengappa, Jithin "Lightning Rod" Varghese
+  and Hitesh "Gulabi Toofan" Bhatt.
+
+  The stats page calls `db.getPlayerStats(id)`, a Postgres function that takes hundreds of
+  milliseconds, and it runs the same query again for every single request. The live panel shows
+  p99 climbing and Postgres queries per second through the roof.
+
+scenario: toss-time-100   # drives the live pain panel while the level is open
+
+brainstorm:
+  prompt: "Thousands of reads, the same three players, data that changes once per match. What would you reach for?"
+  options:
+    - id: cache-aside-ttl
+      label: "Cache-aside: check Redis, on a miss read Postgres and store it with a TTL"
+      is_reasonable: true
+    - id: cache-forever
+      label: "Cache it in Redis with no expiry"
+      is_reasonable: false
+    - id: more-app-servers
+      label: "Run more app servers"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: add a Postgres read replica"
+      is_reasonable: true
+
+teach: |
+  **Cache-aside** keeps the database as the source of truth and Redis as a copy that is allowed
+  to be briefly stale:
+
+  1. Read the cache key. A hit returns immediately.
+  2. On a miss, read the database, write the result to the cache **with a TTL**, return it.
+
+  The TTL is your staleness budget: a shorter TTL means fresher data and a lower hit ratio.
+  Store an entity as a hash (`HSET` then `EXPIRE`), read it back with `HGETALL`. Hash values come
+  back as strings.
+
+  A worked example with the docs' sample domain (not your task):
+
+  ```js
+  const cached = await redis.hGetAll(`cache:product:${id}`);
+  ```
+
+task: |
+  Fill in `getPlayerStats(deps, playerId)` in `workspace/ch2/cache.js`.
+
+  - Cache key: `cache:player:<playerId>`, a hash.
+  - On a miss, load from Postgres with `db.query('SELECT * FROM player_stats($1)', [playerId])`.
+  - Keep cached stats for **30 seconds**.
+
+hints:
+  - "HGETALL on a missing key returns an empty object, not null."
+  - "Write the hash and its expiry in one MULTI so the key never exists without a TTL."
+
+verify:
+  # Runs in list order. The behavior verifier resets state from its fixtures first.
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/01-cold-cache.yaml
+    assertions:
+      - call: { args: ["p-028"] }
+        sideEffect:
+          - cmd: [TYPE, "cache:player:p-028"]
+            equals: hash
+            message: "After a miss, cache:player:p-028 should be a hash in Redis. Nothing was cached."
+          - cmd: [TTL, "cache:player:p-028"]
+            between: [1, 30]
+            message: "The cached stats should expire within 30 seconds."
+  - type: traffic
+    scenario: toss-time-100
+    baseline: true
+    assertions:
+      p99_ratio_lte: 0.2        # p99 at least 5x better than the baseline run
+      db_calls_ratio_lte: 0.1   # at least 90% fewer Postgres calls
+    message: "Under toss-time load the page is not meaningfully faster than with no cache."
+  - type: antipattern
+    checks:
+      - cmd: [TTL, "cache:player:p-028"]
+        notEquals: -1
+        message: "This passes today, but the cache never expires. When stats change after the match, every user keeps seeing the old numbers until someone deletes the key by hand."
+
+show_me: stats_latency_panel
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+min_redis_version: "8.0"
+
+reward:
+  xp: 100
+  badge: "First cache"
+
+solutions:
+  reference: solutions/01-reference.js
+  wrong:
+    - path: solutions/01-wrong-no-cache.js
+      expect: wrong
+      because: "Reads Postgres every time; nothing is cached."
+    - path: solutions/01-works-but-wrong-no-ttl.js
+      expect: works_but_wrong
+      because: "Caches correctly but never expires, so stats go stale forever."

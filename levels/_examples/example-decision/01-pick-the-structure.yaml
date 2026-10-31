@@ -1,0 +1,84 @@
+id: example-decision-01-pick-the-structure
+chapter: example-decision
+title: "Pick the structure"
+mode: decision
+
+story: |
+  Teja has three features on a sticky note above his desk. Each one needs somewhere to live in
+  Redis, and each one has an obvious wrong answer that would work for a week.
+
+  Before anyone writes code, you pick the structure for each and say why in one line.
+
+brainstorm:
+  prompt: "Before you look at the three features: what is the first question you ask when choosing a Redis data type?"
+  options:
+    - id: need-ordering
+      label: "Do I need the items kept in order, and by what?"
+      is_reasonable: true
+    - id: what-is-fastest
+      label: "Which type has the fastest commands?"
+      is_reasonable: false
+    - id: not-redis
+      label: "Should this be in Redis at all?"
+      is_reasonable: true
+
+teach: |
+  The Redis docs give rules of thumb for choosing a type:
+
+  - **Collections**: need ordering? A sorted set. Need extra fields per key and no set
+    operations? A hash. Keys are integers in a known range? A bitmap on a string.
+    Otherwise a set.
+  - **Objects**: need per-field expiry, or frequent field access with no nesting? A hash.
+    Nested data? JSON, which has the highest memory and processing cost, then hashes, then strings.
+  - Sorted sets have the highest memory overhead of the collections, then sets, then strings.
+
+  Every type can be emulated with strings; the trade-off is speed, memory and features.
+
+task: |
+  Answer all three questions. For each, choose one structure. Your one-line reasoning is shown
+  next to the model answer afterwards.
+
+verify:
+  - type: quiz
+    question: "A live leaderboard of points per hostel, read top ten first."
+    options:
+      - { id: lb-sorted-set, label: "Sorted set" }
+      - { id: lb-list, label: "List, sorted in the app" }
+      - { id: lb-set, label: "Set" }
+    correct: lb-sorted-set
+    explanation: "It needs ordering by a score, which is exactly what a sorted set maintains."
+  - type: quiz
+    question: "A player profile card: name, college, hostel, matches played. Fields are read one at a time, nothing is nested."
+    options:
+      - { id: profile-hash, label: "Hash" }
+      - { id: profile-json, label: "JSON document" }
+      - { id: profile-list, label: "List of values" }
+    correct: profile-hash
+    explanation: "Flat fields read individually fit a hash; JSON costs more memory and processing and buys nesting you do not need."
+  - type: quiz
+    question: "Which days of this month a user logged in, for a streak badge."
+    options:
+      - { id: streak-bitmap, label: "Bitmap on a string, one bit per day" }
+      - { id: streak-sorted-set, label: "Sorted set of dates" }
+      - { id: streak-hash, label: "Hash of date to true" }
+    correct: streak-bitmap
+    explanation: "The keys are integers in a known range (day 1 to 31), the docs' case for a bitmap."
+
+docs:
+  - https://redis.io/docs/latest/develop/data-types/compare-data-types
+
+reward:
+  xp: 40
+
+solutions:
+  reference: [lb-sorted-set, profile-hash, streak-bitmap]
+  wrong:
+    - option: lb-list
+      expect: wrong
+      because: "Sorting on every read is the work a sorted set does once, on write."
+    - option: profile-json
+      expect: wrong
+      because: "No nesting, so JSON only adds memory and processing cost."
+    - option: streak-sorted-set
+      expect: wrong
+      because: "Highest memory overhead of the collections for 31 yes/no values."

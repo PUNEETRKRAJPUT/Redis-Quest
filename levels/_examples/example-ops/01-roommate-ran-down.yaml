@@ -1,0 +1,53 @@
+id: example-ops-01-roommate-ran-down
+chapter: example-ops
+title: "Roommate ran down"
+mode: ops
+
+story: |
+  Teja shut the whole stack down to cool his laptop. Your save file, `game:player:{{player.id}}`,
+  lives in Redis. Is it still there when everything comes back up?
+
+brainstorm:
+  prompt: "When the Redis container is removed and created again, what decides whether your keys survive?"
+  options:
+    - id: data-volume
+      label: "Whether Redis writes to disk, and whether that disk (the volume) survives"
+      is_reasonable: true
+    - id: always-lost
+      label: "Nothing survives; Redis is memory only"
+      is_reasonable: false
+    - id: not-redis
+      label: "Keep the save file somewhere other than Redis"
+      is_reasonable: true
+
+teach: |
+  The `redis` service keeps its data directory, `/data`, on a named Docker volume. Removing the
+  containers does not remove named volumes unless you ask for it.
+
+  Whether there is anything in `/data` to keep depends on Redis persistence, which is all of
+  Chapter 5. For now: the volume is the disk, the container is just the process.
+
+task: |
+  On your Mac, in the repo folder, stop the stack with `docker compose down` and start it again
+  with `docker compose up -d`. Then come back here.
+
+verify:
+  - type: event
+    kind: redis_reconnect
+    timeoutMs: 300000
+    message: "The game did not see Redis go away and come back within five minutes."
+  - type: redis
+    checks:
+      - cmd: [EXISTS, "game:player:{{player.id}}"]
+        equals: 1
+        message: "Your save file is gone. Did you run down with -v? That deletes the volumes too."
+
+reward:
+  xp: 20
+
+solutions:
+  reference: solutions/01-reference.sh
+  wrong:
+    - path: solutions/01-wrong-down-volumes.sh
+      expect: wrong
+      because: "down -v removes the named volumes, so Redis comes back empty."

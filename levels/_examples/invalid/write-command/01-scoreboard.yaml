@@ -1,0 +1,26 @@
+# Deliberately invalid: a write command in a verifier without allowWrite. The line marked INVALID is where the validator must point.
+id: write-command-01-scoreboard
+chapter: write-command
+title: "Invalid example"
+mode: cli
+story: "A minimal level that is valid except for one deliberate mistake."
+brainstorm:
+  prompt: "Which structure?"
+  options:
+    - { id: sorted-set, label: "Sorted set", is_reasonable: true }
+    - { id: not-redis, label: "Not Redis", is_reasonable: false }
+teach: "Sorted sets keep members ordered by score."
+task: "Add yourself to `lb:example` with ZADD."
+verify:
+  - type: redis
+    checks:
+      - cmd: [SET, "lb:checked", "1"]   # INVALID: SET writes
+        equals: OK
+reward:
+  xp: 10
+solutions:
+  reference: solutions/reference.redis
+  wrong:
+    - path: solutions/wrong.redis
+      expect: wrong
+      because: "Never adds anything."

@@ -1,0 +1,6 @@
+id: unknown-template-variable
+title: "Invalid example: unknown-template-variable"
+incident:
+  - { from: roommate, time: "12:00", text: "bhai this one is broken on purpose" }
+levels:
+  - unknown-template-variable-01-scoreboard

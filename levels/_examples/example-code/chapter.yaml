@@ -1,0 +1,14 @@
+id: example-code
+title: "Example: everyone showed up"
+incident:
+  - from: roommate
+    time: "19:31"
+    text: "bhai bhai bhai the toss is in 2 min and the stats page is just a spinner 😭"
+  - from: senior
+    time: "19:33"
+    text: "Scene kya hai? Just add more servers na"
+  - from: you
+    time: "19:34"
+    text: "Postgres is doing the same slow query for the same three players. Give me ten minutes."
+levels:
+  - example-code-01-cache-aside

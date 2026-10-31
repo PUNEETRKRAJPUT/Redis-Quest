@@ -1,0 +1,27 @@
+# Deliberately invalid: a check with two assertions. The line marked INVALID is where the validator must point.
+id: two-assertions-01-scoreboard
+chapter: two-assertions
+title: "Invalid example"
+mode: cli
+story: "A minimal level that is valid except for one deliberate mistake."
+brainstorm:
+  prompt: "Which structure?"
+  options:
+    - { id: sorted-set, label: "Sorted set", is_reasonable: true }
+    - { id: not-redis, label: "Not Redis", is_reasonable: false }
+teach: "Sorted sets keep members ordered by score."
+task: "Add yourself to `lb:example` with ZADD."
+verify:
+  - type: redis
+    checks:
+      - cmd: [ZCARD, "lb:example"]   # INVALID: equals and gte on one check
+        equals: 1
+        gte: 1
+reward:
+  xp: 10
+solutions:
+  reference: solutions/reference.redis
+  wrong:
+    - path: solutions/wrong.redis
+      expect: wrong
+      because: "Never adds anything."

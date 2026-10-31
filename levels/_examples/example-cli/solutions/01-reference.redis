@@ -1,0 +1,6 @@
+# Reference: one sorted set is the whole scoreboard. Score = points, member = user id.
+ZADD lb:hostel:h-c-02-2 120 user:{{player.id}}
+# ZINCRBY adds atomically, so two last-over updates can never overwrite each other.
+ZINCRBY lb:hostel:h-c-02-2 30 user:{{player.id}}
+ZRANGE lb:hostel:h-c-02-2 0 9 REV WITHSCORES
+ZREVRANK lb:hostel:h-c-02-2 user:{{player.id}}

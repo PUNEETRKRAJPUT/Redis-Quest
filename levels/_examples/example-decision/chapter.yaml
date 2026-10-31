@@ -1,0 +1,11 @@
+id: example-decision
+title: "Example: which one would you reach for"
+incident:
+  - from: roommate
+    time: "16:20"
+    text: "yaar three new features in the backlog and I have no idea which Redis thing goes where"
+  - from: you
+    time: "16:22"
+    text: "give me the list. we pick the structure before we write a single line"
+levels:
+  - example-decision-01-pick-the-structure
