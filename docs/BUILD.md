@@ -19,7 +19,7 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 | id | task | wave | status | model | spec | check | handoff |
 |---|---|---|---|---|---|---|---|
 | P0-01 | Repo skeleton: pnpm workspace, TS base, lint, package layout | 1 | done | sonnet | specs/P0-01 | check/P0-01.sh | handoffs/P0-01 |
-| P0-02 | Docker: node Dockerfile, compose, Caddyfile, start + preflight scripts | 2 | in progress | sonnet | specs/P0-02 | check/P0-02.sh | |
+| P0-02 | Docker: node Dockerfile, compose, Caddyfile, start + preflight scripts | 2 | done | sonnet | specs/P0-02 | check/P0-02.sh | handoffs/P0-02 |
 | P0-03 | Fiction bible | 1 | done | sonnet | specs/P0-03 | check/P0-03.sh | handoffs/P0-03 |
 | P0-04 | Postgres schema, seed generator, outbox triggers, slow query | 2 | in progress | sonnet | specs/P0-04 | check/P0-04.sh | |
 | P0-05 | Level file schema, loader, validator | 2 | in progress | opus | specs/P0-05 | check/P0-05.sh | |
@@ -28,7 +28,7 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 | P0-08 | Runner: load workspace module, call with deps, metrics, crash isolation | 3 | todo | sonnet | specs/P0-08 | check/P0-08.sh | |
 | P0-09 | Verifier engine: redis, antipattern, quiz, event; traffic + behavior wiring | 4 | todo | opus | specs/P0-09 | check/P0-09.sh | |
 | P0-10 | UI shell: chapter map, level view (seven beats), terminal, editor, logs, show-me | 4 | todo | sonnet | specs/P0-10 | check/P0-10.sh | |
-| P0-11 | Redis Insight auto-provisioning via its API | 3 | todo | sonnet | specs/P0-11 | check/P0-11.sh | |
+| P0-11 | Redis Insight auto-provisioning via its API | 3 | in progress | sonnet | specs/P0-11 | check/P0-11.sh | |
 | P0-12 | CI: build, lint, level validation, checks, Playwright Chapter 0 | 5 | todo | sonnet | specs/P0-12 | check/P0-12.sh | |
 
 Waves run in order; tasks within a wave run in parallel because they own disjoint files. A task may
@@ -44,6 +44,7 @@ start early if everything it depends on is `done`.
 | T1 | Five-tester playtest, findings, fixes | todo |
 
 ## Decisions log (newest first)
+- 2026-11-01 Verified: arm64 `redis:8` (8.10.3) loads search, ReJSON, timeseries, bf with no flags. Docker Desktop here has 7.7 GiB. `.dockerignore` lives next to the Dockerfile.
 - 2026-11-01 League is the Nukkad Cricket League (NCL), 8 franchises, hot players p-028, p-101, p-151.
 - 2026-11-01 Milestone 1 = Phase 0 + Ch0 + Ch1 + Ch2.1–2.4. Fictional league. macOS Apple Silicon 16 GB
   only. Engine/app split. Progress file is the source of truth. MIT licence. Repo-local git identity is

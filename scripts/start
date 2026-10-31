@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# One command to bring the whole local stack up. Bash 3.2 compatible.
+set -u
+cd "$(dirname "$0")/.." || exit 1
+
+scripts/preflight.sh || { echo; echo "Not starting: fix the FAIL lines above first."; exit 1; }
+
+[ -f .env ] || { cp .env.example .env; echo "Created .env from .env.example"; }
+# postgres/init is mounted read-only into the database container; make sure it exists.
+mkdir -p logs .progress workspace postgres/init
+
+# Same precedence as compose: process environment, then .env, then defaults.
+envval() {
+  local v
+  eval "v=\${$1:-}"
+  [ -z "$v" ] && v="$(grep -E "^$1=" .env | tail -n 1 | sed 's/^[^=]*=//')"
+  printf '%s' "${v:-$2}"
+}
+PROXY_PORT="$(envval PROXY_PORT 3000)"
+INSIGHT_PORT="$(envval INSIGHT_PORT 5540)"
+REDIS_PORT="$(envval REDIS_PORT 6379)"
+PG_PORT="$(envval PG_PORT 5432)"
+
+docker compose up -d --build || { echo "docker compose up failed"; exit 1; }
+
+wait_healthy() { # service
+  local i=0 cid st
+  while [ "$i" -lt 60 ]; do
+    cid="$(docker compose ps -q "$1" 2>/dev/null)"
+    st="$([ -n "$cid" ] && docker inspect --format '{{.State.Health.Status}}' "$cid" 2>/dev/null)"
+    [ "$st" = "healthy" ] && { echo "$1 healthy"; return 0; }
+    sleep 2; i=$((i + 1))
+  done
+  echo "$1 did not become healthy in 120 s (docker compose logs $1)"
+  return 1
+}
+wait_healthy redis || exit 1
+wait_healthy postgres || exit 1
+
+echo "Waiting up to 60 s for the game on http://localhost:${PROXY_PORT}/health ..."
+UP=0
+i=0
+while [ "$i" -lt 30 ]; do
+  if curl -fs -o /dev/null "http://localhost:${PROXY_PORT}/health"; then UP=1; break; fi
+  sleep 2; i=$((i + 1))
+done
+
+echo
+if [ "$UP" -eq 1 ]; then
+  echo "Game:           http://localhost:${PROXY_PORT}"
+else
+  echo "Game:           not up yet. The engine service is not built in this version of the repo,"
+  echo "                so http://localhost:${PROXY_PORT} answers 502 until it is. This is expected."
+fi
+echo "Redis Insight:  http://localhost:${INSIGHT_PORT}"
+echo "Redis:          127.0.0.1:${REDIS_PORT}    Postgres: 127.0.0.1:${PG_PORT} (user/password/db: quest)"
+echo "Stop:           scripts/stop"

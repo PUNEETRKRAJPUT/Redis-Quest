@@ -1,0 +1,15 @@
+# Host node_modules hold macOS symlinks into the pnpm store; the image installs its own.
+**/node_modules
+**/dist
+**/.tsbuildinfo
+.git
+.env
+.env.*
+logs
+.progress
+workspace
+docs
+fiction
+postgres
+graphify-out
+.DS_Store

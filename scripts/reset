@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Wipes Redis, Postgres and Insight data volumes. Keeps .progress/ (the game's progress file).
+cd "$(dirname "$0")/.." || exit 1
+printf 'This deletes all Redis, Postgres and Insight data (volumes). .progress/ is kept. Continue? [y/N] '
+read -r ans
+case "$ans" in
+  y|Y) docker compose down -v ;;
+  *) echo "Cancelled."; exit 1 ;;
+esac

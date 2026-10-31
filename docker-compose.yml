@@ -1,0 +1,155 @@
+name: redis-quest
+
+# Host ports come from .env (defaults in .env.example). Container-side ports never change.
+
+x-node: &node
+  build: { context: ., dockerfile: docker/node.Dockerfile }
+  image: redis-quest-node:latest
+  platform: linux/arm64
+  environment: &node-env
+    REDIS_URL: redis://redis:6379
+    DATABASE_URL: postgres://quest:quest@postgres:5432/quest
+    LOG_DIR: /logs
+    PROGRESS_DIR: /progress
+    WORKSPACE_DIR: /workspace
+    APP_URL: http://proxy:3000/app
+    RUNNER_URL: http://runner:4100
+    ENGINE_URL: http://engine:4200
+  volumes:
+    - ./workspace:/workspace
+    - ./logs:/logs
+    - ./.progress:/progress
+  depends_on:
+    redis: { condition: service_healthy }
+    postgres: { condition: service_healthy }
+
+x-redis-cluster-node: &redis-cluster-node
+  image: redis:8
+  platform: linux/arm64
+  mem_limit: 192m
+
+services:
+  # No depends_on engine/app: until they exist the proxy answers 502, which is the expected state.
+  proxy:
+    image: caddy:2-alpine
+    platform: linux/arm64
+    ports: ["127.0.0.1:${PROXY_PORT:-3000}:3000"]
+    volumes: ["./docker/Caddyfile:/etc/caddy/Caddyfile:ro", "./logs:/logs"]
+    mem_limit: 64m
+
+  engine:
+    <<: *node
+    command: ["node", "engine/dist/main.js"]
+    environment: { <<: *node-env, PORT: "4200" }
+    mem_limit: 512m
+
+  app:
+    <<: *node
+    command: ["node", "app/dist/main.js"]
+    environment: { <<: *node-env, PORT: "4000" }
+    mem_limit: 512m
+    # scaled by the learner in ch3: docker compose up -d --scale app=2
+
+  runner:
+    <<: *node
+    command: ["node", "runner/dist/main.js"]
+    environment: { <<: *node-env, PORT: "4100" }
+    mem_limit: 512m
+
+  redis:
+    image: redis:8
+    platform: linux/arm64
+    command: ["redis-server", "--maxmemory", "512mb", "--save", "", "--appendonly", "no"] # ch5 turns persistence on
+    ports: ["127.0.0.1:${REDIS_PORT:-6379}:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck: { test: ["CMD", "redis-cli", "PING"], interval: 2s, timeout: 2s, retries: 15 }
+    mem_limit: 768m
+
+  insight:
+    image: redis/redisinsight:latest
+    platform: linux/arm64
+    ports: ["127.0.0.1:${INSIGHT_PORT:-5540}:5540"]
+    volumes: ["insight-data:/data"]
+    mem_limit: 512m
+
+  postgres:
+    image: postgres:16
+    platform: linux/arm64
+    environment: { POSTGRES_USER: quest, POSTGRES_PASSWORD: quest, POSTGRES_DB: quest }
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - logging_collector=on
+      - -c
+      - log_directory=/logs/postgres
+      - -c
+      - log_min_duration_statement=100
+    ports: ["127.0.0.1:${PG_PORT:-5432}:5432"]
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./logs:/logs
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U quest -d quest"], interval: 2s, timeout: 2s, retries: 30 }
+    mem_limit: 1g
+
+  # ---- chapter 5 profiles (started by the learner by hand; later tasks make them correct) ----
+  redis-nopersist:
+    profiles: [crash]
+    image: redis:8
+    platform: linux/arm64
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    mem_limit: 256m
+
+  redis-replica:
+    profiles: [replica]
+    image: redis:8
+    platform: linux/arm64
+    command: ["redis-server", "--replicaof", "redis", "6379", "--replica-announce-ip", "redis-replica"]
+    ports: ["127.0.0.1:6380:6379"]
+    mem_limit: 256m
+
+  # Sentinel rewrites its config, so each container runs from a writable copy.
+  sentinel-1: &sentinel
+    profiles: [sentinel]
+    image: redis:8
+    platform: linux/arm64
+    command: ["sh", "-c", "cp /conf/sentinel.conf /tmp/sentinel.conf && exec redis-sentinel /tmp/sentinel.conf"]
+    volumes: ["./docker/sentinel:/conf:ro"]
+    ports: ["127.0.0.1:26379:26379"]
+    mem_limit: 64m
+  sentinel-2:
+    <<: *sentinel
+    ports: ["127.0.0.1:26380:26379"]
+  sentinel-3:
+    <<: *sentinel
+    ports: ["127.0.0.1:26381:26379"]
+
+  redis-c1: &cluster
+    <<: *redis-cluster-node
+    profiles: [cluster]
+    command: ["redis-server", "--cluster-enabled", "yes", "--cluster-announce-hostname", "redis-c1", "--cluster-preferred-endpoint-type", "hostname", "--cluster-node-timeout", "5000", "--save", "", "--appendonly", "no"]
+    ports: ["127.0.0.1:7100:6379"]
+  redis-c2:
+    <<: *cluster
+    command: ["redis-server", "--cluster-enabled", "yes", "--cluster-announce-hostname", "redis-c2", "--cluster-preferred-endpoint-type", "hostname", "--cluster-node-timeout", "5000", "--save", "", "--appendonly", "no"]
+    ports: ["127.0.0.1:7101:6379"]
+  redis-c3:
+    <<: *cluster
+    command: ["redis-server", "--cluster-enabled", "yes", "--cluster-announce-hostname", "redis-c3", "--cluster-preferred-endpoint-type", "hostname", "--cluster-node-timeout", "5000", "--save", "", "--appendonly", "no"]
+    ports: ["127.0.0.1:7102:6379"]
+  redis-c4:
+    <<: *cluster
+    command: ["redis-server", "--cluster-enabled", "yes", "--cluster-announce-hostname", "redis-c4", "--cluster-preferred-endpoint-type", "hostname", "--cluster-node-timeout", "5000", "--save", "", "--appendonly", "no"]
+    ports: ["127.0.0.1:7103:6379"]
+  redis-c5:
+    <<: *cluster
+    command: ["redis-server", "--cluster-enabled", "yes", "--cluster-announce-hostname", "redis-c5", "--cluster-preferred-endpoint-type", "hostname", "--cluster-node-timeout", "5000", "--save", "", "--appendonly", "no"]
+    ports: ["127.0.0.1:7104:6379"]
+  redis-c6:
+    <<: *cluster
+    command: ["redis-server", "--cluster-enabled", "yes", "--cluster-announce-hostname", "redis-c6", "--cluster-preferred-endpoint-type", "hostname", "--cluster-node-timeout", "5000", "--save", "", "--appendonly", "no"]
+    ports: ["127.0.0.1:7105:6379"]
+
+volumes: { redis-data: {}, pg-data: {}, insight-data: {} }

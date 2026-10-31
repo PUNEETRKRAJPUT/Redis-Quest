@@ -1,0 +1,23 @@
+{
+	admin off
+	auto_https off
+}
+
+:3000 {
+	log {
+		output file /logs/proxy/access.log
+		format json
+	}
+
+	# /app/* keeps its prefix (handle, not handle_path): the app mounts its routes under /app.
+	handle /app/* {
+		reverse_proxy app:4000
+	}
+
+	# Everything else, WebSocket upgrades included, goes to the single engine instance.
+	handle {
+		reverse_proxy engine:4200 {
+			flush_interval -1
+		}
+	}
+}
