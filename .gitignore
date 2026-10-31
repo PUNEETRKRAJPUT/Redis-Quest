@@ -11,3 +11,4 @@ postgres/init/002-seed.sql
 postgres/init/*.tmp
 .env.*
 !.env.example
+!docs/ci-local.log

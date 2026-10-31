@@ -1,0 +1,125 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Proves build, lint, unit tests and level validation. Hosted runners are Linux amd64 and this project
+  # pins linux/arm64 images, so nothing Docker-backed runs here (see .github/workflows/README.md).
+  fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      # pnpm version comes from "packageManager" in package.json (pnpm@10.24.0).
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Locate pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Validate real chapters
+        run: |
+          set -eu
+          n=0
+          for dir in levels/*/; do
+            dir=${dir%/}
+            case "$(basename "$dir")" in _*) continue ;; esac
+            echo "== levels:validate $dir"
+            pnpm --filter @quest/shared levels:validate "$dir"
+            n=$((n + 1))
+          done
+          if [ "$n" -eq 0 ]; then echo "no chapter directories found under levels/"; exit 1; fi
+          echo "validated $n chapter(s)"
+
+      # levels/_examples contains invalid cases on purpose: it must fail, with file:line:col errors.
+      - name: Validate levels/_examples fails with positioned errors
+        run: |
+          set -u
+          out=$(pnpm --silent --filter @quest/shared levels:validate levels/_examples 2>&1) && rc=0 || rc=$?
+          printf '%s\n' "$out"
+          count=$(printf '%s\n' "$out" | grep -cE '^levels/_examples/invalid/[^ ]+:[0-9]+:[0-9]+ ' || true)
+          if [ "$rc" -eq 1 ] && [ "$count" -ge 8 ]; then
+            echo "levels/_examples failed as expected with $count positioned errors"
+          else
+            echo "expected exit 1 with at least 8 positioned errors; got exit $rc and $count"
+            exit 1
+          fi
+
+      # A check script opts in by containing a line that is exactly: # ci: docker-free
+      - name: Docker-free check scripts
+        run: |
+          set -eu
+          ran=0
+          for f in scripts/check/*.sh; do
+            if grep -qxF '# ci: docker-free' "$f"; then
+              echo "== $f"
+              bash "$f"
+              ran=$((ran + 1))
+            fi
+          done
+          echo "ran $ran docker-free check script(s)"
+
+  # GitHub's macOS runners do not ship Docker, so this job normally skips itself. The full run is
+  # scripts/check/ci-local.sh on a developer Mac, which appends to docs/ci-local.log.
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect Docker
+        id: docker
+        run: |
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=mac job skipped::Docker is not available on this runner. Run scripts/check/ci-local.sh on a developer Mac; evidence goes to docs/ci-local.log."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.docker.outputs.available == 'true'
+        with:
+          node-version-file: .node-version
+
+      - name: Full check run
+        if: steps.docker.outputs.available == 'true'
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          bash scripts/check/all.sh
