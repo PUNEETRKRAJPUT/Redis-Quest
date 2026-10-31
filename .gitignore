@@ -7,3 +7,5 @@ logs/
 .DS_Store
 *.log
 .pnpm-store/
+postgres/init/002-seed.sql
+postgres/init/*.tmp

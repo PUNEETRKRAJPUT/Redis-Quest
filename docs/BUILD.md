@@ -21,7 +21,7 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 | P0-01 | Repo skeleton: pnpm workspace, TS base, lint, package layout | 1 | done | sonnet | specs/P0-01 | check/P0-01.sh | handoffs/P0-01 |
 | P0-02 | Docker: node Dockerfile, compose, Caddyfile, start + preflight scripts | 2 | done | sonnet | specs/P0-02 | check/P0-02.sh | handoffs/P0-02 |
 | P0-03 | Fiction bible | 1 | done | sonnet | specs/P0-03 | check/P0-03.sh | handoffs/P0-03 |
-| P0-04 | Postgres schema, seed generator, outbox triggers, slow query | 2 | in progress | sonnet | specs/P0-04 | check/P0-04.sh | |
+| P0-04 | Postgres schema, seed generator, outbox triggers, slow query | 2 | done | sonnet | specs/P0-04 | check/P0-04.sh | handoffs/P0-04 |
 | P0-05 | Level file schema, loader, validator | 2 | in progress | opus | specs/P0-05 | check/P0-05.sh | |
 | P0-06 | Engine skeleton: health, progress file + Redis mirror, WebSocket, CLI proxy | 3 | todo | sonnet | specs/P0-06 | check/P0-06.sh | |
 | P0-07 | App skeleton: baseline routes, slot registry, target switching | 3 | todo | opus | specs/P0-07 | check/P0-07.sh | |
@@ -44,6 +44,7 @@ start early if everything it depends on is `done`.
 | T1 | Five-tester playtest, findings, fixes | todo |
 
 ## Decisions log (newest first)
+- 2026-11-01 Seed is committed gzipped (`002-seed.sql.gz`, 11 MB); the Postgres image loads it natively. `player_stats()` p50 measured 175-290 ms here.
 - 2026-11-01 Verified: arm64 `redis:8` (8.10.3) loads search, ReJSON, timeseries, bf with no flags. Docker Desktop here has 7.7 GiB. `.dockerignore` lives next to the Dockerfile.
 - 2026-11-01 League is the Nukkad Cricket League (NCL), 8 franchises, hot players p-028, p-101, p-151.
 - 2026-11-01 Milestone 1 = Phase 0 + Ch0 + Ch1 + Ch2.1–2.4. Fictional league. macOS Apple Silicon 16 GB

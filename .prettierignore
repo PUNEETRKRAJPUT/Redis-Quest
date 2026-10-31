@@ -3,5 +3,5 @@ pnpm-lock.yaml
 dist/
 node_modules/
 fiction/*.json
-postgres/init/002-seed.sql
+postgres/init/002-seed.sql.gz
 workspace/
