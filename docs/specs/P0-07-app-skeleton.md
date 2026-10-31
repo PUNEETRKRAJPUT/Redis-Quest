@@ -54,6 +54,9 @@ the mechanism the whole game stands on; design it so a level author never touche
     (slot `leaderboard.top`)
   - `GET /app/limits/ping` → a route guarded by slot `ratelimit.allow` (baseline: in-process fixed window
     per `x-user-id`, again on purpose)
+  - `POST /app/register { id, name, college_id, hostel_id }` → slot `onboarding.registerUser`
+    (signature `(deps, user)`; baseline inserts into Postgres only; level 1.16 writes the Redis side:
+    hash, set membership, zset entry at 0, in one MULTI)
   - Optional extra latency on every DB call from `dbExtraLatencyMs` in the app config (one level uses it).
 - Test and check ids from the seed: users u-000001, u-000010 (home college c-02), u-020000; contests 1
   and 62 (about 3,000 entries each); completed matches m-001 and m-040; live m-041, m-042.
