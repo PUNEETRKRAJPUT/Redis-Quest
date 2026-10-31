@@ -29,7 +29,7 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 | P0-09 | Verifier engine: redis, antipattern, quiz, event; traffic + behavior wiring | 4 | in progress | opus | specs/P0-09 | check/P0-09.sh | |
 | P0-10 | UI shell: chapter map, level view (seven beats), terminal, editor, logs, show-me | 4 | in progress | sonnet | specs/P0-10 | check/P0-10.sh | |
 | P0-11 | Redis Insight auto-provisioning via its API | 3 | done | sonnet | specs/P0-11 | check/P0-11.sh | handoffs/P0-11 |
-| P0-12 | CI: build, lint, level validation, checks, Playwright Chapter 0 | 5 | todo | sonnet | specs/P0-12 | check/P0-12.sh | |
+| P0-12 | CI: build, lint, level validation, checks, Playwright Chapter 0 | 5 | in progress | sonnet | specs/P0-12 | check/P0-12.sh | |
 
 Waves run in order; tasks within a wave run in parallel because they own disjoint files. A task may
 start early if everything it depends on is `done`.
