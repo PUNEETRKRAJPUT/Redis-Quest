@@ -353,7 +353,8 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await snap(page, 'metrics');
 
   await page.goto('/#/showme');
-  await expect(page.locator('[data-showme]')).toHaveCount(14);
+  // Every registered show-me component renders once on sample data: 14 before F-13, 19 with its five panels.
+  await expect(page.locator('[data-showme]')).toHaveCount(19);
   await expect(page.getByText('Unknown show-me component')).toHaveCount(0);
   await snap(page, 'showme-gallery');
   // F-10: the two components that used to fall back to "unknown", shot on their own.
