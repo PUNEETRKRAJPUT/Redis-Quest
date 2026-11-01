@@ -93,18 +93,23 @@ jobs:
         run: pnpm -r test
 
       - name: Validate real chapters
+        # The whole tree in one call: interview rebuilds (and the Finale's pools) name levels in earlier chapters,
+        # which the validator only accepts when those chapters are passed too (F-12, E-04).
         run: |
           set -eu
+          dirs=""
           n=0
           for dir in levels/*/; do
             dir=${dir%/}
             case "$(basename "$dir")" in _*) continue ;; esac
-            echo "== levels:validate $dir"
-            pnpm --filter @quest/shared levels:validate "$dir"
+            dirs="$dirs $dir"
             n=$((n + 1))
           done
           if [ "$n" -eq 0 ]; then echo "no chapter directories found under levels/"; exit 1; fi
-          echo "validated $n chapter(s)"
+          echo "== levels:validate$dirs"
+          # shellcheck disable=SC2086
+          pnpm --filter @quest/shared levels:validate $dirs
+          echo "validated $n chapter(s) together"
 
       # levels/_examples contains invalid cases on purpose: it must fail, with file:line:col errors.
       - name: Validate levels/_examples fails with positioned errors
