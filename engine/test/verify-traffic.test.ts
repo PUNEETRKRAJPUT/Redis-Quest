@@ -182,10 +182,15 @@ describe('TrafficRunner with fakes', () => {
     };
     const tap = new MetricsTap();
     const runs: RunLoadOptions[] = [];
+    // A fake clock that moves ten seconds per run. The graded window reaches one second back from a run's
+    // start (as it does for real pushes), so two fake runs stamped with the real clock could share a second
+    // when they straddled a boundary and the baseline's sample would leak into the graded sum (seen on CI).
+    let clock = Date.now();
     const runLoad = async (o: RunLoadOptions): Promise<LoadRunResult> => {
       runs.push(o);
       const cached = active.includes('cache.getPlayerStats');
-      const now = Date.now();
+      const now = clock;
+      clock += 10_000;
       const r = cached
         ? load({ p99Ms: 15, rps: 2000 })
         : load({ p99Ms: 2500, rps: 40, ...(opts.baselineFails ? { ok2xx: 0, errorRate: 1 } : {}) });
