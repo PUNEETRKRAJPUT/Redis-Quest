@@ -179,7 +179,9 @@ info "first call: $MS ms, $(hdr x-quest-slots)"
 req GET /app/players/p-151/stats; expect_status "second call p-151 (hit)" 200
 SECOND_MS=$MS
 expect_js "cached row has the same player" 'j.player_id==="p-151"&&j.name.length>0'
-if awk -v m="$SECOND_MS" 'BEGIN { exit !(m < 20) }'; then ok "second call under 20 ms ($SECOND_MS ms)"; else bad "second call took $SECOND_MS ms (want < 20)"; fi
+# A hit is judged against the misses measured above, not an absolute number: on a loaded Mac (the full local run)
+# a 3 ms hit has been seen at 60 ms while the misses stayed above 230 ms. Half the fastest miss still proves the cache.
+if awk -v m="$SECOND_MS" -v b="$MIN" 'BEGIN { exit !(m < b / 2) }'; then ok "second call under half the fastest miss ($SECOND_MS ms vs $MIN ms)"; else bad "second call took $SECOND_MS ms (want under half the fastest miss, $MIN ms)"; fi
 sleep 2.5
 req GET /app/metrics; APP_RC_AFTER=$(js "$BODY" '(j.totals["GET /app/players/:id/stats"]||{redisCommands:0}).redisCommands')
 req GET '/api/metrics?seconds=300'; ENGINE_AFTER=$BODY
