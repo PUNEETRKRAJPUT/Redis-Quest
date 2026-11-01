@@ -24,8 +24,10 @@ function envFilePort(name: string, dflt: number): number {
   }
   return dflt;
 }
-export const REDIS_URL = `redis://127.0.0.1:${envFilePort('REDIS_PORT', 6391)}`;
-export const DATABASE_URL = `postgres://quest:quest@127.0.0.1:${envFilePort('PG_PORT', 5433)}/quest`;
+// Explicit URLs win (CI sets them for its service containers); otherwise the quest-p07 ports.
+export const REDIS_URL = process.env.REDIS_URL ?? `redis://127.0.0.1:${envFilePort('REDIS_PORT', 6391)}`;
+export const DATABASE_URL =
+  process.env.DATABASE_URL ?? `postgres://quest:quest@127.0.0.1:${envFilePort('PG_PORT', 5433)}/quest`;
 
 export function tempDir(prefix: string): string {
   return mkdtempSync(path.join(tmpdir(), `quest-p07-${prefix}-`));

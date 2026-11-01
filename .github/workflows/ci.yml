@@ -75,6 +75,17 @@ jobs:
       - name: Lint
         run: pnpm -r lint
 
+      # The app tests query the seeded schema (player_stats, contests, ...). Load it into the service
+      # container the same way the Postgres image's init directory would.
+      - name: Load schema and seed into the Postgres service
+        run: |
+          set -eu
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f postgres/init/001-schema.sql
+          gunzip -c postgres/init/002-seed.sql.gz | psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f postgres/init/003-outbox.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f postgres/init/004-slow-by-design.sql
+          psql "$DATABASE_URL" -Atc "select count(*) from users"
+
       - name: Test
         run: pnpm -r test
 
