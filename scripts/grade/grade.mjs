@@ -676,6 +676,24 @@ async function gradeLevel(lv) {
     { path: x.solutions.reference, expect: 'right', because: '' },
     ...x.solutions.wrong.map((w) => ({ ...w })),
   ];
+  // A level that waits for Redis to go away and come back needs a real `docker compose stop redis`; nothing the
+  // harness can do through the engine produces that, so it is graded by hand (ch2-10 was, with a real outage).
+  const needsOutage = lv.level.verify.some(
+    (v) => v.type === 'event' && (v.kind === 'redis_disconnect' || v.kind === 'redis_reconnect'),
+  );
+  if (needsOutage) {
+    for (const s of sols)
+      skipped(
+        lv,
+        s.path,
+        s.expect,
+        'SKIPPED (needs a real Redis outage: graded by hand)',
+        s.because,
+      );
+    await ensureUnlocked(id);
+    await api('POST', `/api/levels/${id}/complete`);
+    return;
+  }
   let unlocked = false;
   for (const s of sols) {
     const ext = extname(s.path);

@@ -63,10 +63,11 @@ start early if everything it depends on is `done`.
 | C2b | Chapter 2 levels 2.5 to 2.11 (spec: specs/C2b, handoff: handoffs/C2b) | done (every solution graded through the engine; level 10 by hand with a real outage; tag v0.2.0) |
 | E-01 | Engine, UI and harness plumbing for Chapter 3: `service_scaled` emitter, "Run my code in the app" switch, harness rules for channel, scale and ticker_gap events (spec: specs/E-01, handoff: handoffs/E-01) | done (check 38 PASS; scratch chapter 6/6; examples 9/9) |
 | A-02 | App plumbing for Chapter 3: leaderboard addPoints/rank/recompute, contest.join, ticker publish slot and provided subscriber with gap detection, `x-quest-instance`, `scripts/hit.sh` (spec: specs/A-02, handoff: handoffs/A-02) | done (check 101 PASS; scale=2 lets 20 through; ticker_gap missed 2; 40,098 recompute rows in 124 ms) |
-| C3 | Chapter 3 levels (15) (spec: specs/C3) | in progress |
+| C3 | Chapter 3 levels (15) (spec: specs/C3, handoff: handoffs/C3) | done (static check 302 PASS; graded through the engine by G-01: 43/43 incl. both traffic-decided wrongs, pub/sub and ticker_gap events; 3.1 by hand: 10 then 20 allowed, scale event seen; switch verified in a browser) |
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)
+- 2026-11-01 Chapter 3 complete (15 levels). New plumbing: `service_scaled` event, "Run my code in the app" switch (POST /api/levels/:id/slots), harness produces live events for good solutions only. The grading harness now SKIPs levels that need a real Redis outage (ch2-10) instead of reporting a mismatch; they are graded by hand. Fixed a timer leak in createLearnerDeps' closeRedis (ClientClosedError after every closed duplicate).
 - 2026-11-01 Tag v0.2.0: Chapter 2 complete; full local run GREEN at fb09c79 (docs/ci-local.log).
 - 2026-11-01 Chapter 2 complete (13 levels). Live grading found: 4xx must count as answered in the traffic verifier; ops levels must restore Redis config; a cli level cannot depend on a workspace file from an earlier level.
 - 2026-11-01 Full local run GREEN at 4fa4283 (ALL CHECKS PASSED, docs/ci-local.log). It surfaced four stale check assumptions and one real app bug (bind-mount poller lag; fixed with a throttled request-path stat). Content proven by the grading harness: ch1 52/52, ch2a 13/13, ch0 cli levels, examples. Fresh-clone `./scripts/start` verified.
