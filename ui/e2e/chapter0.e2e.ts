@@ -353,8 +353,15 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await snap(page, 'metrics');
 
   await page.goto('/#/showme');
-  await expect(page.locator('[data-showme]')).toHaveCount(12);
+  await expect(page.locator('[data-showme]')).toHaveCount(14);
+  await expect(page.getByText('Unknown show-me component')).toHaveCount(0);
   await snap(page, 'showme-gallery');
+  // F-10: the two components that used to fall back to "unknown", shot on their own.
+  for (const id of ['stats_latency_panel', 'otp_limiter_panel']) {
+    const card = page.locator(`[data-showme="${id}"]`);
+    await expect(card).toBeVisible();
+    await card.screenshot({ path: join(SHOTS, `showme-${id}.png`) });
+  }
 
   // ---- FLUSHALL in the terminal: warning, then the mirror banner, then restore ---------------------------------
   await page.getByRole('link', { name: 'Terminal', exact: true }).click();

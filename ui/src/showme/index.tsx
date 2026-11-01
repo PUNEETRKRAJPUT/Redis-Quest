@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { api } from '../api';
+import { useQuest } from '../store';
+import type { MetricsSeries, MetricsTick } from '../types';
 import { asList, asNumber, asPairs, asString, asStrings } from '../redisReply';
 import {
   BitmapStreakView,
@@ -11,12 +14,14 @@ import {
   KvCardView,
   LeaderboardPanelView,
   ListFeedView,
+  OtpLimiterView,
   SetChipsView,
+  StatsLatencyView,
   StreamLogView,
   TtlTimerView,
 } from './views';
 import type { ShowMeSpec } from '../types';
-import { useRedis } from './useRedis';
+import { readRedis, useRedis } from './useRedis';
 
 export const SHOW_ME_IDS = [
   'kv_card',
@@ -31,6 +36,8 @@ export const SHOW_ME_IDS = [
   'stream_log',
   'json_tree',
   'cache_stats',
+  'stats_latency_panel',
+  'otp_limiter_panel',
 ] as const;
 export type ShowMeId = (typeof SHOW_ME_IDS)[number];
 
@@ -181,6 +188,117 @@ function CacheStats() {
   );
 }
 
+export const STATS_ROUTE = 'GET /app/players/:id/stats';
+export const PING_ROUTE = 'GET /app/limits/ping';
+
+/** One route's recent seconds out of the metrics.tick history: only ticks where the route had traffic. */
+export function routeTickSeries(ticks: MetricsTick[], route: string) {
+  const rows = ticks.flatMap((t) => {
+    const r = t.routes?.[route];
+    return r ? [r] : [];
+  });
+  return {
+    p50: rows.map((r) => r.p50Ms ?? 0),
+    p99: rows.map((r) => r.p99Ms ?? 0),
+    rps: rows.map((r) => r.count ?? 0),
+    db: rows.flatMap((r) => (typeof r.dbQueries === 'number' ? [r.dbQueries] : [])),
+  };
+}
+
+const last = (a: number[]): number | null => (a.length ? (a[a.length - 1] as number) : null);
+
+/** GET /api/metrics every 2 s for the window aggregates; the live seconds come from the store's metrics.tick. */
+function useMetricsWindow(): MetricsSeries | null {
+  const [win, setWin] = useState<MetricsSeries | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      api
+        .metrics(60)
+        .then((m) => alive && setWin(m))
+        .catch(() => undefined);
+    void load();
+    const t = setInterval(() => void load(), 2000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+  return win;
+}
+
+/** EXISTS per key, polled; null until the first answer. One effect because the key count varies. */
+function useKeysExist(names: string[]): Record<string, boolean | null> {
+  const [found, setFound] = useState<Record<string, boolean>>({});
+  const joined = JSON.stringify(names);
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      const list = JSON.parse(joined) as string[];
+      const next: Record<string, boolean> = {};
+      await Promise.all(
+        list.map(async (k) => {
+          try {
+            next[k] = asNumber(await readRedis(['EXISTS', k])) === 1;
+          } catch {
+            // leave unknown
+          }
+        }),
+      );
+      if (!alive) return;
+      setFound(next);
+      timer = setTimeout(() => void tick(), 2000);
+    };
+    void tick();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [joined]);
+  return Object.fromEntries(names.map((n) => [n, found[n] ?? null]));
+}
+
+function StatsLatency({ keys }: { keys: string[] }) {
+  const ticks = useQuest((s) => s.ticks);
+  const win = useMetricsWindow();
+  const exists = useKeysExist(keys);
+  const s = routeTickSeries(ticks, STATS_ROUTE);
+  const agg = win?.routes[STATS_ROUTE];
+  return (
+    <StatsLatencyView
+      route={STATS_ROUTE}
+      p50={last(s.p50) ?? agg?.p50Ms ?? null}
+      p99={last(s.p99) ?? agg?.p99Ms ?? null}
+      rps={last(s.rps)}
+      dbQps={last(s.db)}
+      p99Series={s.p99}
+      keys={keys.map((name) => ({ name, exists: exists[name] ?? null }))}
+    />
+  );
+}
+function OtpLimiter({ k }: { k: string }) {
+  const type = useRedis(['TYPE', k], 1000);
+  const t = asString(type.reply) ?? 'none';
+  const hash = useRedis(t === 'hash' ? ['HGETALL', k] : null, 1000);
+  const str = useRedis(t === 'string' ? ['GET', k] : null, 1000);
+  const ttl = useRedis(t === 'string' ? ['TTL', k] : null, 1000);
+  const card = useRedis(t === 'zset' ? ['ZCARD', k] : null, 1000);
+  const win = useMetricsWindow();
+  if (!type.reply) return <Loading error={type.error} />;
+  return (
+    <OtpLimiterView
+      name={k}
+      type={t}
+      fields={hash.reply ? asPairs(hash.reply) : []}
+      value={asString(str.reply)}
+      ttl={asNumber(ttl.reply)}
+      members={asNumber(card.reply)}
+      pingRequests={win?.routes[PING_ROUTE]?.count ?? null}
+    />
+  );
+}
+
 function KeyPicker({ id, onPick }: { id: string; onPick: (k: string) => void }) {
   const [v, setV] = useState('');
   return (
@@ -233,6 +351,10 @@ function Panel({ id, k, playerId }: { id: ShowMeId; k: string; playerId: string 
       return <JsonTree k={k} />;
     case 'cache_stats':
       return <CacheStats />;
+    case 'stats_latency_panel':
+      return <StatsLatency keys={[k]} />;
+    case 'otp_limiter_panel':
+      return <OtpLimiter k={k} />;
   }
 }
 
@@ -248,6 +370,15 @@ export function ShowMe({ spec, playerId }: { spec: ShowMeSpec; playerId: string 
       <>
         {title}
         <CacheStats />
+      </>
+    );
+  }
+  if (id === 'stats_latency_panel') {
+    // One panel for the route; the keys are listed inside it, so keys: [] is fine (level 2.1).
+    return (
+      <>
+        {title}
+        <StatsLatency keys={keys} />
       </>
     );
   }

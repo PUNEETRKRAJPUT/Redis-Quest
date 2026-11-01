@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Sparkline } from '../panels/MetricsPanel';
 
 // Pure views: data in, markup out. The contract for each is the exported props interface.
 
@@ -464,5 +465,151 @@ export function CacheStatsView({ hits, misses, keys, commands }: CacheStatsProps
         </dl>
       </div>
     </figure>
+  );
+}
+
+// ---- stats_latency_panel ---------------------------------------------------------------------------------
+export interface StatsLatencyProps {
+  /** The route the numbers belong to, as the app records it. */
+  route: string;
+  /** Latest second with traffic on the route; null when there is none yet. */
+  p50: number | null;
+  p99: number | null;
+  rps: number | null;
+  /** Postgres queries per second on the route; null when the app does not report them. */
+  dbQps: number | null;
+  /** p99 per second over the recent ticks, oldest first. */
+  p99Series: number[];
+  /** show_me.keys: the cache keys this level is about, with whether they exist now (null while unknown). */
+  keys: { name: string; exists: boolean | null }[];
+}
+export function StatsLatencyView({
+  route,
+  p50,
+  p99,
+  rps,
+  dbQps,
+  p99Series,
+  keys,
+}: StatsLatencyProps) {
+  const num = (n: number | null, d = 0) => (n === null ? 'no data' : n.toFixed(d));
+  return (
+    <Card title="Stats route, live" name={route} kind="stats_latency_panel">
+      <Sparkline label="p99" unit="ms" values={p99Series} />
+      <dl className="facts" data-testid="stats-facts">
+        <div>
+          <dt>p50</dt>
+          <dd>{p50 === null ? 'no data' : `${num(p50)} ms`}</dd>
+        </div>
+        <div>
+          <dt>p99</dt>
+          <dd>{p99 === null ? 'no data' : `${num(p99)} ms`}</dd>
+        </div>
+        <div>
+          <dt>requests/s</dt>
+          <dd>{num(rps)}</dd>
+        </div>
+        <div>
+          <dt>postgres queries/s</dt>
+          <dd>{dbQps === null ? 'not reported' : num(dbQps)}</dd>
+        </div>
+      </dl>
+      <p className="muted">the page is slow because every request asks Postgres</p>
+      {keys.length > 0 ? (
+        <ul className="stream" data-testid="stats-keys">
+          {keys.map((k) => (
+            <li key={k.name}>
+              <code>{k.name}</code>
+              <span className="muted">
+                {k.exists === null ? 'checking' : k.exists ? 'cached' : 'does not exist yet'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Card>
+  );
+}
+
+// ---- otp_limiter_panel -----------------------------------------------------------------------------------
+export interface OtpLimiterProps {
+  name: string;
+  /** Redis TYPE of the key: hash (token bucket), string (fixed window), zset (sorted-set log), none. */
+  type: string;
+  /** HGETALL, for a hash. */
+  fields: [string, string][];
+  /** GET, for a string: the window's count. */
+  value: string | null;
+  /** TTL in seconds; -1 no expiry, -2 key missing. */
+  ttl: number | null;
+  /** ZCARD, for a sorted set. */
+  members: number | null;
+  /** Requests the app served on GET /app/limits/ping in the metrics window; null when none seen. */
+  pingRequests: number | null;
+}
+export function OtpLimiterView({
+  name,
+  type,
+  fields,
+  value,
+  ttl,
+  members,
+  pingRequests,
+}: OtpLimiterProps) {
+  const title =
+    type === 'hash'
+      ? 'Rate limit: token bucket'
+      : type === 'string'
+        ? 'Rate limit: fixed window'
+        : type === 'zset'
+          ? 'Rate limit: sorted-set log'
+          : 'Rate limit';
+  return (
+    <Card title={title} name={name} kind="otp_limiter_panel">
+      {type === 'none' ? (
+        <Empty>This key does not exist (yet). Nobody has been counted.</Empty>
+      ) : type === 'hash' ? (
+        <table className="kv-table" data-testid="limiter-hash">
+          <tbody>
+            {fields.map(([f, v]) => (
+              <tr key={f}>
+                <th scope="row">{f}</th>
+                <td>{v}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : type === 'string' ? (
+        <dl className="facts" data-testid="limiter-window">
+          <div>
+            <dt>count</dt>
+            <dd>{value ?? '?'}</dd>
+          </div>
+          <div>
+            <dt>window resets</dt>
+            <dd>{ttl === null || ttl < 0 ? 'no expiry set' : `in ${ttl}s`}</dd>
+          </div>
+        </dl>
+      ) : type === 'zset' ? (
+        <dl className="facts" data-testid="limiter-log">
+          <div>
+            <dt>requests in the log</dt>
+            <dd>{members ?? 0}</dd>
+          </div>
+        </dl>
+      ) : (
+        <Empty>A {type} key. A limiter keeps a hash, a string or a sorted set.</Empty>
+      )}
+      <dl className="facts" data-testid="limiter-tally">
+        <div>
+          <dt>/app/limits/ping served</dt>
+          <dd>{pingRequests === null ? 'no traffic yet' : pingRequests}</dd>
+        </div>
+        <div>
+          <dt>denied (429)</dt>
+          <dd>not reported</dd>
+        </div>
+      </dl>
+    </Card>
   );
 }

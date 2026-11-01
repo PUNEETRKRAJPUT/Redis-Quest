@@ -9,7 +9,9 @@ import {
   KvCardView,
   LeaderboardPanelView,
   ListFeedView,
+  OtpLimiterView,
   SetChipsView,
+  StatsLatencyView,
   StreamLogView,
   TtlTimerView,
 } from '../showme/views';
@@ -34,6 +36,8 @@ export function ShowMeGallery() {
         <StreamLogView {...s.stream} />
         <JsonTreeView {...s.json} />
         <CacheStatsView {...s.cache} />
+        <StatsLatencyView {...s.stats} />
+        <OtpLimiterView {...s.limiter} />
       </div>
     </main>
   );

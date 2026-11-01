@@ -65,4 +65,25 @@ export const SAMPLE = {
     },
   },
   cache: { hits: 940, misses: 60, keys: 128, commands: 5120 },
+  stats: {
+    route: 'GET /app/players/:id/stats',
+    p50: 182,
+    p99: 640,
+    rps: 38,
+    dbQps: 38,
+    p99Series: [410, 520, 480, 610, 590, 640, 630, 640],
+    keys: [{ name: 'cache:player:p-028', exists: false }],
+  },
+  limiter: {
+    name: 'ratelimit:u-limit-1',
+    type: 'hash',
+    fields: [
+      ['tokens', '3'],
+      ['ts', '1730000002000'],
+    ] as [string, string][],
+    value: null,
+    ttl: 42,
+    members: null,
+    pingRequests: 126,
+  },
 };

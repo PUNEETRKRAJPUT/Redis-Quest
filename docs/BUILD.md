@@ -43,7 +43,8 @@ start early if everything it depends on is `done`.
 | F-03 (done) | Code tree formatted once; `pnpm format:check` runs in CI; content, data, docs and workflows are ignored | done |
 | F-04 (done, handoffs/F-04) | UI: ideal-way panel renders `ideal`, unlocks after pass or 3 attempts, "reveal anyway" via GET /api/levels/:id/ideal, line diff for code levels | done |
 | F-05 (done, handoffs/F-05) | `show_me` is `{ component, keys, title? }`; all 27 levels declare their keys; engine renders the templates; UI's hard-coded key table removed | done |
-| F-10 (in progress, spec: specs/F-10) | UI: implement the `stats_latency_panel` and `otp_limiter_panel` show-me components (levels 2.1 and 3.x reference them; they render as unknown today) | todo |
+| F-10 (done, handoffs/F-10) | UI: `stats_latency_panel` and `otp_limiter_panel` implemented; 429s are not counted by the app's metrics yet (a later app follow-up) | done |
+| F-11 | App metrics: count 429 responses separately so the limiter panel can show denied requests | todo |
 | F-06 (done, handoffs/F-UI) | UI: clicking away from a focused terminal makes the page jump; fix for real users | todo |
 | F-07 (done, handoffs/F-UI; engine side pending F-09) | UI: Redis Insight link should use the configured `INSIGHT_PORT`, not 5540 | todo |
 | F-08 (done, handoffs/F-UI) | Playwright e2e: set `ALLOW_DEV_COMPLETE_FALLBACK=false` now that verify works | done |
@@ -57,7 +58,7 @@ start early if everything it depends on is `done`.
 | C1 | Chapter 1 levels (16) (spec: specs/C1, handoff: handoffs/C1) | done (graded through the engine by G-01: 52/52) |
 | C2a | Chapter 2 levels 2.1 to 2.4 (spec: specs/C2a, handoff: handoffs/C2a) | done (graded by G-01: 13/13 including traffic) |
 | G-01 | Level grading harness: plays every declared solution through the engine, prints the truth table (spec: specs/G-01, handoff: handoffs/G-01) | done (all three bugs fixed; ch1 re-graded 52/52) |
-| T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md; fresh-clone run verified 2026-11-01) | todo |
+| T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)
 - 2026-11-01 Full local run GREEN at 4fa4283 (ALL CHECKS PASSED, docs/ci-local.log). It surfaced four stale check assumptions and one real app bug (bind-mount poller lag; fixed with a throttled request-path stat). Content proven by the grading harness: ch1 52/52, ch2a 13/13, ch0 cli levels, examples. Fresh-clone `./scripts/start` verified.
