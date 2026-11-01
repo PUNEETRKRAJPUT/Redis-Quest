@@ -105,21 +105,31 @@ describe('deps.redisCached', () => {
   });
 
   test('it is lazy (no connection until used), supports multi, and the learner cannot close it', async () => {
-    const before = Number(/connected_clients:(\d+)/.exec(await observer().info('clients'))![1]);
+    // Connections are identified by client id, not counted: the server is shared with the other suites, whose
+    // clients open and close on their own clock, so a global count can move by one between two reads (seen on
+    // CI and in the full local run). Only the ids this test created are judged.
+    const clientIds = async (): Promise<Set<string>> => {
+      const list = (await observer().sendCommand(['CLIENT', 'LIST'])) as string;
+      return new Set([...list.matchAll(/(?:^|\n)id=(\d+)/g)].map((m) => m[1] as string));
+    };
+    const newSince = (base: Set<string>, now: Set<string>) =>
+      [...now].filter((id) => !base.has(id));
+    const before = await clientIds();
     const ctx = await createLearnerDeps({ redisUrl, databaseUrl });
+    let mine: string[] = [];
     try {
-      const after = Number(/connected_clients:(\d+)/.exec(await observer().info('clients'))![1]);
-      expect(after).toBe(before + 1); // only deps.redis; redisCached has not connected
+      const afterCreate = newSince(before, await clientIds());
+      expect(afterCreate).toHaveLength(1); // only deps.redis; redisCached has not connected
       await ctx.deps.redisCached.close(); // swallowed
       const out = await ctx.deps.redisCached.multi().set(key, 'x').get(key).exec();
       expect(out).toEqual(['OK', 'x']);
-      const used = Number(/connected_clients:(\d+)/.exec(await observer().info('clients'))![1]);
-      expect(used).toBe(before + 2);
+      mine = newSince(before, await clientIds());
+      expect(mine).toHaveLength(2); // deps.redis plus the cached client, connected on first use
     } finally {
       await ctx.close();
     }
     await new Promise((r) => setTimeout(r, 100));
-    const closed = Number(/connected_clients:(\d+)/.exec(await observer().info('clients'))![1]);
-    expect(closed).toBe(before);
+    const stillOpen = await clientIds();
+    expect(mine.filter((id) => stillOpen.has(id))).toEqual([]); // both of this test's connections are gone
   });
 });
