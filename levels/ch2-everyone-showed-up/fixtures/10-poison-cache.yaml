@@ -1,0 +1,8 @@
+# Stands in for "Redis is unhealthy" without stopping it: the cache keys hold a plain string where the code expects a
+# hash, so every hash command on them fails with a WRONGTYPE error reply. Code that lets Redis errors escape throws here;
+# code that degrades to Postgres does not. (The engine's own fixtures need a working Redis, so the real outage is the
+# learner's drill; this is the part the grader can repeat.) The poison expires by itself after 30 seconds.
+steps:
+  - cmd: [DEL, "cache:player:p-151", "cache:player:p-999", "lock:cache:player:p-151", "lock:cache:player:p-999"]
+  - cmd: [SET, "cache:player:p-151", "not-a-hash", EX, 30]
+  - cmd: [SET, "cache:player:p-999", "not-a-hash", EX, 30]

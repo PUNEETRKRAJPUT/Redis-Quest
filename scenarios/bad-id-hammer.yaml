@@ -1,0 +1,16 @@
+# Chapter 2, level 2.5: bots hammer an id that is not a player. 100 connections, no warmup, all on
+# GET /app/players/p-999/stats. A cache that cannot remember "not found" asks Postgres every time.
+id: bad-id-hammer
+description: "100 connections, 8 s, all on GET /app/players/p-999/stats, an id that is not a player."
+durationSec: 8
+connections: 100
+pipelining: 1
+seed: 20260105
+users:
+  count: 100
+  distribution: uniform
+requests:
+  - method: GET
+    path: /app/players/p-999/stats
+    weight: 1
+    userIdHeader: x-user-id

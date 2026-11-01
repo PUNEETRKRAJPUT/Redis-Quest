@@ -1,0 +1,21 @@
+# Chapter 2, level 2.10: the stats page on the three hot players while Redis is being stopped and
+# started. The graded run is only about errors: a cache that degrades to Postgres never answers 5xx.
+id: stats-redis-down
+description: "30 connections, 6 s, Zipf-skewed hot players (p-028, p-101, p-151) on GET /app/players/:id/stats."
+durationSec: 6
+connections: 30
+pipelining: 1
+seed: 20260110
+users:
+  count: 100
+  distribution: uniform
+params:
+  hot:
+    values: [p-028, p-101, p-151]
+    distribution: zipf
+    zipfSkew: 1.1
+requests:
+  - method: GET
+    path: /app/players/{hot}/stats
+    weight: 1
+    userIdHeader: x-user-id

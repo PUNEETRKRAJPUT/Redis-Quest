@@ -1,0 +1,3 @@
+# Run before the trivial behavior verifier that switches the learner's cache on for the load run.
+steps:
+  - cmd: [DEL, "cache:player:p-151", "lock:cache:player:p-151"]

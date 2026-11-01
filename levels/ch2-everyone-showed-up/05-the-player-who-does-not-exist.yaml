@@ -1,0 +1,127 @@
+id: ch2-05-the-player-who-does-not-exist
+chapter: ch2
+title: "The player who does not exist"
+mode: code
+
+story: |
+  It is 7:41 pm. The page is fast, the mess hall is happy, and then the roommate goes quiet in the way
+  that means he is reading logs. "Bhai. Postgres is busy again. It is the slow query. Same id every time:
+  `p-999`."
+
+  There is no `p-999`. The league has two hundred players, and none of them has that id. Bunty, the warden's
+  nephew, found out that the stats page takes an id in the address bar, typed a nonsense one, saw an
+  error, and did what any Class 11 student with a free evening would do: wrote a loop. His friends have
+  copied it. A hundred of them are now asking for the stats of a player who is not there, as fast as the
+  mess hall wifi allows.
+
+  Your cache from level 2 is working perfectly for real players, and that is the problem. You were told
+  to cache nothing for an id that is not a player, so every one of those requests misses, takes the lock,
+  asks Postgres a slow question, hears "no rows", and caches nothing. Then the next request does it all
+  again. A cache that cannot remember "there is nothing here" is a cache that every bot can walk around.
+
+  The warden has already called the senior. The senior has already called you.
+
+scenario: bad-id-hammer   # drives the live pain panel while the level is open
+
+brainstorm:
+  prompt: "A hundred connections keep asking for an id that is not a player, and Postgres answers 'no rows' slowly every time. What do you do about the answer 'nothing'?"
+  options:
+    - id: short-ttl-not-found
+      label: "Remember 'not found' in the cache too, but only for a few seconds"
+      is_reasonable: true
+    - id: forever-not-found
+      label: "Remember 'not found' for as long as a real player, or forever, so it is never asked twice"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: find the callers asking for ids that do not exist and rate-limit them"
+      is_reasonable: true
+
+teach: |
+  The cache-aside page in the docs has a line for exactly this: **cache "not found" sentinels with a shorter
+  TTL** than real rows. This is **negative caching**: the cache stores the fact that there is nothing to
+  store, so the question is not asked again for a while.
+
+  Two decisions make it safe.
+
+  **What the sentinel is.** Your cache key is a hash, and `HGETALL` on a key that holds something other
+  than a hash is an error (`WRONGTYPE`), so do not put a plain string there. Write a hash with one marker
+  field, for example `_missing` set to `1`. A real stats row never has that field.
+
+  **Check for it first.** Your level 2 code treats "the hash has fields" as a hit and hands it back. A
+  sentinel has a field, so it would be handed back as a player's stats. Test for the marker before you test
+  for fields, and return `null` when it is there.
+
+  **How long it lives.** A real row can be 30 seconds stale and nobody is hurt. "Not found" is different:
+  the id may become real a minute from now, when somebody signs up, and a long TTL would hide them. Keep the
+  sentinel to a few seconds. It only has to outlast the bots' next request, not the day.
+
+  Write the sentinel with its expiry in one `multi()`, as you did for rows, so it can never be left behind.
+  The lock from level 4 still matters: the 99 requests waiting for the winner must be able to find the
+  sentinel and return `null`, not fall through to Postgres themselves.
+
+task: |
+  Extend `getPlayerStats(deps, playerId)` in `workspace/ch2/cache.js`, the single-flight version you finished
+  in level 4. Real players keep behaving exactly as before.
+
+  - When Postgres has no row for the id, write a hash at `cache:player:<playerId>` with the single field
+    `_missing` set to `1`, and give it an expiry of **5 seconds**, in the same `multi()`. Then return `null`.
+  - When a read finds that marker, return `null` straight away without asking Postgres. That includes the
+    requests that were waiting on the lock.
+  - Do not change the 30 second expiry on real rows, and keep releasing the lock on every path.
+
+  The hammer sends 100 connections at `p-999` for 8 seconds. Postgres may answer at most three queries.
+
+hints:
+  - "Check `cached._missing === '1'` before you check whether the hash has any fields, or the sentinel gets returned as if it were a player."
+  - "node-redis: redis.multi().hSet(key, { _missing: '1' }).expire(key, 5).exec() writes the sentinel and its expiry together."
+  - "In the waiting loop, read the cache again each time round and return null when you see the sentinel. Check whether the lock still exists before you read the cache, so a winner that finishes between the two cannot slip past you."
+
+verify:
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/05-cold-sentinel.yaml
+    assertions:
+      - call: { args: ["p-999"] }
+        repeat: 2
+        expect: null
+        message: "p-999 is not a player. getPlayerStats should return null for it, on the first call and on the second."
+        sideEffect:
+          - cmd: [EXISTS, "cache:player:p-999"]
+            equals: 1
+            message: "Nothing was cached for p-999, so the next request will ask Postgres again. Write a not-found sentinel at cache:player:p-999."
+          - cmd: [TTL, "cache:player:p-999"]
+            gte: 1
+            message: "The not-found sentinel at cache:player:p-999 has no expiry. Give it one, in the same multi() that writes it."
+  - type: traffic
+    scenario: bad-id-hammer
+    baseline: false
+    assertions:
+      db_queries_lte: 3
+      error_rate_lte: 0
+    message: "A hundred connections asked for p-999 and Postgres was asked more than three times, or some requests failed. After the first 'no rows' the answer should come from the sentinel."
+  - type: antipattern
+    checks:
+      - cmd: [TTL, "cache:player:p-999"]
+        lte: 10
+        message: "This passes today, but a not-found cached as long as a real row hides a player who signs up tomorrow. The new player's page answers 404 from the sentinel until it expires, and the longer that is, the longer a real person looks like a stranger. Keep the sentinel to a few seconds."
+
+show_me:
+  component: stats_latency_panel
+  keys: ["cache:player:p-999"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+  - https://redis.io/docs/latest/develop/data-types/hashes/
+
+reward:
+  xp: 60
+  badge: "Nobody home"
+
+solutions:
+  reference: solutions/05-reference.js
+  wrong:
+    - path: solutions/05-wrong-no-sentinel.js
+      expect: wrong
+      because: "This is the level 4 cache. It caches real players and holds back a stampede, but it writes nothing for an id that is not a player, so no sentinel exists and every request for p-999 asks Postgres again."
+    - path: solutions/05-works-but-wrong-long-ttl.js
+      expect: works_but_wrong
+      because: "A correct negative cache with the wrong lifetime. The sentinel lives 30 seconds, the same as a real row, so a player who signs up in the meantime keeps looking like a stranger until it expires."

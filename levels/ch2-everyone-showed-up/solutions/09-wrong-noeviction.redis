@@ -1,0 +1,5 @@
+# Wrong: a ceiling with nothing allowed to go. evicted_keys never moves, and at the limit every write that adds data fails.
+CONFIG SET maxmemory 64mb
+CONFIG SET maxmemory-policy noeviction
+INFO stats
+CONFIG SET maxmemory 512mb

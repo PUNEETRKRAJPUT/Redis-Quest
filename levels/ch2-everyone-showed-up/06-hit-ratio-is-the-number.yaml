@@ -1,0 +1,139 @@
+id: ch2-06-hit-ratio-is-the-number
+chapter: ch2
+title: "Hit ratio is the number"
+mode: code
+
+story: |
+  It is 7:58 pm. The first innings is on, the mess hall is calm, and Harry Bhaiya has pulled a chair up next
+  to your laptop. He is holding the spreadsheet where he writes down everything he has promised the sponsors.
+
+  "Teja says the page is fast now. Fast is a feeling. The sponsor's cousin is an auditor, he will ask me one
+  question: is the cache working? Give me a number I can say out loud."
+
+  The roommate offers the average page time. You can see the problem: it is a good number when the cache is
+  working, and also a good number on a quiet evening with no cache at all. What Harry wants is a number that
+  can only be good if the cache is doing its job.
+
+  Redis already keeps that number. It counts, for every lookup it serves, whether the key was there. Go and
+  read it while the hundred-user crowd is on the page.
+
+scenario: stats-hot-100   # drives the live pain panel while the level is open
+
+brainstorm:
+  prompt: "Harry wants one number that is only good if the cache is earning its keep. What would you read?"
+  options:
+    - id: hit-ratio
+      label: "The share of cache lookups that found the key: hits out of hits plus misses"
+      is_reasonable: true
+    - id: key-count
+      label: "How many keys are in Redis: a bigger cache must be a better one"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: have the app count its own cache hits and misses and report that"
+      is_reasonable: true
+
+teach: |
+  The **hit ratio** is the number the docs tell you to tune a cache by. Redis counts two things in `INFO`,
+  under the `stats` section: `keyspace_hits` and `keyspace_misses`. The ratio is
+
+  `keyspace_hits / (keyspace_hits + keyspace_misses)`
+
+  `INFO stats` prints just that section as lines of `name:value`. Most of it is other counters; find the two
+  you need. The eviction page of the docs names this exact calculation and says to read `evicted_keys` beside
+  it (you will meet that in the next level), and it notes that `EXISTS` on a key that is not there counts as
+  a miss.
+
+  Two habits keep you honest:
+
+  - **Read it twice.** The two counters belong to the whole server, every client included. To know the ratio
+    for the crowd that is on the page now, read both numbers, wait a few seconds, read them again, and work
+    out the ratio of the differences.
+  - **Know what it moves with.** A shorter TTL means keys expire sooner and more lookups miss, so the ratio
+    drops and Postgres works harder. That trade is the whole point of the TTL dial from level 2.
+
+  There is no worked example here, because the exercise is the reading. The commands are `INFO stats` and a
+  calculator.
+
+task: |
+  The hundred-user crowd on the live panel is running against your cache, so the counters are moving.
+
+  1. Your cache from 2.2 should still be in `workspace/ch2/cache.js`. If it is not, paste it back. The check switches
+     it on for a load run, and the ratio is only meaningful if it is there.
+  2. In the terminal, run `INFO stats`. Find `keyspace_hits` and `keyspace_misses`.
+  3. Wait ten seconds, run it again, and work out the ratio for those ten seconds.
+  4. Answer the two questions below.
+
+  To pass, the stats must be live, your cache must answer at least nine in ten of the requests of the hot
+  crowd without asking Postgres, and the two answers must be right.
+
+hints:
+  - "INFO stats prints one name:value per line. Look for keyspace_hits and keyspace_misses."
+  - "The ratio is hits divided by hits plus misses, not hits divided by misses."
+  - "If the load run fails on the hit ratio, check that workspace/ch2/cache.js still caches real players for 30 seconds."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [INFO, stats]
+        matches: "keyspace_hits:[1-9]"
+        message: "Redis has not counted any hits yet. Is the cache switched on, and is anyone reading through it?"
+      - cmd: [INFO, stats]
+        matches: "keyspace_misses:[1-9]"
+        message: "Redis has not counted any misses yet, which means nothing has ever looked up a key that was not there. Open the stats page for a player the cache has not seen."
+  - type: quiz
+    question: "INFO stats shows keyspace_hits:900 and keyspace_misses:100. What is the hit ratio?"
+    options:
+      - id: ratio-90
+        label: "0.9, which is 90 percent: hits out of all lookups"
+      - id: ratio-10
+        label: "0.1, which is 10 percent"
+      - id: ratio-9
+        label: "9, because hits divided by misses is 900 / 100"
+      - id: ratio-100
+        label: "100 percent, because there are more hits than misses"
+    correct: ratio-90
+    explanation: "The ratio is hits out of all lookups: 900 / (900 + 100) = 0.9. Dividing hits by misses gives 9, which is a ratio of two counts, not a share. 10 percent is the miss ratio, the number you want small."
+  - type: quiz
+    question: "You cut the cache TTL from 30 seconds to 3 seconds to make the page fresher. What does the hit ratio do, and what does Postgres feel?"
+    options:
+      - id: ratio-drops
+        label: "The ratio drops, because keys expire sooner and more lookups find nothing; Postgres gets asked more often"
+      - id: ratio-rises
+        label: "The ratio rises, because fresher data is better data; Postgres is asked less"
+      - id: ratio-same
+        label: "Nothing changes: the TTL only affects how old the data is"
+    correct: ratio-drops
+    explanation: "The docs' trade is that a shorter TTL means fresher data and a lower hit rate. Every key that expires is a lookup that finds nothing, and each of those goes back to Postgres. The TTL is a dial between staleness and database load, and the hit ratio is the gauge for it."
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/06-cold-p151.yaml
+    assertions:
+      - call: { args: ["p-151"] }
+        message: "getPlayerStats for p-151 should still cache the player. Is your cache from this chapter still in workspace/ch2/cache.js?"
+        sideEffect:
+          - cmd: [EXISTS, "cache:player:p-151"]
+            equals: 1
+            message: "cache:player:p-151 is not in Redis after the call. The hit ratio can only be good if the cache is filling."
+  - type: traffic
+    scenario: stats-hot-100
+    baseline: false
+    assertions:
+      hit_ratio_gte: 0.9
+    message: "Under the hundred-user crowd fewer than nine in ten requests were answered without asking Postgres. Check that your cache is in workspace/ch2/cache.js and keeps real players for 30 seconds."
+
+show_me:
+  component: cache_stats
+  keys: []
+docs:
+  - https://redis.io/docs/latest/develop/reference/eviction/
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+
+reward:
+  xp: 25
+
+solutions:
+  reference: solutions/06-reference.js
+  wrong:
+    - path: solutions/06-wrong-no-cache.js
+      expect: wrong
+      because: "Asks Postgres for every request and caches nothing, so the keys are never there: the hit ratio stays near zero, and there is no cache:player:p-151 hash after the call."

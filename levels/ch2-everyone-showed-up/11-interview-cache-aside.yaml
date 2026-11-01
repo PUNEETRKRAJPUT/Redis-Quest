@@ -1,0 +1,101 @@
+id: ch2-11-interview-cache-aside
+chapter: ch2
+title: "Interview: cache-aside from a blank file"
+mode: code
+
+interview:
+  minutes: 20
+  rebuild_of: ch2-02-cache-aside-v1
+  hint_xp_cost: 10
+
+story: |
+  Placement season. Harry Bhaiya has booked you into a mock interview with a senior from the college's alumni
+  network, who now builds backends for a living and has a laptop open and a calm voice. "You put a cache in front of
+  the stats page. Good. Rebuild it. Blank file, twenty minutes, I will watch the clock and the load graph."
+
+  There is no senior on the chat to call, no roommate to blame and no teaching page open next to you. If you like the
+  file you have now, copy it to a safe name first. Then open the empty one.
+
+brainstorm:
+  prompt: "Before you type: what is your plan for a cache in front of a slow, read-heavy Postgres function, and what is the one thing you will not forget?"
+  options:
+    - id: cache-aside-ttl
+      label: "Cache-aside with a hash per player and a TTL, so a stale copy fixes itself"
+      is_reasonable: true
+    - id: cache-forever
+      label: "Cache every player in Redis with no expiry, and fix the data when somebody complains"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: make the Postgres query cheaper first"
+      is_reasonable: true
+
+task: |
+  Design and implement a read-through cache for player stats. Fill in `getPlayerStats(deps, playerId)` in
+  `workspace/ch2/cache.js` from a blank file. It receives `{ redis, db }` as `deps`.
+
+  - The cache key is `cache:player:<playerId>` and it is a hash.
+  - On a miss, load from Postgres with `db.query('SELECT * FROM player_stats($1)', [playerId])`. `rows[0]` is the
+    stats row, or `undefined` for an id that is not a player: return `null` for that and cache nothing.
+  - Keep cached stats for **30 seconds**, set when you write the hash.
+  - Return the stats row as Postgres gave it on a miss, and the fields of the cached hash on a hit.
+
+  The check runs your function against a hundred-user crowd, and then asks whether it left a key that never expires.
+
+hints:
+  - "HGETALL on a missing key returns an empty object, not null."
+  - "HSET and EXPIRE in one multi().exec() so the key never exists without a TTL."
+
+verify:
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/11-cold-cache.yaml
+    assertions:
+      - call: { args: ["p-151"] }
+        repeat: 2
+        message: "Calling getPlayerStats for p-151 twice should leave a hash named cache:player:p-151 in Redis."
+        sideEffect:
+          - cmd: [TYPE, "cache:player:p-151"]
+            equals: hash
+            message: "cache:player:p-151 should be a hash after the call. Nothing was cached."
+          - cmd: [HGET, "cache:player:p-151", player_id]
+            equals: "p-151"
+            message: "The cached hash for p-151 should hold p-151's own stats, with a player_id field of p-151."
+      - call: { args: ["p-999"] }
+        expect: null
+        message: "p-999 is not a player. getPlayerStats should return null for it."
+        sideEffect:
+          - cmd: [EXISTS, "cache:player:p-999"]
+            equals: 0
+            message: "An id that is not a player should not leave a cache:player key behind."
+  - type: traffic
+    scenario: stats-hot-100
+    baseline: true
+    assertions:
+      p99_ratio_lte: 0.2
+      db_calls_ratio_lte: 0.1
+    message: "Under toss-time load the stats page is not meaningfully faster than with no cache, or Postgres is still being asked nearly as often."
+  - type: antipattern
+    checks:
+      - cmd: [TTL, "cache:player:p-151"]
+        gte: 1
+        message: "This passes today, but a cached row with no TTL is stale forever and memory only grows. The day a player scores a century, the page still shows yesterday's runs until somebody deletes the key by hand."
+
+show_me:
+  component: stats_latency_panel
+  keys: ["cache:player:p-151"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+
+reward:
+  xp: 60
+  badge: "Cache, from memory"
+
+solutions:
+  reference: solutions/02-reference.js
+  wrong:
+    - path: solutions/02-wrong-no-cache.js
+      expect: wrong
+      because: "Asks Postgres for every request and stores nothing in Redis, so there is no cache:player:p-151 hash and the page is exactly as slow as before."
+    - path: solutions/02-works-but-wrong-no-ttl.js
+      expect: works_but_wrong
+      because: "A correct cache-aside that never sets an expiry. Fast today, but every cached row is stale forever and every player ever opened stays in memory."

@@ -1,0 +1,19 @@
+# Chapter 2, level 2.7: everyone opens the fixtures page. 50 connections on GET /app/fixtures. The
+# discarded warmup gives a prefetch cache a moment to finish its bulk load after the slots switch on.
+id: fixtures-read
+description: "50 connections, 6 s, all on GET /app/fixtures."
+durationSec: 6
+connections: 50
+pipelining: 1
+seed: 20260107
+warmup:
+  durationSec: 2
+  connections: 5
+users:
+  count: 100
+  distribution: uniform
+requests:
+  - method: GET
+    path: /app/fixtures
+    weight: 1
+    userIdHeader: x-user-id

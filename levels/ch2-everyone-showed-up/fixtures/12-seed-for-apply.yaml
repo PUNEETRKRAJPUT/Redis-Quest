@@ -1,0 +1,29 @@
+# One cached match with a short TTL (100 s) and an old venue, for the applyChange verifier. A correct upsert
+# changes the venue and refreshes the TTL to the safety net.
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'cache:match:*')) do redis.call('DEL', k) end return 1"
+      - 0
+  - cmd:
+      - HSET
+      - "cache:match:m-901"
+      - id
+      - "m-901"
+      - season
+      - "2026"
+      - home_team_id
+      - "t-04"
+      - away_team_id
+      - "t-06"
+      - home_team_name
+      - "Delhi Dust Devils"
+      - away_team_name
+      - "Hyderabad Charminars"
+      - venue
+      - "Old Ground"
+      - starts_at
+      - "2026-11-03T14:00:00.000Z"
+      - status
+      - "scheduled"
+  - cmd: [EXPIRE, "cache:match:m-901", 100]

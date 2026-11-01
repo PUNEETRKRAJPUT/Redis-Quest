@@ -1,0 +1,73 @@
+# Three cached matches for the getFixtures verifier: one scheduled, one live, one completed. A correct page lists the
+# live one first (earlier start) and the scheduled one second, and leaves the completed one out.
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'cache:match:*')) do redis.call('DEL', k) end return 1"
+      - 0
+  - cmd:
+      - HSET
+      - "cache:match:m-901"
+      - "id"
+      - "m-901"
+      - "season"
+      - "2026"
+      - "home_team_id"
+      - "t-04"
+      - "away_team_id"
+      - "t-06"
+      - "home_team_name"
+      - "Delhi Dust Devils"
+      - "away_team_name"
+      - "Hyderabad Charminars"
+      - "venue"
+      - "Old Ground"
+      - "starts_at"
+      - "2026-11-03T14:00:00.000Z"
+      - "status"
+      - "scheduled"
+  - cmd: [EXPIRE, "cache:match:m-901", 600]
+  - cmd:
+      - HSET
+      - "cache:match:m-902"
+      - "id"
+      - "m-902"
+      - "season"
+      - "2026"
+      - "home_team_id"
+      - "t-02"
+      - "away_team_id"
+      - "t-03"
+      - "home_team_name"
+      - "Chennai Lighthouse"
+      - "away_team_name"
+      - "Kolkata Riverhawks"
+      - "venue"
+      - "Marina Lantern Ground"
+      - "starts_at"
+      - "2026-11-02T10:00:00.000Z"
+      - "status"
+      - "live"
+  - cmd: [EXPIRE, "cache:match:m-902", 600]
+  - cmd:
+      - HSET
+      - "cache:match:m-903"
+      - "id"
+      - "m-903"
+      - "season"
+      - "2026"
+      - "home_team_id"
+      - "t-01"
+      - "away_team_id"
+      - "t-05"
+      - "home_team_name"
+      - "Mumbai Monsoon"
+      - "away_team_name"
+      - "Bengaluru Gulmohars"
+      - "venue"
+      - "Bandra Bandstand Oval"
+      - "starts_at"
+      - "2026-10-01T10:00:00.000Z"
+      - "status"
+      - "completed"
+  - cmd: [EXPIRE, "cache:match:m-903", 600]

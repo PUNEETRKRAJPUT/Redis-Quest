@@ -1,0 +1,7 @@
+# Reference: a 64 MB ceiling, and permission to drop the least recently used key to stay under it.
+CONFIG SET maxmemory 64mb
+CONFIG SET maxmemory-policy allkeys-lru
+# Watch the counter move while the crowd is on the page.
+INFO stats
+# Put the box back the way the game runs it.
+CONFIG SET maxmemory 512mb

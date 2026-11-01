@@ -25,7 +25,7 @@ if [ $RC -eq 0 ]; then pass "$OUT"; else fail "validate (exit $RC)"; echo "$OUT"
 step "chapter.yaml"
 if sed -n 's/^id: *//p' "$CH/chapter.yaml" | head -n 1 | grep -qx 'ch2'; then pass "chapter id ch2"; else fail "chapter id is not ch2"; fi
 LISTED=$(grep -E '^  - ch2-' "$CH/chapter.yaml" | wc -l | tr -d ' ')
-[ "$LISTED" -eq 4 ] && pass "chapter lists exactly 4 levels" || fail "chapter lists $LISTED levels, want 4"
+[ "$LISTED" -ge 4 ] && pass "chapter lists at least the 4 opening levels ($LISTED)" || fail "chapter lists $LISTED levels, want at least 4"
 
 step "levels"
 COUNT=0
@@ -46,7 +46,7 @@ for f in "$CH"/[0-9][0-9]-*.yaml; do
   done
   if grep -qE '^docs:' "$f" && grep -qE '^  - https://redis\.io/docs/' "$f"; then pass "  docs link present"; else fail "  no docs link ($id)"; fi
   n=$(awk '/^teach: \|/{t=1;next} t&&/^[^ ]/{exit} t{c++} END{print c+0}' "$f")
-  if [ "$n" -ge 8 ] && [ "$n" -le 24 ]; then pass "  teach is $n lines"; else fail "  teach is $n lines, want 8 to 24 ($id)"; fi
+  if grep -qE "^interview:" "$f"; then pass "  interview level: no teach by design"; elif [ "$n" -ge 8 ] && [ "$n" -le 24 ]; then pass "  teach is $n lines"; else fail "  teach is $n lines, want 8 to 24 ($id)"; fi
   sc=$(sed -n 's/^scenario: *\([A-Za-z0-9-]*\).*/\1/p' "$f" | head -n 1)
   if [ -n "$sc" ]; then
     [ -f "scenarios/$sc.yaml" ] && pass "  scenario $sc exists" || fail "  scenario $sc has no file ($id)"
@@ -56,7 +56,7 @@ for f in "$CH"/[0-9][0-9]-*.yaml; do
     [ -f "scenarios/$s.yaml" ] && pass "  traffic scenario $s exists" || fail "  traffic scenario $s has no file ($id)"
   done
 done
-[ "$COUNT" -eq 4 ] && pass "4 level files" || fail "found $COUNT level files, want 4"
+[ "$COUNT" -ge 4 ] && pass "at least 4 level files ($COUNT)" || fail "found $COUNT level files, want at least 4"
 
 step "spec rules"
 # Level 2.2: the behavior verifier must not check TTL, or a no-TTL cache could never be works-but-wrong.

@@ -1,0 +1,15 @@
+# Two sessions for u-000010 and one for u-000100. Logging u-000010 out everywhere must not touch u-000100.
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'session:*')) do redis.call('DEL', k) end return 1"
+      - 0
+  - cmd: [DEL, "user:u-000010:sessions", "user:u-000100:sessions"]
+  - cmd: [HSET, "session:quest-sid-1", user_id, "u-000010", created_at, "2026-11-01T10:00:00.000Z", last_seen_at, "2026-11-01T10:00:00.000Z"]
+  - cmd: [EXPIRE, "session:quest-sid-1", 1000]
+  - cmd: [HSET, "session:quest-sid-2", user_id, "u-000010", created_at, "2026-11-01T10:05:00.000Z", last_seen_at, "2026-11-01T10:05:00.000Z"]
+  - cmd: [EXPIRE, "session:quest-sid-2", 1000]
+  - cmd: [HSET, "session:quest-sid-3", user_id, "u-000100", created_at, "2026-11-01T10:10:00.000Z", last_seen_at, "2026-11-01T10:10:00.000Z"]
+  - cmd: [EXPIRE, "session:quest-sid-3", 1000]
+  - cmd: [SADD, "user:u-000010:sessions", "quest-sid-1", "quest-sid-2"]
+  - cmd: [SADD, "user:u-000100:sessions", "quest-sid-3"]

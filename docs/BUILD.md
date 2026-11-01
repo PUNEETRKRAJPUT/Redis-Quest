@@ -64,6 +64,7 @@ start early if everything it depends on is `done`.
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)
+- 2026-11-01 Chapter 2 complete (13 levels). Live grading found: 4xx must count as answered in the traffic verifier; ops levels must restore Redis config; a cli level cannot depend on a workspace file from an earlier level.
 - 2026-11-01 Full local run GREEN at 4fa4283 (ALL CHECKS PASSED, docs/ci-local.log). It surfaced four stale check assumptions and one real app bug (bind-mount poller lag; fixed with a throttled request-path stat). Content proven by the grading harness: ch1 52/52, ch2a 13/13, ch0 cli levels, examples. Fresh-clone `./scripts/start` verified.
 - 2026-11-01 Phase 0 complete: 12/12 tasks done, CI green, Chapter 0 playable end to end in a browser with real verdicts. Next: C2a, fresh-clone run, ci-local log, F-04/F-05, then the five-tester playtest (T1).
 - 2026-11-01 Default Redis now persists (RDB 60/1000 + AOF everysec) so Chapter 0.5 is honest; the `crash` profile is the no-persistence instance for Chapter 5. Verifier grades traffic relative to an engine-recorded baseline; traffic runs last and only after behavior passed on the runner.

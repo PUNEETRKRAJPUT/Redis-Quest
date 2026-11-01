@@ -1,0 +1,142 @@
+id: ch2-09-the-box-is-full
+chapter: ch2
+title: "The box is full"
+mode: ops
+
+story: |
+  It is 9:20 pm. The sponsors have gone home, the match is in its last overs, and the roommate has just
+  pasted a screenshot into the group: a red banner from the app, and under it Redis refusing every write.
+  "I did not touch ANYTHING. I swear on my keyboard."
+
+  You check. Redis is not broken. It is full. Cached stats, the fixtures, the sessions, every key anybody
+  ever wrote has piled up in one Redis, and tonight is the first night the pile reached the ceiling. Redis is
+  doing exactly what it was told when it hit the limit, which is the problem: nobody told it what to throw away.
+
+  A cache is allowed to forget. That is what makes it a cache. You will tell Redis how much room it has and which
+  keys it may drop first, then watch it do it while the hundred-user crowd is still on the page. The game has
+  also put a pile of cold filler keys in Redis, so the box really is over the line you are about to draw.
+
+  One thing to think about while you do this: the sessions and the cache are in the same Redis. You are about to
+  tell it that any key can go.
+
+scenario: stats-hot-100   # drives the live pain panel while the level is open
+
+brainstorm:
+  prompt: "Redis has hit its memory ceiling and the cache is erroring on writes. Which key should Redis drop first?"
+  options:
+    - id: least-recently-used
+      label: "The keys nobody has read for the longest time"
+      is_reasonable: true
+    - id: oldest-written
+      label: "The oldest keys, whether or not anybody still reads them"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: give the box more memory and never evict anything"
+      is_reasonable: true
+
+setup:
+  # Cold filler, about 85 MB with a 15-minute TTL so it cleans itself up, so the box is over the limit you will set. The filler is the least recently used data
+  # in Redis, which is why LRU eviction should drop it before the hot cache. The task shows how to clear it afterwards.
+  - cmd:
+      - EVAL
+      - "for i = 1, 90000 do redis.call('SET', 'filler:ch2-09:' .. i, string.rep('x', 900), 'EX', 900) end return 1"
+      - 0
+
+teach: |
+  Eviction is for caches. Two settings decide it, both changeable live with `CONFIG SET`:
+
+  - `maxmemory`: how much memory Redis may use for data. `0` means no limit. `CONFIG SET maxmemory 64mb` sets
+    64 megabytes, and `CONFIG GET maxmemory` shows it in bytes. Replication and AOF buffers are not counted.
+  - `maxmemory-policy`: what Redis does at the limit.
+
+  The policies you will meet, from the docs:
+
+  - `noeviction`: writes that would add data fail with an error; reads still work.
+  - `allkeys-lru`: drop the least recently used key, whatever it is. The docs call it the default choice for a
+    cache. Redis approximates LRU by sampling a few keys (`maxmemory-samples`, 5 by default).
+  - `volatile-lru`, `volatile-ttl` and the other `volatile-*` policies: only keys that have an expiry are
+    candidates. If no key has one they behave like `noeviction`.
+  - `allkeys-random`, `allkeys-lfu` and friends exist; the docs suggest `allkeys-lru` unless you know better.
+
+  Watch it work in `INFO stats`: `evicted_keys` counts the keys Redis dropped, and `keyspace_hits` and
+  `keyspace_misses` give the ratio you read last level. The docs also say: if you mix cache keys and keys you
+  cannot lose in one Redis, consider **two separate instances**.
+
+  A limit is for the exercise: you put it back to 512 MB at the end, because every later level writes to this Redis and a box
+  squeezed to 64 MB would start dropping or refusing their keys.
+
+  The worked example, not your task: `CONFIG SET maxmemory 100mb`, then `CONFIG GET maxmemory`.
+
+task: |
+  In the game's terminal (this is the Redis your app is using), before you change anything run
+  `CONFIG GET maxmemory-policy` and note what it says. The practice stack's compose file runs Redis with a 512 MB limit.
+  Then:
+
+  1. Run `INFO stats` and note `evicted_keys`.
+  2. Set the ceiling: `CONFIG SET maxmemory 64mb`.
+  3. Tell Redis it may drop the least recently used key, whatever it is: `CONFIG SET maxmemory-policy allkeys-lru`.
+  4. Run `INFO stats` again while the crowd is on the page. `evicted_keys` should have moved.
+  5. Answer the two questions below.
+  6. Put the box back the way the game runs it: `CONFIG SET maxmemory 512mb`. The check wants `allkeys-lru` left in place.
+
+  The game's own save keys (`game:*`) live in this same Redis and have no special protection under `allkeys-lru`, so do not
+  linger at 64 MB. The `filler:ch2-09:` keys are cold and will be evicted first; you can leave them.
+
+hints:
+  - "CONFIG SET takes the parameter and then the value: CONFIG SET maxmemory 64mb."
+  - "evicted_keys is in the stats section: INFO stats."
+  - "If evicted_keys stays at zero, run CONFIG GET maxmemory while you are at 64mb: it should say 67108864 bytes. Put it back to 512mb only after you have seen evictions."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [CONFIG, GET, maxmemory]
+        equals: ["maxmemory", "536870912"]
+        message: "maxmemory should be back at 512 megabytes, which CONFIG GET shows as 536870912 bytes. After the exercise run CONFIG SET maxmemory 512mb, so the later levels do not run in a squeezed box."
+      - cmd: [INFO, stats]
+        matches: "evicted_keys:[1-9]"
+        message: "Redis has not evicted any key yet. Set maxmemory to 64mb and the policy to allkeys-lru while the box is over the limit, and watch evicted_keys move before you put the limit back."
+      - cmd: [CONFIG, GET, maxmemory-policy]
+        contains: allkeys-lru
+        message: "maxmemory-policy should be allkeys-lru. Run CONFIG SET maxmemory-policy allkeys-lru."
+  - type: quiz
+    question: "Sessions and the player cache live in one Redis, and you have set allkeys-lru. Memory fills again. What does Redis do to the sessions, and what is the safe fix?"
+    options:
+      - id: two-instances
+        label: "It may evict sessions like any other key. Keep sessions in their own Redis, not in the one that is allowed to forget"
+      - id: sessions-are-safe
+        label: "Nothing: sessions are hashes with a TTL, and Redis never evicts a key that has an expiry"
+      - id: volatile-protects
+        label: "Switch to volatile-lru: only keys with a TTL go, so the sessions are safe"
+      - id: bigger-limit
+        label: "Raise maxmemory until it can never fill"
+    correct: two-instances
+    explanation: "allkeys-lru means every key is a candidate, a session included, and an evicted session is a user suddenly logged out. volatile-lru only considers keys that have an expiry, and a session has one, so it is a candidate too. The docs' advice for mixing cache keys and keys you cannot lose is to consider two separate instances. A bigger limit just moves the day it fills."
+  - type: quiz
+    question: "You set maxmemory-policy noeviction instead, and memory fills. What happens?"
+    options:
+      - id: writes-fail
+        label: "Writes that add data fail with an error, reads still work, so the cache stops filling and the app sees errors on writes"
+      - id: oldest-dropped
+        label: "Redis quietly drops the oldest keys so the writes succeed"
+      - id: reads-fail
+        label: "Everything fails, reads included, until memory is freed"
+    correct: writes-fail
+    explanation: "noeviction means Redis keeps what it has and refuses writes that would add data; reads are still answered. For a cache that means the page keeps serving what is cached while every cache write errors, which is the red banner the roommate screenshotted."
+
+show_me:
+  component: cache_stats
+  keys: []
+docs:
+  - https://redis.io/docs/latest/develop/reference/eviction/
+  - https://redis.io/docs/latest/develop/use-cases/session-store
+
+reward:
+  xp: 40
+
+solutions:
+  reference: solutions/09-reference.redis
+  wrong:
+    - path: solutions/09-wrong-noeviction.redis
+      expect: wrong
+      because: "noeviction means nothing is ever dropped, so evicted_keys never moves and, while the box is full, every write that adds data errors. The policy has to be one that frees room, such as allkeys-lru. (This file still puts the limit back to 512mb.)"

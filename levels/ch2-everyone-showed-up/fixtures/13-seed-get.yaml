@@ -1,0 +1,10 @@
+# One live session for u-000010 with only 100 s left: a get that slides the expiry brings it back to 1800.
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'session:*')) do redis.call('DEL', k) end return 1"
+      - 0
+  - cmd: [DEL, "user:u-000010:sessions", "user:u-000100:sessions"]
+  - cmd: [HSET, "session:quest-sid-1", user_id, "u-000010", created_at, "2026-11-01T10:00:00.000Z", last_seen_at, "2026-11-01T10:00:00.000Z"]
+  - cmd: [EXPIRE, "session:quest-sid-1", 100]
+  - cmd: [SADD, "user:u-000010:sessions", "quest-sid-1"]

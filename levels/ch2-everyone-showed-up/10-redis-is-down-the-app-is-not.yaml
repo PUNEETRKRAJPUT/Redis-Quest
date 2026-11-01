@@ -1,0 +1,122 @@
+id: ch2-10-redis-is-down-the-app-is-not
+chapter: ch2
+title: "Redis is down, the app is not"
+mode: code
+
+story: |
+  It is 9:48 pm and the match is over. The roommate is carrying the laptops back to the room when somebody
+  trips on the extension cord. The Mac sleeps, Docker pauses, and for ninety seconds Redis is gone.
+
+  The app is not. It is running, Postgres is running, every player's stats are sitting in the database, and
+  for ninety seconds the stats page showed a red 500 to everyone, because getting stats goes through the cache
+  first and the cache was not answering. A thing that makes the app faster became a thing that can take it
+  down. The senior's message is short: "It was a CACHE. It is meant to be optional."
+
+  He is right. A cache that is allowed to forget is also allowed to be missing. When Redis cannot answer, the
+  page should get slower, not fail: serve from Postgres, make some noise in the log, and come back to the cache by
+  itself when Redis does.
+
+  You will break your own Redis on purpose, to see what the app does. Make it survive.
+
+brainstorm:
+  prompt: "Redis stops answering, and the stats page has been using it for every read. What should a request do?"
+  options:
+    - id: fall-back-to-postgres
+      label: "Treat any Redis failure as a miss: answer from Postgres, keep serving, log it"
+      is_reasonable: true
+    - id: retry-until-back
+      label: "Keep retrying Redis until it answers, however long that takes"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: put a second layer in front, such as the CDN, so fewer requests ever reach the app"
+      is_reasonable: true
+
+teach: |
+  The node-redis guide in the docs lists the patterns for a client that cannot reach Redis: **fail fast**,
+  **graceful degradation**, retry with backoff, log and continue. This level is graceful degradation: the cache
+  fails, the feature carries on without it.
+
+  The game's client is already set to fail fast (`disableOfflineQueue`, which the docs recommend so that
+  commands are discarded instead of queued up and replayed later). You will see two errors:
+
+  - Redis **stopped** (`docker compose stop redis`): every command rejects within about 10 ms with
+    `Error: The client is offline`. The `name` is a plain `Error`, so match on the message or just catch everything.
+  - Redis **hung** (paused, socket open, no reply): the game's client rejects after 2 seconds with
+    `RedisCommandTimeoutError`. That 2 second limit is this practice stack's setting, not a node-redis default.
+
+  Both are ordinary rejected promises. So the move is a `try/catch` around the Redis part of the function, with the
+  Postgres lookup as the fallback. Three things to get right:
+
+  - Catch **everything** from the Redis calls, including the lock and the write-back. Do not let a failed cache write
+    undo a good answer you already have from Postgres.
+  - Do not catch Postgres errors as if they were Redis ones. If the database is down too, that is a real outage.
+  - Do not ask Postgres twice in one request.
+
+  Postgres now takes the whole crowd while Redis is away. That is the price, and the reason the cache was there.
+
+task: |
+  Wrap `getPlayerStats(deps, playerId)` in `workspace/ch2/cache.js` (your level 5 version) so that any failure
+  from a Redis call ends in a lookup from Postgres: `db.query('SELECT * FROM player_stats($1)', [playerId])`,
+  with `rows[0]` or `null` as before. The function must not throw because of Redis.
+
+  Then break it for real, in your own terminal on your Mac (the game cannot do this for you):
+
+  1. `docker compose stop redis`
+  2. In the browser, open the stats page for `p-028`, or run `curl localhost:3000/app/players/p-028/stats`. It should
+     still answer, slowly, from Postgres.
+  3. Press Verify here. The game has seen Redis go away, and now it waits for it to come back.
+  4. `docker compose start redis`. The check carries on from there.
+
+  The check also makes Redis misbehave without stopping it: it leaves a plain string where your code expects a hash,
+  and your function must still answer from Postgres.
+
+hints:
+  - "Put every Redis call (the read, the lock, the write-back, the release) inside one try. Keep the Postgres query in a helper you can call from the try and from the catch."
+  - "If the failure happens after Postgres has already answered, return that answer instead of querying again."
+  - "A string where a hash should be makes HGETALL fail with an error reply. It is a Redis failure like any other: your catch covers it."
+
+verify:
+  - type: event
+    kind: redis_disconnect
+    timeoutMs: 5000
+    message: "The game has not seen Redis go away since you started this level. Run docker compose stop redis in your own terminal, then press Verify."
+  - type: event
+    kind: redis_reconnect
+    timeoutMs: 300000
+    message: "The game did not see Redis come back within five minutes. Run docker compose start redis in your own terminal."
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/10-poison-cache.yaml
+    assertions:
+      - call: { args: ["p-999"] }
+        repeat: 2
+        expect: null
+        message: "Redis answered with an error (the cache key holds a string where a hash is expected) and getPlayerStats should still answer from Postgres: null for p-999, which is not a player."
+      - call: { args: ["p-151"] }
+        repeat: 2
+        expectCount: { value: null, equals: 0 }
+        message: "Redis answered with an error and getPlayerStats should still return the player's stats row from Postgres for p-151. Returning null or throwing hides a real player behind a Redis problem."
+  - type: traffic
+    scenario: stats-redis-down
+    baseline: false
+    assertions:
+      error_rate_lte: 0
+    message: "Some stats requests failed during the load run. With Redis unhealthy the page must degrade to Postgres, never answer with an error."
+
+show_me:
+  component: stats_latency_panel
+  keys: []
+docs:
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+
+reward:
+  xp: 60
+  badge: "Degrades gracefully"
+
+solutions:
+  reference: solutions/10-reference.js
+  wrong:
+    - path: solutions/10-wrong-no-catch.js
+      expect: wrong
+      because: "This is the level 2 cache. It works while Redis answers, but any Redis error is thrown straight out of getPlayerStats, so the page turns into a 500 for as long as the cache is unhealthy."

@@ -1,0 +1,153 @@
+id: ch2-13-interview-session-store
+chapter: ch2
+title: "Interview: session store from a blank file"
+mode: code
+
+interview:
+  minutes: 30
+  rebuild_of: ch2-08-otp-login-properly
+  hint_xp_cost: 10
+
+story: |
+  Third round of the mock interview, and the senior from the alumni network has stopped smiling in a way that means the
+  question matters. "Users log in with a one-time code. You run two copies of the app. People walk away from computers.
+  Security wants one account logged out of everything with one call. Show me the session store."
+
+  Four blank files. Thirty minutes. Remember who is watching.
+
+brainstorm:
+  prompt: "Before you type: two copies of the app, abandoned logins, and logout everywhere. Where do sessions live, how do they leave, and how do you find all of one user's?"
+  options:
+    - id: redis-hash-ttl
+      label: "A hash per session in Redis with a sliding expiry, and a set per user listing their sessions"
+      is_reasonable: true
+    - id: redis-string-forever
+      label: "A JSON string per session in Redis with no expiry, deleted on logout"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a sessions table in Postgres with a cleanup job"
+      is_reasonable: true
+
+task: |
+  Design a session store that survives two copies of the app, forgets abandoned logins, and can cut a user off
+  everywhere. Write four files in `workspace/ch3/`; each exports one default function that gets `{ redis }` as `deps`.
+
+  - **`session-create.js`: `create(deps, user)`.** `user` is `{ id, handle, display_name, college_id, hostel_id }`. Make a
+    random session id (32 bytes, `base64url`). Write the hash `session:<sid>` with `user_id`, `created_at` and `last_seen_at`,
+    expire it in **1800** seconds, and add the sid to the set `user:<user.id>:sessions`, in one `multi()`. Return the sid.
+  - **`session-get.js`: `get(deps, sid)`.** No such session: `null`. Otherwise refresh `last_seen_at`, slide the expiry back to
+    1800 seconds, and return `{ userId, createdAt }`.
+  - **`session-destroy.js`: `destroy(deps, sid)`.** Delete the session and take it out of its user's set.
+  - **`session-destroy-all.js`: `destroyAll(deps, userId)`.** Delete every session in the user's set and empty the set. No scanning.
+
+hints:
+  - "HSET, EXPIRE and SADD in one multi().exec(), so a session never exists without its expiry or outside the user's set."
+  - "To take a session out of its user's set you need its user_id: read it before you delete the hash."
+
+verify:
+  - type: behavior
+    slot: session.create
+    fixtures: fixtures/13-clean-sessions.yaml
+    assertions:
+      - call:
+          args:
+            - { id: "u-000010", handle: "quest-test", display_name: "Quest Test", college_id: "c-02", hostel_id: "h-c-02-2" }
+        message: "session.create should return a session id and leave a hash named session:<sid> holding the user's id."
+        sideEffect:
+          - cmd:
+              - EVAL_RO
+              - "local keys = redis.call('KEYS', 'session:*') if #keys == 0 then return 'no session key' end return redis.call('HGET', keys[1], 'user_id') or 'no user_id field'"
+              - 0
+            equals: "u-000010"
+            message: "After session.create there should be a hash session:<sid> in Redis with user_id u-000010. Sessions held in the app's memory are invisible to the other copy of the app."
+  - type: behavior
+    slot: session.get
+    fixtures: fixtures/13-seed-get.yaml
+    assertions:
+      - call: { args: ["quest-sid-1"] }
+        expect: { userId: "u-000010", createdAt: "2026-11-01T10:00:00.000Z" }
+        message: "session.get for a live session should return { userId, createdAt } from the stored hash, and push its expiry out again."
+        sideEffect:
+          - cmd: [TTL, "session:quest-sid-1"]
+            between: [1700, 1800]
+            message: "Reading a session should slide its expiry back to 1800 seconds. The seeded session had 100 seconds left and still has about that, so an active user is logged out half an hour after login no matter what."
+      - call: { args: ["quest-sid-unknown"] }
+        expect: null
+        message: "session.get for an id that is not a session should return null."
+        sideEffect:
+          - cmd: [EXISTS, "session:quest-sid-unknown"]
+            equals: 0
+            message: "Reading an unknown session left a hash behind. A get must not create sessions."
+  - type: behavior
+    slot: session.destroy
+    fixtures: fixtures/13-seed-destroy.yaml
+    assertions:
+      - call: { args: ["quest-sid-1"] }
+        message: "session.destroy should remove that one session and nothing else."
+        sideEffect:
+          - cmd: [EXISTS, "session:quest-sid-1"]
+            equals: 0
+            message: "session:quest-sid-1 is still in Redis after destroy. Logout has to delete the session."
+          - cmd: [EXISTS, "session:quest-sid-2"]
+            equals: 1
+            message: "Logging out of one session also removed the user's other session. Only the one named should go."
+          - cmd: [SISMEMBER, "user:u-000010:sessions", "quest-sid-1"]
+            equals: 0
+            message: "The destroyed session is still listed in user:u-000010:sessions. Take it out of the set too, or logout-all keeps chasing sessions that are gone."
+  - type: behavior
+    slot: session.destroyAll
+    fixtures: fixtures/13-seed-destroy-all.yaml
+    assertions:
+      - call: { args: ["u-000010"] }
+        message: "session.destroyAll for u-000010 should remove both of their sessions, empty their set, and leave other users alone."
+        sideEffect:
+          - cmd: [EXISTS, "session:quest-sid-1", "session:quest-sid-2"]
+            equals: 0
+            message: "One of u-000010's sessions survived destroyAll. Logout everywhere has to reach every session of the user."
+          - cmd: [EXISTS, "session:quest-sid-3"]
+            equals: 1
+            message: "destroyAll removed a session that belongs to another user (u-000100). Only the named user's sessions should go."
+          - cmd: [SCARD, "user:u-000010:sessions"]
+            equals: 0
+            message: "user:u-000010:sessions still lists sessions after destroyAll. Remove the ids you just deleted."
+  - type: antipattern
+    slot: session.create
+    fixtures: fixtures/13-clean-sessions.yaml
+    assertions:
+      - call:
+          args:
+            - { id: "u-000010", handle: "quest-test", display_name: "Quest Test", college_id: "c-02", hostel_id: "h-c-02-2" }
+        message: "A session store has to expire abandoned sessions and know every session of a user."
+        sideEffect:
+          - cmd:
+              - EVAL_RO
+              - "local keys = redis.call('KEYS', 'session:*') if #keys == 0 then return -3 end local lowest = nil for _, k in ipairs(keys) do local t = redis.call('TTL', k) if lowest == nil or t < lowest then lowest = t end end return lowest"
+              - 0
+            between: [1700, 1800]
+            message: "This passes today, but a session with no expiry is never cleaned up. Every login that is abandoned stays in Redis for good, and the box fills with people who left. The expiry belongs in the same multi() as the HSET."
+          - cmd: [SCARD, "user:u-000010:sessions"]
+            equals: 1
+            message: "This passes today, but nothing lists the user's sessions, so logout-all has to scan every session key in Redis and read its owner. That is fine for 30 sessions and a Redis stall for 300,000. Add each session id to a set per user when you create it."
+
+show_me:
+  component: set_chips
+  keys: ["user:u-000010:sessions"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/session-store
+
+reward:
+  xp: 60
+  badge: "Sessions, from memory"
+
+solutions:
+  reference: solutions/08-reference.js
+  wrong:
+    - path: solutions/08-wrong-in-memory.js
+      expect: wrong
+      because: "Sessions in a Map inside the app process: invisible to the second copy of the app, lost on restart, and nothing in Redis."
+    - path: solutions/08-wrong-no-ttl.js
+      expect: works_but_wrong
+      because: "Sessions live in Redis and logout works, but create sets no expiry, so a login that is created and abandoned stays in Redis forever."
+    - path: solutions/08-works-but-wrong-no-user-set.js
+      expect: works_but_wrong
+      because: "Sessions have a TTL and slide correctly, but there is no per-user set, so logout everywhere has to scan every session key in Redis."

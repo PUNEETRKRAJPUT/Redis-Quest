@@ -1,0 +1,8 @@
+# Removes every session hash and the two per-user sets this level uses. (DEL takes no pattern, so a short script
+# lists the session keys.)
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'session:*')) do redis.call('DEL', k) end return 1"
+      - 0
+  - cmd: [DEL, "user:u-000010:sessions", "user:u-000100:sessions"]

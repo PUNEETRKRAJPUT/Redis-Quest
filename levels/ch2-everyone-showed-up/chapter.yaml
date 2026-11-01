@@ -27,3 +27,12 @@ levels:
   - ch2-02-cache-aside-v1
   - ch2-03-stale-is-a-bug
   - ch2-04-stampede-at-the-toss
+  - ch2-05-the-player-who-does-not-exist
+  - ch2-06-hit-ratio-is-the-number
+  - ch2-07-fixtures-must-never-miss
+  - ch2-08-otp-login-properly
+  - ch2-09-the-box-is-full
+  - ch2-10-redis-is-down-the-app-is-not
+  - ch2-11-interview-cache-aside
+  - ch2-12-interview-prefetch
+  - ch2-13-interview-session-store

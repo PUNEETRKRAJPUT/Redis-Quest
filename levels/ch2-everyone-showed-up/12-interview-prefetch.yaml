@@ -1,0 +1,165 @@
+id: ch2-12-interview-prefetch
+chapter: ch2
+title: "Interview: prefetch from a blank file"
+mode: code
+
+interview:
+  minutes: 30
+  rebuild_of: ch2-07-fixtures-must-never-miss
+  hint_xp_cost: 10
+
+story: |
+  Second round of the mock interview. The senior from the alumni network slides a printout across the table: a league
+  fixtures table, sixty rows, edited by another system that writes straight to the database. "Every phone in the
+  stadium opens the fixtures page. The database must never see them. And when the league office moves a match, the
+  page must follow. You built this once. Build it again."
+
+  Three blank files. Thirty minutes. The clock is on the wall.
+
+brainstorm:
+  prompt: "Before you type: sixty rows that everyone reads, changed rarely by a system you do not control. What is your design, and what must the read path never do?"
+  options:
+    - id: prefetch-cdc
+      label: "Load it all up front, apply each change event, read only Redis"
+      is_reasonable: true
+    - id: cache-aside-ttl
+      label: "Cache each row on first read with a short TTL"
+      is_reasonable: true
+    - id: cache-forever
+      label: "Cache each row on first read and never update it"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a materialized view in Postgres refreshed on a schedule"
+      is_reasonable: true
+
+task: |
+  Design a prefetch cache for the match fixtures that is warm before anybody asks, follows the change feed, and
+  never reads the database on the read path. Write three files in `workspace/ch2/`; each exports one default function
+  that gets `{ redis }` as `deps`.
+
+  - **`prefetch-bulk.js`: `bulkLoad(deps, rows)`.** `rows` are every match joined with team names (`id, season,
+    home_team_id, away_team_id, home_team_name, away_team_name, venue, starts_at, status`). Store each as a hash
+    `cache:match:<id>`, all values strings, TTL **3600** seconds.
+  - **`prefetch-apply.js`: `applyChange(deps, event)`.** `event` is `{ aggregate, aggregateId, op, payload }` and arrives
+    for every table: ignore all but `matches`. Insert or update replaces the hash with the payload's fields (strings; null
+    becomes `''`), keeps the two team-name fields already there, and sets the 3600 second TTL again. Delete removes the key.
+  - **`prefetch.js`: `getFixtures(deps)`.** `SCAN` for `cache:match:*`, `HGETALL` each, return the hashes as stored for the
+    `scheduled` and `live` matches ordered by `starts_at` then `id`. No `cache:match:*` key at all: return `null`, do not ask
+    Postgres.
+
+hints:
+  - "The update payload has no team names. Read home_team_name and away_team_name from the hash before you replace it."
+  - "A miss is an incident, not a reason to query Postgres: return null."
+
+verify:
+  - type: behavior
+    slot: prefetch.bulkLoad
+    fixtures: fixtures/12-clean-matches.yaml
+    assertions:
+      - call:
+          args:
+            - - { id: "m-901", season: 2026, home_team_id: "t-04", away_team_id: "t-06", home_team_name: "Delhi Dust Devils", away_team_name: "Hyderabad Charminars", venue: "Old Ground", starts_at: "2026-11-03T14:00:00.000Z", status: "scheduled" }
+              - { id: "m-902", season: 2026, home_team_id: "t-02", away_team_id: "t-03", home_team_name: "Chennai Lighthouse", away_team_name: "Kolkata Riverhawks", venue: "Marina Lantern Ground", starts_at: "2026-11-02T10:00:00.000Z", status: "live" }
+              - { id: "m-903", season: 2026, home_team_id: "t-01", away_team_id: "t-05", home_team_name: "Mumbai Monsoon", away_team_name: "Bengaluru Gulmohars", venue: "Bandra Bandstand Oval", starts_at: "2026-10-01T10:00:00.000Z", status: "completed" }
+        message: "bulkLoad with three matches should leave three hashes, cache:match:m-901, m-902 and m-903, each with a safety-net TTL close to an hour."
+        sideEffect:
+          - cmd: [TYPE, "cache:match:m-901"]
+            equals: hash
+            message: "cache:match:m-901 should be a hash after bulkLoad."
+          - cmd: [HGET, "cache:match:m-901", venue]
+            equals: "Old Ground"
+            message: "cache:match:m-901 should hold the row's own fields, with venue Old Ground."
+          - cmd: [HGET, "cache:match:m-902", home_team_name]
+            equals: "Chennai Lighthouse"
+            message: "cache:match:m-902 should keep the joined team names, home_team_name Chennai Lighthouse."
+          - cmd: [TTL, "cache:match:m-901"]
+            between: [3000, 3600]
+            message: "cache:match:m-901 should carry a safety-net TTL of 3600 seconds."
+          - cmd: [TTL, "cache:match:m-903"]
+            between: [3000, 3600]
+            message: "cache:match:m-903 should carry a safety-net TTL of 3600 seconds, completed matches included."
+  - type: behavior
+    slot: prefetch.applyChange
+    fixtures: fixtures/12-seed-for-apply.yaml
+    assertions:
+      - call:
+          args:
+            - { aggregate: "matches", aggregateId: "m-901", op: "update", payload: { id: "m-901", season: 2026, home_team_id: "t-04", away_team_id: "t-06", venue: "Quest Test Ground", starts_at: "2026-11-03T14:00:00+00:00", status: "scheduled" } }
+        message: "An update event for m-901 should change its venue in the cache within the call, and refresh its TTL."
+        sideEffect:
+          - cmd: [HGET, "cache:match:m-901", venue]
+            equals: "Quest Test Ground"
+            message: "After an update event the cached venue is still the old one. applyChange has to write the payload into cache:match:m-901."
+          - cmd: [TTL, "cache:match:m-901"]
+            between: [3000, 3600]
+            message: "The TTL of cache:match:m-901 was not refreshed to the safety net by the update. Every upsert sets it again."
+      - call:
+          args:
+            - { aggregate: "matches", aggregateId: "m-902", op: "insert", payload: { id: "m-902", season: 2026, home_team_id: "t-02", away_team_id: "t-03", venue: "Marina Lantern Ground", starts_at: "2026-11-02T10:00:00+00:00", status: "scheduled" } }
+        message: "An insert event for a new match should create cache:match:m-902."
+        sideEffect:
+          - cmd: [TYPE, "cache:match:m-902"]
+            equals: hash
+            message: "An insert event should create the hash cache:match:m-902."
+          - cmd: [TTL, "cache:match:m-902"]
+            between: [3000, 3600]
+            message: "A new cache:match:m-902 should carry the 3600 second safety-net TTL."
+      - call:
+          args:
+            - { aggregate: "matches", aggregateId: "m-901", op: "delete", payload: { id: "m-901", season: 2026, home_team_id: "t-04", away_team_id: "t-06", venue: "Quest Test Ground", starts_at: "2026-11-03T14:00:00+00:00", status: "scheduled" } }
+        message: "A delete event for m-901 should remove cache:match:m-901."
+        sideEffect:
+          - cmd: [EXISTS, "cache:match:m-901"]
+            equals: 0
+            message: "cache:match:m-901 is still in Redis after its delete event. A deleted match must leave the cache."
+      - call:
+          args:
+            - { aggregate: "players", aggregateId: "p-001", op: "update", payload: { id: "p-001", fame: 31 } }
+        message: "An event for another table (players) should be ignored, not turned into a match."
+        sideEffect:
+          - cmd: [EXISTS, "cache:match:p-001"]
+            equals: 0
+            message: "A players change created cache:match:p-001. applyChange gets an event for every table; ignore the ones that are not matches."
+  - type: behavior
+    slot: prefetch.getFixtures
+    fixtures: fixtures/12-seed-for-read.yaml
+    assertions:
+      - call: { args: [] }
+        expect:
+          - { id: "m-902", season: "2026", home_team_id: "t-02", away_team_id: "t-03", home_team_name: "Chennai Lighthouse", away_team_name: "Kolkata Riverhawks", venue: "Marina Lantern Ground", starts_at: "2026-11-02T10:00:00.000Z", status: "live" }
+          - { id: "m-901", season: "2026", home_team_id: "t-04", away_team_id: "t-06", home_team_name: "Delhi Dust Devils", away_team_name: "Hyderabad Charminars", venue: "Old Ground", starts_at: "2026-11-03T14:00:00.000Z", status: "scheduled" }
+        message: "With three cached matches (one scheduled, one live, one completed) getFixtures should return the live one first and the scheduled one second, as the hashes are stored, and leave the completed one out."
+  - type: antipattern
+    slot: prefetch.getFixtures
+    fixtures: fixtures/12-clean-matches.yaml
+    assertions:
+      - call: { args: [] }
+        expect: null
+        message: "This passes today, but getFixtures asks Postgres when the cache is empty. The page never breaks, so nobody notices that the sync pipeline has died, and when the whole crowd lands on the fixtures page every phone becomes a Postgres query. A prefetch cache that misses is an incident: return null, and let it be loud."
+  - type: traffic
+    scenario: fixtures-read
+    baseline: true
+    assertions:
+      db_calls_ratio_lte: 0.01
+      error_rate_lte: 0
+    message: "Under fifty connections on the fixtures page Postgres is still being asked, or some requests failed. After the bulk load the page should read only Redis, and the bulk load has to cover every match."
+
+show_me:
+  component: hash_card
+  keys: ["cache:match:m-043"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/prefetch-cache
+
+reward:
+  xp: 60
+  badge: "Prefetch, from memory"
+
+solutions:
+  reference: solutions/07-reference.js
+  wrong:
+    - path: solutions/07-wrong-no-apply.js
+      expect: wrong
+      because: "The bulk load and the read are right, but applyChange does nothing. The cache is correct at startup and then frozen, so a moved match never reaches Redis until the safety-net TTL expires."
+    - path: solutions/07-wrong-fallback-to-postgres.js
+      expect: works_but_wrong
+      because: "The cache is loaded and kept in step, but getFixtures quietly asks Postgres when Redis has nothing, which hides a dead sync pipeline and sends the whole crowd to Postgres on the day Redis restarts empty."

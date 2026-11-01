@@ -1,0 +1,6 @@
+# Empties the prefetch cache: every cache:match:* hash goes. (DEL takes no pattern, so a short script lists them.)
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'cache:match:*')) do redis.call('DEL', k) end return 1"
+      - 0
