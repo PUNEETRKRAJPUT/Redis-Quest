@@ -38,14 +38,14 @@ start early if everything it depends on is `done`.
 
 | id | task | status |
 |---|---|---|
-| F-01 | Caddy: use dynamic A-record upstreams for `app` so requests round-robin across scaled instances without the app closing every connection (`APP_MAX_REQUESTS_PER_SOCKET=1` is the current workaround) | todo |
+| F-01 (in progress, spec: specs/F-01) | Caddy: use dynamic A-record upstreams for `app` so requests round-robin across scaled instances without the app closing every connection (`APP_MAX_REQUESTS_PER_SOCKET=1` is the current workaround) | todo |
 | F-02 | Engine metrics aggregate must sum `dbQueries` and `redisCommands` (P0-09 is making this change) | in progress |
 | F-03 | `.prettierignore` exists; add a `format:check` step to CI once the tree is stable | todo |
 | F-04 | UI: render the `ideal` object from the verify response and call `GET /api/levels/:id/ideal` for "reveal anyway" (P0-09 is adding the endpoint) | todo |
 | F-05 | Schema: `show_me` should carry the key(s) to display (`{ component, keys }`), additive; UI stops hard-coding keys per level | todo |
-| F-06 | UI: clicking away from a focused terminal makes the page jump; fix for real users | todo |
-| F-07 | UI: Redis Insight link should use the configured `INSIGHT_PORT`, not 5540 | todo |
-| F-08 | Playwright e2e: set `ALLOW_DEV_COMPLETE_FALLBACK=false` now that verify works | todo |
+| F-06 (in progress, bundled as specs/F-UI) | UI: clicking away from a focused terminal makes the page jump; fix for real users | todo |
+| F-07 (in progress, specs/F-UI) | UI: Redis Insight link should use the configured `INSIGHT_PORT`, not 5540 | todo |
+| F-08 (in progress, specs/F-UI) | Playwright e2e: set `ALLOW_DEV_COMPLETE_FALLBACK=false` now that verify works | todo |
 
 ## Content (after Phase 0)
 
