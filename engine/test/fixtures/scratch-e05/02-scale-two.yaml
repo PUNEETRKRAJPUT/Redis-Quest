@@ -1,0 +1,43 @@
+id: scratch-e05-02-scale-two
+chapter: scratch-e05
+title: "Scale to two"
+mode: ops
+
+story: |
+  Harry Bhaiya wants a second copy of the app "for capacity". Does the game see it?
+
+brainstorm:
+  prompt: "What changes when a second copy of the app starts?"
+  options:
+    - id: separate-memory
+      label: "Each copy has its own memory"
+      is_reasonable: true
+    - id: nothing
+      label: "Nothing: the copies share state by themselves"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: the copies each keep their own Map, so the count is per copy"
+      is_reasonable: true
+
+teach: |
+  `docker compose up -d --scale app=2 app` starts a second container of the `app` service.
+
+task: |
+  Run `docker compose up -d --scale app=2 app`, wait ten seconds, and come back.
+
+verify:
+  - type: event
+    kind: service_scaled
+    match: { service: app, instances: 2 }
+    timeoutMs: 20000
+    message: "The game has not seen a second copy of the app since you started this level."
+
+reward:
+  xp: 10
+
+solutions:
+  reference: solutions/02-reference.sh
+  wrong:
+    - path: solutions/02-wrong-restart.sh
+      expect: wrong
+      because: "Restarting the app adds no copy, so the game never sees instances: 2."

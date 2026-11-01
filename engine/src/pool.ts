@@ -18,6 +18,14 @@ export function poolEntries(level: LoadedLevel): readonly PoolEntry[] | null {
   return lv.mode === 'code' && lv.interview?.pool ? lv.interview.pool : null;
 }
 
+/** E-05: the follow-up questions of a `rebuild_of` interview level (none on any other level). */
+export function ownQuestions(level: LoadedLevel): readonly QuizVerifier[] {
+  const lv = level.level;
+  return lv.mode === 'code' && lv.interview?.rebuild_of !== undefined
+    ? (lv.interview.questions ?? [])
+    : [];
+}
+
 /** `interview.blank_start` with its default (true for a pool level, false for a `rebuild_of` level). */
 export function blankStartOf(level: LoadedLevel): boolean {
   const lv = level.level;
@@ -73,7 +81,22 @@ export function effectiveLevel(
   get: (id: string) => LevelIndexEntry | undefined,
 ): Effective {
   const pool = poolEntries(entry.level);
-  if (!pool) return { pool: false, drawn: null, questions: [], verifyLevel: entry.level };
+  if (!pool) {
+    // E-05: a `rebuild_of` level's own follow-up questions go after its own checks, exactly like a pool entry's.
+    const own = ownQuestions(entry.level);
+    if (own.length === 0)
+      return { pool: false, drawn: null, questions: [], verifyLevel: entry.level };
+    const el = entry.level;
+    return {
+      pool: false,
+      drawn: null,
+      questions: own,
+      verifyLevel: {
+        ...el,
+        level: { ...el.level, verify: [...el.level.verify, ...own] } as LoadedLevel['level'],
+      },
+    };
+  }
   const pe = lp?.drawn ? pool.find((e) => e.rebuild_of === lp.drawn) : undefined;
   const drawn = pe ? get(pe.rebuild_of) : undefined;
   if (!pe || !drawn) return { pool: true, drawn: null, questions: [], verifyLevel: entry.level };

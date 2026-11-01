@@ -131,7 +131,7 @@ solutions:                             # beat 7, and the CI proof of every verif
 | `scenario` | no | load scenario id for the live pain panel (e.g. `toss-time-100`) |
 | `hints` | no | ordered list of strings |
 | `show_me` | no | `{ component, keys, title? }`, see below; a bare component id is still accepted |
-| `interview` | no | `code` levels only: makes the level a timed blank rebuild (`rebuild_of`) or a drawn one (`pool`), see "Interview levels" |
+| `interview` | no | `code` levels only: makes the level a timed blank rebuild (`rebuild_of`, with optional follow-up `questions`) or a drawn one (`pool`), see "Interview levels" |
 | `docs` | no | URLs starting with `https://redis.io/docs/` |
 | `min_redis_version` | no | quoted, e.g. `"8.4"`, for commands that need it |
 
@@ -140,6 +140,17 @@ templates (`{{player.id}}`), are read through the UI's read-only CLI proxy (one 
 be empty when nothing in Redis is worth showing. The short form `show_me: kv_card` is kept for compatibility:
 the loader normalises it to `{ component: kv_card, keys: [] }`. `title` is an optional heading. Prefer
 the object form: with no keys the UI has nothing to display and asks the learner which key to read.
+
+Show-me components for later chapters. Every command is on the read-only allowlist
+(`packages/shared/src/levels/commands.ts`); the panel polls them every 2 s through `POST /api/cli`.
+
+| component | `keys` | commands it reads | empty state |
+|---|---|---|---|
+| `stream_groups` | stream names | `XLEN`, `XINFO GROUPS <key>`, `XPENDING <key> <group>` | "no stream yet" |
+| `ts_chart` | time series keys | `TS.INFO`, `TS.RANGE <key> - + AGGREGATION avg 60000` (last 60 buckets) | "no samples yet" |
+| `bf_card` | Bloom filter keys | `BF.INFO`, `BF.CARD` | "no filter yet" |
+| `ft_card` | index names | `FT.INFO`, `FT.SEARCH <index> * LIMIT 0 3 RETURN 0` | "no index yet" |
+| `acl_users` | ignored (use `[]`) | `ACL LIST` | "No ACL users came back." |
 
 Unknown keys are errors everywhere, including inside verifiers. There is no `unlocks` field:
 `chapter.yaml` order decides what comes next.
@@ -161,6 +172,14 @@ interview:
   minutes: 10                          # 5 to 60, whole minutes
   rebuild_of: example-code-01-cache-aside   # the guided level this repeats
   hint_xp_cost: 10                     # whole XP per hint, default 10
+  questions:                           # optional (E-05): 1 to 5 follow-up quizzes, asked after the level's own checks
+    - type: quiz
+      question: "Why does the cached hash get a TTL?"
+      options:
+        - { id: stale-heals, label: "So a stale entry fixes itself" }
+        - { id: ram-only, label: "Redis cannot keep a key for long" }
+      correct: stale-heals
+      explanation: "The expiry bounds how long a wrong page can live."
 ```
 
 - Leave `teach` out. The UI replaces the Teach beat with one line, "no teaching here: this is the
@@ -173,8 +192,16 @@ interview:
 - The verifiers are the same kind as any code level; the timer never changes the verdict. The clock starts when
   the level is first started, a verify after the deadline still grades and is marked overtime, each hint
   subtracts `hint_xp_cost` from the learner's XP (never below 0), and a pass records "rebuilt in m:ss".
+- **`questions` (E-05).** The interviewer's follow-ups after the rebuild, on the `rebuild_of` form only (a pool entry
+  carries its own, below). 1 to 5 quizzes written as in "quiz" below, option ids unique across the list. They are
+  verifiers 1 to 5 after the level's own ones: `GET /api/levels/:id` lists them after the level's `verify` and
+  `interview.questionsFrom` is the index of the first (the number of the level's own verifiers), `verify` grades them
+  after the level's checks, and a wrong or missing answer makes the verdict wrong, exactly as for a pool entry. The
+  level's `verify` still needs its `behavior` or `traffic` check; `questions` never replace it. Write them in the
+  interviewer's voice ("Why ...?", "What would you say if ...?").
 - Write the task in interview wording ("Design a ... that ...") and keep hints few; they cost XP here.
-- A full example is `levels/_examples/example-interview/`.
+- A full example is `levels/_examples/example-interview/`; one with `questions` is the scratch chapter
+  `engine/test/fixtures/scratch-e05/`.
 
 ### Interview pools: the interviewer picks
 

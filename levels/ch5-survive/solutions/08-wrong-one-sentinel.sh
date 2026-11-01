@@ -2,7 +2,7 @@
 # Wrong: only one Sentinel is started. sentinel.conf says quorum 2, so one Sentinel can never agree "the master is down" with anybody:
 # no failover, the game never sees sentinel_failover, and the master stays dead until it is started again by hand.
 set -eu
-API="${API:-http://localhost:3000}"
+API="${QUEST_API:-${API:-http://localhost:3000}}"
 docker compose --profile sentinel up -d sentinel-1
 sleep 5
 curl -sS -X PUT "$API/api/target" -H 'content-type: application/json' \

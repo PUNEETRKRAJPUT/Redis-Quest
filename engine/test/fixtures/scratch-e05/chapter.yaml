@@ -1,0 +1,13 @@
+id: scratch-e05
+title: "Scratch: follow-up questions and ops levels the harness runs"
+incident:
+  - from: senior
+    time: "09:00"
+    text: "Rebuild it from a blank file, then I will ask you about it."
+  - from: you
+    time: "09:01"
+    text: "Okay. Ready."
+levels:
+  - scratch-e05-01-cache-aside-questions
+  - scratch-e05-02-scale-two
+  - scratch-e05-03-stay-two

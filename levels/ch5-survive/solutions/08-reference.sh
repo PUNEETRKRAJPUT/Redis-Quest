@@ -3,7 +3,7 @@
 # waits for sentinel_failover); run from the repo folder on your Mac with the stack up, redis-replica running (level 7) and the
 # game pointed at redis://redis:6379. About a minute and a half.
 set -eu
-API="${API:-http://localhost:3000}"
+API="${QUEST_API:-${API:-http://localhost:3000}}"
 SENTINEL_URL='sentinel://mymaster@sentinel-1:26379,sentinel-2:26379,sentinel-3:26379'
 put_target() { curl -fsS -X PUT "$API/api/target" -H 'content-type: application/json' -d "{\"redisUrl\":\"$1\"}"; echo; }
 ask() { docker compose exec -T sentinel-1 redis-cli -p 26379 "$@"; }

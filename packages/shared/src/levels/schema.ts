@@ -605,30 +605,33 @@ export const POOL_ENTRIES_MAX = 12;
 export const POOL_QUESTIONS_MIN = 1;
 export const POOL_QUESTIONS_MAX = 5;
 
-const poolEntrySchema = z
-  .strictObject({
-    rebuild_of: levelId,
-    questions: z
-      .array(quizVerifier)
-      .min(POOL_QUESTIONS_MIN, 'a pool entry needs at least one follow-up question')
-      .max(POOL_QUESTIONS_MAX, `a pool entry has at most ${POOL_QUESTIONS_MAX} follow-up questions`),
-  })
-  .superRefine((entry, ctx) => {
-    // Option ids are unique within the entry, so a question can be named without the others in the way.
+/** 1 to 5 follow-up quiz questions, with option ids unique across the list. Shared by pool entries and `rebuild_of`. */
+const followUpQuestions = (owner: string) =>
+  z
+  .array(quizVerifier)
+  .min(POOL_QUESTIONS_MIN, `${owner} needs at least one follow-up question`)
+  .max(POOL_QUESTIONS_MAX, `${owner} has at most ${POOL_QUESTIONS_MAX} follow-up questions`)
+  .superRefine((questions, ctx) => {
+    // Option ids are unique within the list, so a question can be named without the others in the way.
     const seen = new Set<string>();
-    entry.questions.forEach((q, qi) => {
+    questions.forEach((q, qi) => {
       q.options.forEach((o, oi) => {
         if (seen.has(o.id)) {
           ctx.addIssue({
             code: 'custom',
-            path: ['questions', qi, 'options', oi, 'id'],
-            message: `option id ${o.id} is used by another question of this pool entry`,
+            path: [qi, 'options', oi, 'id'],
+            message: `option id ${o.id} is used by another question of this ${owner === 'a pool entry' ? 'pool entry' : 'interview level'}`,
           });
         }
         seen.add(o.id);
       });
     });
   });
+
+const poolEntrySchema = z.strictObject({
+  rebuild_of: levelId,
+  questions: followUpQuestions('a pool entry'),
+});
 export type PoolEntry = z.output<typeof poolEntrySchema>;
 
 export const interviewSchema = z
@@ -639,6 +642,8 @@ export const interviewSchema = z
       .min(INTERVIEW_MINUTES_MIN, `must be at least ${INTERVIEW_MINUTES_MIN} minutes`)
       .max(INTERVIEW_MINUTES_MAX, `must be at most ${INTERVIEW_MINUTES_MAX} minutes`),
     rebuild_of: levelId.optional(),
+    /** E-05. Follow-up questions for the `rebuild_of` form, asked after the level's own checks (a pool carries its own per entry). */
+    questions: followUpQuestions('an interview level').optional(),
     pool: z
       .array(poolEntrySchema)
       .min(POOL_ENTRIES_MIN, `a pool needs at least ${POOL_ENTRIES_MIN} entries`)
@@ -658,6 +663,9 @@ export const interviewSchema = z
       ctx.addIssue({ code: 'custom', path: ['pool'], message: 'use either rebuild_of or pool, not both' });
     } else if (iv.rebuild_of === undefined && iv.pool === undefined) {
       ctx.addIssue({ code: 'custom', path: [], message: 'needs rebuild_of (one level) or pool (a list of levels to draw from)' });
+    }
+    if (iv.questions !== undefined && iv.rebuild_of === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['questions'], message: 'questions go with rebuild_of; a pool entry carries its own' });
     }
     const seen = new Set<string>();
     (iv.pool ?? []).forEach((e, i) => {

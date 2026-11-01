@@ -1,6 +1,10 @@
 # Compose override for scripts/check/G-01.sh only (project quest-g01). It isolates the grading stack from
 # every other project and from the learner: its own image tag, and scratch directories for the workspace,
 # logs, progress and levels (G01_* are absolute paths exported by the check script).
+# E-05: the chapter 5 profile services lose their published host ports (as scripts/check/compose.e03.yaml does), so
+# a run with --run-ops can start the profiles while a learner's default stack (or another check) holds 6380, 26379
+# to 26381 and 7100 to 7105. Everything reaches them by container name over the compose network, as the game does.
+# `!reset []` needs Docker Compose 2.24 or newer (the preflight already asks for a current Docker Desktop).
 x-g01-node: &g01-node
   image: quest-g01-node:latest
 
@@ -38,3 +42,23 @@ services:
       - pg-data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
       - ${G01_LOGS:?}:/logs
+  redis-replica:
+    ports: !reset []
+  sentinel-1:
+    ports: !reset []
+  sentinel-2:
+    ports: !reset []
+  sentinel-3:
+    ports: !reset []
+  redis-c1:
+    ports: !reset []
+  redis-c2:
+    ports: !reset []
+  redis-c3:
+    ports: !reset []
+  redis-c4:
+    ports: !reset []
+  redis-c5:
+    ports: !reset []
+  redis-c6:
+    ports: !reset []

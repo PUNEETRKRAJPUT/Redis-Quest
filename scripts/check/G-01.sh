@@ -39,9 +39,27 @@ setvar ENGINE_DEV 1
 
 export G01_WORKSPACE="$CHECK_DIR/workspace" G01_LOGS="$CHECK_DIR/logs" G01_PROGRESS="$CHECK_DIR/progress" G01_LEVELS="$CHECK_DIR/levels"
 
+# E-05: G01_RUN_OPS=1 also runs the .sh ops solutions and grades the levels that need the compose profiles, against
+# THIS stack and never the default project: the environment below is what `docker compose` inside a solution reads
+# (COMPOSE_PROJECT_NAME beats the file's name:, COMPOSE_FILE lists the files, COMPOSE_ENV_FILES names the env file).
+# Default off: the full local run stays as it was. It is slower (the ch5 failovers alone take a few minutes).
+G01_RUN_OPS="${G01_RUN_OPS:-0}"
+RUN_OPS_ARG=""
+if [ "$G01_RUN_OPS" = 1 ]; then
+  RUN_OPS_ARG="--run-ops"
+  export COMPOSE_PROJECT_NAME="$PROJECT"
+  export COMPOSE_FILE="docker-compose.yml:$OVERRIDE"
+  export COMPOSE_ENV_FILES="$ENV_FILE"
+  export QUEST_API="$BASE" PROXY_PORT=3500 REDIS_PORT=6395 PG_PORT=5437 INSIGHT_PORT=5545
+  echo "G-01 mode: RUN-OPS (G01_RUN_OPS=1): .sh solutions and profile levels are run against project $PROJECT (COMPOSE_FILE=$COMPOSE_FILE, COMPOSE_ENV_FILES=$COMPOSE_ENV_FILES, QUEST_API=$QUEST_API); several minutes longer"
+else
+  echo "G-01 mode: default (.sh ops solutions and profile levels are SKIPPED; set G01_RUN_OPS=1 to run them against $PROJECT)"
+fi
+
 cleanup() {
   say "cleanup"
-  dc down -v --remove-orphans >/dev/null 2>&1 && echo "docker compose -p $PROJECT down -v: done"
+  # --profile '*': a run with G01_RUN_OPS=1 may have started profile services (replica, sentinels, crash node, cluster).
+  dc --profile '*' down -v --remove-orphans >/dev/null 2>&1 && echo "docker compose -p $PROJECT down -v: done"
   rm -rf "$CHECK_DIR" && echo "removed scratch dir logs/.g-01-check (workspace copies included)"
 }
 trap cleanup EXIT
@@ -105,7 +123,8 @@ JSONS=""
 grade() {
   name="$1"; shift
   printf '\n----- %s -----\n' "$name"
-  scripts/grade/grade.sh --engine "$BASE" --json "$CHECK_DIR/$name.json" "$@"
+  # shellcheck disable=SC2086
+  scripts/grade/grade.sh --engine "$BASE" $RUN_OPS_ARG --json "$CHECK_DIR/$name.json" "$@"
   rc=$?
   case $rc in
     0) pass "$name: every graded solution matches its declaration" ;;

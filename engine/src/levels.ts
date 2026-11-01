@@ -133,7 +133,13 @@ export function renderLevel(
       task: pool ? NOT_DRAWN_TASK : lv.task,
       brainstorm: lv.brainstorm,
       hints: lv.hints ?? [],
-      verify: lv.verify,
+      // E-05: a `rebuild_of` interview level's follow-up questions come after its own checks.
+      verify: [
+        ...lv.verify,
+        ...(lv.mode === 'code' && lv.interview?.rebuild_of !== undefined
+          ? (lv.interview.questions ?? [])
+          : []),
+      ],
       showMe: lv.show_me ?? null,
     },
     ctx,

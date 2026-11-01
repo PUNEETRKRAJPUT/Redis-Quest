@@ -39,7 +39,7 @@ State is reset between solutions by calling `POST /api/levels/:id/start` again, 
 |---|---|
 | `.redis` (cli, or an ops level that names a `.redis`) | each line (comments and blanks skipped, `{{player.id}}` etc. rendered with `renderTemplate`) goes through `POST /api/cli` |
 | `.js` (code) | copied into the slot's workspace file (`PUT /api/workspace/file`, or into `--workspace DIR`), and the engine activates the slot while it verifies. Slot-to-file comes from `GET /app/slots`, with a built-in table as fallback |
-| `.sh` (ops shell) | **not run**: the row is `SKIPPED (ops shell)`. `--run-ops` runs it on this Mac from the repo root; those scripts run `docker compose` against the default project, so only use it on a machine you can afford to disturb |
+| `.sh` (ops shell) | **not run**: the row is `SKIPPED (ops shell)`. `--run-ops` runs it on this Mac from the repo root with the environment the tool was given; without `COMPOSE_PROJECT_NAME` those scripts run `docker compose` against the default project, so export the grading stack's environment (see "Ops solutions") or only use it on a machine you can afford to disturb |
 | decision (`option:`) | the reference answers every quiz correctly; a wrong entry swaps in that one option |
 
 Then it fills the other verifiers:
@@ -47,6 +47,9 @@ Then it fills the other verifiers:
 - `answer`: for a solution declared `right` or `works_but_wrong`, the tool runs `expected.cmd` through `/api/cli` after
   the solution and types back that reply. For a `wrong` solution it types `not-the-answer`.
 - `quiz`: correct option(s) for `right` and `works_but_wrong`, a wrong option for `wrong`.
+- `interview.questions` (E-05, a `rebuild_of` interview level): the level's follow-up questions sit after its own
+  verifiers (indices continue), answered like a pool entry's: all right for `right` and `works_but_wrong`, the first one
+  wrong for `wrong`. The row's note says `N follow-up questions`.
 - `event`: `cli_ping` comes from a `PING` in the solution; `ui_connected` is posted as the UI would; `progress_restored` is
   produced by the harness calling `POST /api/progress/restore` (what accepting the restore offer does), and **only the
   restore**, so an engine that never emits the event is a mismatch, not hidden.
@@ -123,13 +126,52 @@ declared `right` or `works_but_wrong`, and produces nothing for one declared `wr
 
 Each rule adds one line to the row's `note`.
 
-Levels the harness does **not** play (E-03). A level with an `event` verifier that names the custom event
+Levels the harness does **not** play without `--run-ops` (E-03, E-05). A level with an `event` verifier that names the custom event
 `redis_target_changed` or `sentinel_failover` needs the compose profiles (`replica`, `sentinel`, `cluster`) running and
 a hand on the Docker side (switch the target on the page, `docker compose stop redis`), and nothing the harness does
 through the engine produces them. Every solution of such a level is recorded as `SKIPPED (needs the compose profiles:
 graded by hand)` and the level is completed so later levels unlock, exactly like the outage levels (`redis_disconnect` /
 `redis_reconnect`: `SKIPPED (needs a real Redis outage: graded by hand)`). Grade them by hand once per release, with the
-profiles up.
+profiles up, or with `--run-ops` (below) when the level has `.sh` solutions.
+
+## Ops solutions (E-05, `--run-ops`)
+
+`--run-ops` runs the `.sh` solutions and lifts two skips: "ops shell", and "needs the compose profiles" for a level
+that has at least one `.sh` solution (a profile level whose solutions are only `.js` or `.redis`, ch5-09, stays skipped:
+nothing would start its cluster). "Needs a real Redis outage" stays, unless a `.sh` solution of the level itself runs
+`docker compose stop redis` or `kill redis` (none does today; ch5-01 kills its own `redis-nopersist` node and stays skipped).
+
+**Environment.** A script runs from the repo root with the tool's own environment, plus: `QUEST_API` (default: the
+`--engine` URL, so `curl "$API/api/target"` reaches the grading stack), `PROXY_PORT` (default: the port of `--engine`,
+which `scripts/hit.sh` and `scripts/ticker-drill.sh` read), `QUEST_OPS_ROOT` (when `--workspace` or `G01_WORKSPACE` is
+known: a folder whose `workspace` links to the stack's workspace, for scripts that `cd workspace`, the finale's) and a
+git identity if none is exported. `docker compose` inside the script acts on the grading stack when the caller exports
+`COMPOSE_PROJECT_NAME`, `COMPOSE_FILE` (files separated by `:`) and `COMPOSE_ENV_FILES`: Docker Compose gives the
+environment precedence over the file's `name:`. `G01_RUN_OPS=1 scripts/check/G-01.sh` exports exactly that for project
+`quest-g01` (and `scripts/grade/compose.g01.yaml` takes the profile services' host ports away, so the profiles can run
+next to a learner's default stack). **Without `COMPOSE_PROJECT_NAME` the row is run against the default project** and the
+log line says so.
+
+**Sequence around one `.sh` solution:**
+1. `POST /api/levels/:id/start` (setup re-runs), then the script, in its own process group. Time limit 300 s
+   (`QUEST_OPS_TIMEOUT_S`). A script that runs an attached `docker compose up` (no `-d`; ch0-01's wrong one) gets 20 s and
+   then Ctrl-C, as a learner would give it.
+2. The engine's `/health` must say redis and postgres are up. A script may `down` and `up` the stack, or leave it down
+   (`./scripts/start` refuses to run next to another project's ports: its preflight sees the grading ports held by a
+   project it does not know). If it is not answering and `COMPOSE_PROJECT_NAME` is set, the harness runs
+   `docker compose up -d --no-build redis postgres engine app runner proxy`. It then waits up to 90 s
+   (`QUEST_OPS_HEALTH_S`) and puts what happened in the row's note. Then `/app/health` (60 s).
+3. Answers and `verify` as for any solution. **The harness fakes nothing the script did for real:** for a `.sh` solution
+   the `service_scaled` fake-instance pushes are not made (the script's `docker compose up --scale app=2` is the second
+   instance); the other events (a channel message, an expiring key, ...) are produced as for any solution.
+4. After verify, on an isolated project: `docker compose up -d --no-build --scale app=1 app` and wait for `/app/health`
+   (the note says `app had N instance(s) after the script; scaled back to 1` when N was not 1); if `GET /api/target` is
+   not `redis://redis:6379` it is put back with `PUT /api/target`; if the stack had been down, `POST /api/progress/restore`.
+
+The harness does **not** stop profile services a script started: the reference scripts end with the way back (or, in
+ch5, leave the replica and Sentinels for the next level on purpose). A reference that leaves something behind that breaks
+a later level is a content bug: list it in `scripts/grade/known-content-bugs.tsv`.
+Expect extra time: the ch5 failovers alone take a few minutes, `./scripts/start` rebuilds the image.
 
 ## Pool levels and the portfolio event (E-04)
 
@@ -188,7 +230,9 @@ Do not edit a level just to make the harness green if the level is right and the
 ## Limits
 
 - Ops shell solutions are never executed by default, so `ch0-01`, `ch0-04`, `ch0-05` and `example-ops` are only
-  `SKIPPED` unless you use `--run-ops`.
+  `SKIPPED` unless you use `--run-ops`. Under it, `ch0-04` runs `open http://localhost:5540` on your Mac (a browser tab,
+  nothing the grading stack sees), and a level whose check is already true in a running stack (ch0-01's
+  "the engine has booted") cannot fail for a script that did nothing useful.
 - The tool feeds correct answers to `works_but_wrong` and wrong answers to `wrong` solutions. A wrong solution that
   passes every `redis` check and relies on a missing answer is graded as the learner would see it (the wrong answer fails it).
 - It does not test hints, brainstorm, story text, XP, or the UI (a pool level's clock and hint cost are covered by the engine's own tests).

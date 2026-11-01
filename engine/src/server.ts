@@ -489,7 +489,11 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
                     }
                   : null,
                 blanked: lp.blanked ?? [],
-                questionsFrom: eff.drawn ? eff.drawn.level.level.verify.length : null,
+                questionsFrom: eff.drawn
+                  ? eff.drawn.level.level.verify.length
+                  : eff.questions.length > 0
+                    ? entry.level.level.verify.length
+                    : null,
               },
             )
           : { interview: null, remainingMs: null };

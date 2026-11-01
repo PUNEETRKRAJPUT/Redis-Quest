@@ -10,16 +10,19 @@
 // YAML itself. The engine must already be running with the same level files mounted. Exit codes:
 // 0 every graded solution matches its declaration, 1 at least one MISMATCH, 2 the tool could not run.
 /* global fetch, setTimeout, clearTimeout, setInterval, clearInterval, WebSocket, AbortSignal, process, console */
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -41,7 +44,10 @@ const USAGE = `usage: scripts/grade/grade.sh [options] <chapter-dir | level-id>.
   --engine URL      engine origin as the proxy serves it (default $GRADE_ENGINE or http://127.0.0.1:3500)
   --workspace DIR   write code solutions straight into this workspace directory instead of PUT /api/workspace/file
   --levels DIR      where to look up level ids (default: <repo>/levels, including _examples/*)
-  --run-ops         also run .sh ops solutions on this Mac (they run docker compose against the default project)
+  --run-ops         also run .sh ops solutions on this Mac and grade the levels that need the compose profiles. The scripts
+                    run with this tool's environment: export COMPOSE_PROJECT_NAME, COMPOSE_FILE and COMPOSE_ENV_FILES (as
+                    scripts/check/G-01.sh does with G01_RUN_OPS=1) so docker compose acts on the grading stack; without
+                    them it is the default project
   --json FILE       also write the table as JSON
   -h, --help        this text`;
 
@@ -291,6 +297,197 @@ async function cli(command) {
   if (r.status !== 200)
     throw new Error(`/api/cli ${command} -> ${r.status} ${JSON.stringify(r.body)}`);
   return r.body;
+}
+
+// ---- ops solutions (E-05, --run-ops) --------------------------------------------------------------
+// A .sh solution runs on this Mac from the repo root with this process's environment, so `docker compose ...` inside
+// it acts on whatever COMPOSE_PROJECT_NAME / COMPOSE_FILE / COMPOSE_ENV_FILES name. The harness settles the stack around
+// it: before verify it waits for the engine and the app to answer (and, on an isolated project, starts the core services
+// again if the script left them down); after verify it puts the app back to one instance and the target back on
+// redis://redis:6379. docs/grading.md, "Ops solutions".
+
+const isolated = () => Boolean(process.env.COMPOSE_PROJECT_NAME);
+const CORE_SERVICES = ['redis', 'postgres', 'engine', 'app', 'runner', 'proxy'];
+const HOME_TARGET = 'redis://redis:6379';
+const HEALTH_WAIT_MS = Number(process.env.QUEST_OPS_HEALTH_S ?? 90) * 1000;
+
+function compose(args, timeoutMs = 180_000) {
+  return spawnSync('docker', ['compose', ...args], {
+    cwd: ROOT,
+    env: process.env,
+    encoding: 'utf8',
+    timeout: timeoutMs,
+  });
+}
+
+async function waitFor(fn, ms, everyMs = 2000) {
+  const end = Date.now() + ms;
+  for (;;) {
+    if (await fn()) return true;
+    if (Date.now() >= end) return false;
+    await sleep(everyMs);
+  }
+}
+const engineUp = async () => {
+  try {
+    const r = await api('GET', '/health', undefined, 3000);
+    return r.status === 200 && r.body?.redis === 'up' && r.body?.postgres === 'up';
+  } catch {
+    return false;
+  }
+};
+const appUp = async () => {
+  try {
+    const r = await api('GET', '/app/health', undefined, 3000);
+    return r.status === 200 && r.body?.service === 'app';
+  } catch {
+    return false;
+  }
+};
+
+// A script that does `cd workspace` must act on the grading stack's workspace, never on the learner's: the scripts that do
+// (the finale's) start with `cd "$QUEST_OPS_ROOT"`, a folder whose `workspace` is a link to the stack's workspace directory.
+let opsRoot = null;
+function opsWorkspaceRoot() {
+  const ws = opts.workspace ?? process.env.G01_WORKSPACE ?? process.env.QUEST_WORKSPACE;
+  if (!ws || !existsSync(ws)) return null;
+  if (!opsRoot) {
+    opsRoot = mkdtempSync(join(tmpdir(), 'quest-ops-root-'));
+    symlinkSync(resolve(ws), join(opsRoot, 'workspace'));
+  }
+  return opsRoot;
+}
+function cleanupOpsRoot() {
+  if (opsRoot) rmSync(opsRoot, { recursive: true, force: true }); // removes the link, not what it points at
+  opsRoot = null;
+}
+
+function opsEnv() {
+  const env = { ...process.env };
+  const u = new URL(opts.engine);
+  env.QUEST_API ??= opts.engine;
+  env.PROXY_PORT ??= u.port || '80';
+  const root = opsWorkspaceRoot();
+  if (root) env.QUEST_OPS_ROOT = root;
+  // `git commit` in a scratch workspace must not depend on the machine's identity.
+  env.GIT_AUTHOR_NAME ??= 'Quest Grader';
+  env.GIT_AUTHOR_EMAIL ??= 'grader@quest.invalid';
+  env.GIT_COMMITTER_NAME ??= env.GIT_AUTHOR_NAME;
+  env.GIT_COMMITTER_EMAIL ??= env.GIT_AUTHOR_EMAIL;
+  if (env.GIT_CONFIG_COUNT === undefined) {
+    // and a machine that signs commits must not wait for a passphrase in the middle of a grading run
+    env.GIT_CONFIG_COUNT = '1';
+    env.GIT_CONFIG_KEY_0 = 'commit.gpgsign';
+    env.GIT_CONFIG_VALUE_0 = 'false';
+  }
+  return env;
+}
+
+/** A line that runs `docker compose up` without -d / --detach / --wait stays attached until Ctrl-C. */
+const attachedUp = (text) =>
+  text
+    .split('\n')
+    .some((l) => /^\s*docker compose\b.*\bup\b/.test(l) && !/(\s-d\b|--detach|--wait)/.test(l));
+/** A solution that stops or kills the default `redis` service itself: the one case that lifts the outage skip. */
+const STOPS_REDIS = /^\s*docker compose\s+(stop|kill)\s+redis\s*$/m;
+
+/** Runs one .sh solution like a learner would: from the repo root, in its own process group, with a time limit. */
+function runOpsScript(file, env) {
+  const text = readFileSync(file, 'utf8');
+  const attached = attachedUp(text);
+  const limitMs = attached ? 20_000 : Number(process.env.QUEST_OPS_TIMEOUT_S ?? 300) * 1000;
+  return new Promise((done) => {
+    const t = Date.now();
+    const child = spawn('bash', [file], {
+      cwd: ROOT,
+      env,
+      stdio: ['ignore', 'inherit', 'inherit'],
+      detached: true,
+    });
+    let timedOut = false;
+    let killer = null;
+    const group = (sig) => {
+      try {
+        process.kill(-child.pid, sig);
+      } catch {
+        // already gone
+      }
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      group(attached ? 'SIGINT' : 'SIGTERM'); // an attached `up` stops its containers on Ctrl-C, like a learner's
+      killer = setTimeout(() => group('SIGKILL'), 20_000);
+    }, limitMs);
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      clearTimeout(killer);
+      done({ status: null, error: e.message, timedOut: false, attached, ms: Date.now() - t });
+    });
+    child.on('exit', (status, signal) => {
+      clearTimeout(timer);
+      clearTimeout(killer);
+      done({ status, signal, timedOut, attached, ms: Date.now() - t });
+    });
+  });
+}
+
+/** Before verify: the engine and the app must answer. On an isolated project the core services are started again if needed. */
+async function settleAfterOps() {
+  const notes = [];
+  const t = Date.now();
+  let up = await engineUp();
+  const wasDown = !up;
+  if (!up && isolated()) {
+    const r = compose(['up', '-d', '--no-build', ...CORE_SERVICES]);
+    notes.push(
+      `engine /health was not answering when the script ended; docker compose up -d ${CORE_SERVICES.join(' ')} (exit ${r.status})`,
+    );
+  }
+  if (!up) {
+    up = await waitFor(engineUp, HEALTH_WAIT_MS);
+    const s = Math.round((Date.now() - t) / 1000);
+    notes.push(
+      up
+        ? `engine /health answered again after ${s} s`
+        : `NOTE engine /health did NOT answer within ${Math.round(HEALTH_WAIT_MS / 1000)} s`,
+    );
+  }
+  if (up && !(await appUp()) && !(await waitFor(appUp, 60_000)))
+    notes.push('NOTE /app/health did not answer within 60 s');
+  return { notes, wasDown };
+}
+
+/** After verify: one app instance, the target back home, the game's mirror back if the stack was recreated. */
+async function restoreAfterOps(wasDown) {
+  const notes = [];
+  if (isolated()) {
+    const ps = compose(['ps', '-q', 'app']);
+    const n = String(ps.stdout ?? '')
+      .split('\n')
+      .filter(Boolean).length;
+    const r = compose(['up', '-d', '--no-build', '--scale', 'app=1', 'app']);
+    if (n !== 1)
+      notes.push(`app had ${n} instance(s) after the script; scaled back to 1 (exit ${r.status})`);
+    if (!(await waitFor(appUp, 60_000)))
+      notes.push('NOTE /app/health did not answer within 60 s after the scale');
+  }
+  const tg = await api('GET', '/api/target', undefined, 5000).catch(() => null);
+  if (tg?.status === 200 && tg.body?.redisUrl && tg.body.redisUrl !== HOME_TARGET) {
+    const r = await api('PUT', '/api/target', { redisUrl: HOME_TARGET }, 30_000).catch((e) => ({
+      status: 0,
+      body: { error: e.message },
+    }));
+    notes.push(
+      `target was ${tg.body.redisUrl}; put back to ${HOME_TARGET} (PUT /api/target -> ${r.status})`,
+    );
+  }
+  if (wasDown) {
+    const r = await api('POST', '/api/progress/restore').catch(() => null);
+    notes.push(
+      `stack had been recreated: POST /api/progress/restore -> ${r ? r.status : 'no answer'}`,
+    );
+  }
+  return notes;
 }
 
 // ---- the learner's moves --------------------------------------------------------------------------
@@ -622,11 +819,16 @@ async function busyDance() {
 }
 
 /** verify() plus whatever live events a good solution's level waits for. Returns { out, note }. */
-async function verifyWithEvents(lv, id, answers, good) {
+async function verifyWithEvents(lv, id, answers, good, real = false) {
   const evs = good ? eventVerifiers(lv) : [];
   const notes = [];
   const scaled = evs.find(({ v }) => v.kind === 'service_scaled');
-  if (scaled) notes.push(await simulateScale(lv, scaled.v.match?.instances));
+  // E-05: when a .sh solution ran under --run-ops the app was really scaled (or not) by that script, so nothing is faked.
+  if (scaled && real)
+    notes.push(
+      'service_scaled: real (the .sh solution ran docker compose itself; no fake instance pushed)',
+    );
+  else if (scaled) notes.push(await simulateScale(lv, scaled.v.match?.instances));
   if (evs.some(({ v }) => v.kind === 'custom' && v.match?.name === 'ticker_gap'))
     notes.push(await tickerGapDance());
   const loaded = evs.find(({ v }) => v.kind === 'custom' && v.match?.name === 'load_finished');
@@ -839,9 +1041,14 @@ async function gradeLevel(lv) {
   // way a learner who was handed that use case would. `src` is the level whose files and checks are played;
   // `lv` stays the level the verdicts belong to.
   const poolSpec = x.mode === 'code' && x.interview?.pool ? x.interview.pool : null;
+  // E-05: a `rebuild_of` interview level carries its own follow-up questions, after its own checks: the same path.
+  const ownQuestions =
+    x.mode === 'code' && x.interview?.rebuild_of !== undefined ? (x.interview.questions ?? []) : [];
   let src = lv;
-  let questions = [];
-  let drawNote = '';
+  let questions = [...ownQuestions];
+  let drawNote = ownQuestions.length
+    ? `${ownQuestions.length} follow-up question${ownQuestions.length === 1 ? '' : 's'}`
+    : '';
   if (poolSpec) {
     await ensureUnlocked(id);
     await start(id);
@@ -878,15 +1085,26 @@ async function gradeLevel(lv) {
       v.kind === 'custom' &&
       PROFILE_EVENTS.includes(String(v.match && v.match.name)),
   );
-  if (needsOutage || needsProfiles) {
+  // E-05, --run-ops: a level whose solutions include a .sh can start the profiles itself, so the profile skip lifts for it;
+  // one with no .sh could only be skipped or fail (nothing here would start the cluster), so it stays skipped. The outage
+  // skip lifts only for a .sh that stops or kills the default redis service itself (none today).
+  const shSolutions = sols.filter((s) => extname(s.path) === '.sh');
+  const shStopsRedis = shSolutions.some((s) =>
+    STOPS_REDIS.test(readFileSync(resolveLevelPath(src, s.path), 'utf8')),
+  );
+  const skipOutage = needsOutage && !(opts.runOps && shStopsRedis);
+  const skipProfiles = needsProfiles && !(opts.runOps && shSolutions.length > 0);
+  if ((needsOutage && skipOutage) || (needsProfiles && skipProfiles)) {
     for (const s of sols)
       skipped(
         lv,
         s.path,
         s.expect,
-        needsOutage
+        skipOutage
           ? 'SKIPPED (needs a real Redis outage: graded by hand)'
-          : 'SKIPPED (needs the compose profiles: graded by hand)',
+          : opts.runOps
+            ? 'SKIPPED (needs the compose profiles and no .sh solution starts them: graded by hand)'
+            : 'SKIPPED (needs the compose profiles: graded by hand)',
         s.because,
       );
     await ensureUnlocked(id);
@@ -909,6 +1127,8 @@ async function gradeLevel(lv) {
     const good = s.expect !== 'wrong';
     let transcript = [];
     let note = drawNote;
+    let ranOps = false;
+    let opsWasDown = false;
     if (ext === '.js' || ext === '.mjs') {
       const sl = slotOf(src);
       if (sl.err) {
@@ -941,9 +1161,22 @@ async function gradeLevel(lv) {
       }
     } else if (ext === '.sh') {
       await start(id);
-      log(`running ${s.path} on this Mac (--run-ops)`);
-      const r = spawnSync('bash', [file], { cwd: ROOT, stdio: 'inherit' });
-      note = `ran with --run-ops, exit ${r.status}`;
+      log(
+        `running ${s.path} on this Mac (--run-ops; docker compose acts on ${isolated() ? `project ${process.env.COMPOSE_PROJECT_NAME}` : 'the DEFAULT project: COMPOSE_PROJECT_NAME is not set'})`,
+      );
+      const r = await runOpsScript(file, opsEnv());
+      const how = r.error
+        ? `could not run: ${r.error}`
+        : r.timedOut
+          ? r.attached
+            ? 'stayed attached to docker compose up; stopped with Ctrl-C after 20 s'
+            : 'timed out and was stopped'
+          : `exit ${r.status}`;
+      note = [note, `ran with --run-ops, ${how}`].filter(Boolean).join('; ');
+      const settled = await settleAfterOps();
+      opsWasDown = settled.wasDown;
+      if (settled.notes.length) note = [note, ...settled.notes].filter(Boolean).join('; ');
+      ranOps = true;
     } else {
       skipped(lv, label, s.expect, `SKIPPED (unknown solution type ${ext})`, s.because);
       continue;
@@ -954,12 +1187,20 @@ async function gradeLevel(lv) {
     }
     const answers = {
       ...(await buildAnswers(src, good)),
-      ...(poolSpec ? poolAnswers(src.level.verify.length, questions, good) : {}),
+      ...(questions.length ? poolAnswers(src.level.verify.length, questions, good) : {}),
     };
-    const live = await verifyWithEvents(src, id, answers, good);
+    const live = await verifyWithEvents(src, id, answers, good, ranOps);
     const out = live.out;
     if (live.note) note = [note, live.note].filter(Boolean).join('; ');
-    record(lv, label, s.expect, out, { because: s.because, note });
+    const row = record(lv, label, s.expect, out, { because: s.because, note });
+    if (ranOps) {
+      // The second instance stays up until verify has looked; then the stack goes back to what the next level expects.
+      const back = await restoreAfterOps(opsWasDown);
+      if (back.length) {
+        row.note = [row.note, ...back].filter(Boolean).join('; ');
+        log(`      ${back.join('; ')}`);
+      }
+    }
     // Bundle shims and the bundle are removed (or emptied through the API) after each solution.
     if (touched.size > 1) await restoreWorkspace();
     // A solution that changed server config (ops levels such as ch2-09) must not poison later levels: a wrong one
@@ -1095,9 +1336,11 @@ try {
   console.error(`\ngrade: ${e.stack ?? e}`);
   if (ticker) clearInterval(ticker);
   await restoreWorkspace().catch(() => undefined);
+  cleanupOpsRoot();
   process.exit(2);
 }
 if (ticker) clearInterval(ticker);
+cleanupOpsRoot();
 printTable();
 if (opts.json) {
   const per = {};

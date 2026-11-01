@@ -2,7 +2,7 @@
 # Reference: the whole level as commands, in the order the task gives them. Graded by hand (the level waits for
 # redis_target_changed); run from the repo folder on your Mac with the stack up and the game pointed at redis://redis:6379.
 set -eu
-API="${API:-http://localhost:3000}"
+API="${QUEST_API:-${API:-http://localhost:3000}}"
 put_target() { curl -fsS -X PUT "$API/api/target" -H 'content-type: application/json' -d "{\"redisUrl\":\"$1\"}"; echo; }
 
 # 1. the second box (redis-server --replicaof redis 6379)
