@@ -29,7 +29,7 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 | P0-09 | Verifier engine: redis, antipattern, quiz, event; traffic + behavior wiring | 4 | in progress | opus | specs/P0-09 | check/P0-09.sh | |
 | P0-10 | UI shell: chapter map, level view (seven beats), terminal, editor, logs, show-me | 4 | in progress | sonnet | specs/P0-10 | check/P0-10.sh | |
 | P0-11 | Redis Insight auto-provisioning via its API | 3 | done | sonnet | specs/P0-11 | check/P0-11.sh | handoffs/P0-11 |
-| P0-12 | CI: build, lint, level validation, checks, Playwright Chapter 0 | 5 | done (workflow; first green run + Playwright hook pending) | sonnet | specs/P0-12 | check/P0-12.sh | handoffs/P0-12 |
+| P0-12 | CI: build, lint, level validation, checks, Playwright Chapter 0 | 5 | done (green run 41255059415; Playwright hook filled by P0-10) | sonnet | specs/P0-12 | check/P0-12.sh | handoffs/P0-12 |
 
 Waves run in order; tasks within a wave run in parallel because they own disjoint files. A task may
 start early if everything it depends on is `done`.
@@ -44,6 +44,7 @@ start early if everything it depends on is `done`.
 | T1 | Five-tester playtest, findings, fixes | todo |
 
 ## Decisions log (newest first)
+- 2026-11-01 CI green on GitHub (fast job with redis/postgres service containers; mac job self-skips). Lockfile rule: HEAD's lockfile must match committed manifests; commit package.json and lockfile together; never commit via plumbing without resetting the index afterwards.
 - 2026-11-01 Engine refuses to start on invalid levels by design; content agents must keep chapters valid at every save (write level files before listing them in chapter.yaml).
 - 2026-11-01 Schema rulings: `traffic.baseline: true` means graded against a baseline the engine records itself (scenario run with the learner's slots off); antipattern checks describe the healthy state and a failing check is the hit; behavior assertions have `repeat`/`expectCount`; antipattern may be behavior-shaped (additive change requested); decision `wrong` entries use `option:`.
 - 2026-11-01 Seed is committed gzipped (`002-seed.sql.gz`, 11 MB); the Postgres image loads it natively. `player_stats()` p50 measured 175-290 ms here.
