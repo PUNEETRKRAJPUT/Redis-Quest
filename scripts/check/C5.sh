@@ -277,7 +277,7 @@ ok(ch && ch.levels.length === 14, 'chapter ch5 loads with 14 levels');
   const t = l.task;
   const iWait = t.indexOf('Wait at least 10 seconds'), iStop = t.indexOf('docker compose stop redis-replica'), iStart = t.indexOf('docker compose start redis-replica'), iBack = t.lastIndexOf('redis://redis:6379');
   ok(iWait > 0 && iStop > iWait && iStart > iStop && iBack > iStart, '08 the way back is in E-03\'s order: wait at least 10 s, stop redis-replica, start redis-replica, point the game at redis://redis:6379');
-  ok(/no-good-slave/.test(l.teach) && /3\.5 s/.test(l.teach) && /7\.3 s/.test(l.teach) && /7\.5 s/.test(l.teach) && /6\.6 s/.test(l.teach) && /7\.7 s/.test(l.teach) && /about 11 s/.test(l.teach) && /E-03/.test(l.teach) && /A-05/.test(l.teach), '08 teach quotes E-03\'s and A-05\'s measured timeline as theirs (3.5, 6.6, 7.3, 7.5, 7.7 s, 11 s, no-good-slave)');
+  ok(/no-good-slave/.test(l.teach) && /3\.5 s/.test(l.teach) && /7\.3 s/.test(l.teach) && /7\.5 s/.test(l.teach) && /6\.6 s/.test(l.teach) && /7\.7 s/.test(l.teach) && /about 11 s/.test(l.teach) && /game.s own checks|on this stack/.test(l.teach) && !/[AE]-0\d/.test(l.teach), '08 teach quotes the measured failover timeline as the stack itself measured it (3.5, 6.6, 7.3, 7.5, 7.7 s, 11 s, no-good-slave), naming no build task');
   ok(/quorum/.test(JSON.stringify(l.verify)) && /majority/.test(JSON.stringify(l.verify)) && /three/i.test(JSON.stringify(l.verify)) && /NAT/.test(JSON.stringify(l.verify)), '08 quizzes: quorum against majority, at least three Sentinels, Docker and NAT');
   ok(wrongs(l) === '08-wrong-one-sentinel.sh:wrong' && /quorum 2/.test(l.solutions.wrong[0].because), '08 solutions: .sh reference and one Sentinel (the because names quorum 2)');
 }
