@@ -4,9 +4,13 @@ import { api } from '../api';
 import { useQuest } from '../store';
 import type { MetricsSeries, MetricsTick } from '../types';
 import { asList, asNumber, asPairs, asString, asStrings } from '../redisReply';
+import type { Reply } from '../redisReply';
 import {
+  AclUsersView,
+  BfCardView,
   BitmapStreakView,
   CacheStatsView,
+  FtCardView,
   GeoMapView,
   HashCardView,
   HllCounterView,
@@ -17,11 +21,24 @@ import {
   OtpLimiterView,
   SetChipsView,
   StatsLatencyView,
+  StreamGroupsView,
   StreamLogView,
+  TsChartView,
   TtlTimerView,
 } from './views';
 import type { ShowMeSpec } from '../types';
 import { readRedis, useRedis } from './useRedis';
+import {
+  isMissingError,
+  parseAclList,
+  parseBfInfo,
+  parseFtIds,
+  parseFtInfo,
+  parsePendingByConsumer,
+  parseStreamGroups,
+  parseTsInfo,
+  parseTsRange,
+} from './parse';
 
 export const SHOW_ME_IDS = [
   'kv_card',
@@ -38,6 +55,11 @@ export const SHOW_ME_IDS = [
   'cache_stats',
   'stats_latency_panel',
   'otp_limiter_panel',
+  'stream_groups',
+  'ts_chart',
+  'bf_card',
+  'ft_card',
+  'acl_users',
 ] as const;
 export type ShowMeId = (typeof SHOW_ME_IDS)[number];
 
@@ -299,6 +321,107 @@ function OtpLimiter({ k }: { k: string }) {
   );
 }
 
+/** XPENDING <key> <group> for each group, polled; one effect because the number of groups varies. */
+function usePendingByGroup(key: string, groups: string[]): Record<string, Reply | null> {
+  const [found, setFound] = useState<Record<string, Reply>>({});
+  const joined = JSON.stringify([key, groups]);
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      const [k, list] = JSON.parse(joined) as [string, string[]];
+      const next: Record<string, Reply> = {};
+      await Promise.all(
+        list.map(async (g) => {
+          try {
+            next[g] = await readRedis(['XPENDING', k, g]);
+          } catch {
+            // leave unknown
+          }
+        }),
+      );
+      if (!alive) return;
+      setFound(next);
+      timer = setTimeout(() => void tick(), 2000);
+    };
+    void tick();
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [joined]);
+  return Object.fromEntries(groups.map((g) => [g, found[g] ?? null]));
+}
+
+function StreamGroups({ k }: { k: string }) {
+  const len = useRedis(['XLEN', k]);
+  const grp = useRedis(['XINFO', 'GROUPS', k]);
+  const groups = grp.reply ? parseStreamGroups(grp.reply) : [];
+  const pending = usePendingByGroup(
+    k,
+    groups.map((g) => g.name),
+  );
+  if (!grp.reply && !isMissingError(grp.error)) return <Loading error={grp.error} />;
+  if (!len.reply && !isMissingError(len.error)) return <Loading error={len.error} />;
+  return (
+    <StreamGroupsView
+      name={k}
+      length={grp.reply || len.reply ? (asNumber(len.reply) ?? 0) : null}
+      groups={groups.map((g) => ({
+        ...g,
+        perConsumer: parsePendingByConsumer(pending[g.name]),
+      }))}
+    />
+  );
+}
+function TsChart({ k }: { k: string }) {
+  const info = useRedis(['TS.INFO', k]);
+  const range = useRedis(['TS.RANGE', k, '-', '+', 'AGGREGATION', 'avg', '60000']);
+  if (!info.reply) {
+    return isMissingError(info.error) ? (
+      <TsChartView name={k} info={null} values={[]} />
+    ) : (
+      <Loading error={info.error} />
+    );
+  }
+  return (
+    <TsChartView
+      name={k}
+      info={parseTsInfo(info.reply)}
+      values={parseTsRange(range.reply).map((p) => p.value)}
+    />
+  );
+}
+function BfCard({ k }: { k: string }) {
+  const info = useRedis(['BF.INFO', k]);
+  const card = useRedis(['BF.CARD', k]);
+  if (!info.reply) {
+    return isMissingError(info.error) ? (
+      <BfCardView name={k} info={null} card={null} />
+    ) : (
+      <Loading error={info.error} />
+    );
+  }
+  return <BfCardView name={k} info={parseBfInfo(info.reply)} card={asNumber(card.reply)} />;
+}
+function FtCard({ k }: { k: string }) {
+  const info = useRedis(['FT.INFO', k]);
+  const docs = useRedis(['FT.SEARCH', k, '*', 'LIMIT', '0', '3', 'RETURN', '0']);
+  if (!info.reply) {
+    return isMissingError(info.error) ? (
+      <FtCardView name={k} info={null} docIds={[]} />
+    ) : (
+      <Loading error={info.error} />
+    );
+  }
+  return <FtCardView name={k} info={parseFtInfo(info.reply)} docIds={parseFtIds(docs.reply)} />;
+}
+function AclUsers() {
+  const l = useRedis(['ACL', 'LIST']);
+  if (!l.reply) return <Loading error={l.error} />;
+  return <AclUsersView users={parseAclList(l.reply)} />;
+}
+
 function KeyPicker({ id, onPick }: { id: string; onPick: (k: string) => void }) {
   const [v, setV] = useState('');
   return (
@@ -355,6 +478,16 @@ function Panel({ id, k, playerId }: { id: ShowMeId; k: string; playerId: string 
       return <StatsLatency keys={[k]} />;
     case 'otp_limiter_panel':
       return <OtpLimiter k={k} />;
+    case 'stream_groups':
+      return <StreamGroups k={k} />;
+    case 'ts_chart':
+      return <TsChart k={k} />;
+    case 'bf_card':
+      return <BfCard k={k} />;
+    case 'ft_card':
+      return <FtCard k={k} />;
+    case 'acl_users':
+      return <AclUsers />;
   }
 }
 
@@ -370,6 +503,15 @@ export function ShowMe({ spec, playerId }: { spec: ShowMeSpec; playerId: string 
       <>
         {title}
         <CacheStats />
+      </>
+    );
+  }
+  if (id === 'acl_users') {
+    // The panel is one ACL LIST; any declared keys (level 5.10 declares none) are ignored.
+    return (
+      <>
+        {title}
+        <AclUsers />
       </>
     );
   }

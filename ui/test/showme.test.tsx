@@ -11,10 +11,13 @@ import {
 } from '../src/showme';
 import { SAMPLE } from '../src/showme/sample';
 import {
+  AclUsersView,
+  BfCardView,
   BitmapStreakView,
   CacheStatsView,
   currentStreak,
   fmtDuration,
+  FtCardView,
   GeoMapView,
   HashCardView,
   HllCounterView,
@@ -25,13 +28,15 @@ import {
   OtpLimiterView,
   SetChipsView,
   StatsLatencyView,
+  StreamGroupsView,
   StreamLogView,
+  TsChartView,
   TtlTimerView,
 } from '../src/showme/views';
 
 const s = SAMPLE;
 
-test('fourteen ids, matching the spec', () => {
+test('nineteen ids, matching the spec', () => {
   expect([...SHOW_ME_IDS]).toEqual([
     'kv_card',
     'hash_card',
@@ -47,6 +52,11 @@ test('fourteen ids, matching the spec', () => {
     'cache_stats',
     'stats_latency_panel',
     'otp_limiter_panel',
+    'stream_groups',
+    'ts_chart',
+    'bf_card',
+    'ft_card',
+    'acl_users',
   ]);
   expect(isShowMeId('geo_map')).toBe(true);
   expect(isShowMeId('nope')).toBe(false);
@@ -68,6 +78,11 @@ test('every view renders with its sample and carries its id', () => {
     cache_stats: renderToStaticMarkup(<CacheStatsView {...s.cache} />),
     stats_latency_panel: renderToStaticMarkup(<StatsLatencyView {...s.stats} />),
     otp_limiter_panel: renderToStaticMarkup(<OtpLimiterView {...s.limiter} />),
+    stream_groups: renderToStaticMarkup(<StreamGroupsView {...s.groups} />),
+    ts_chart: renderToStaticMarkup(<TsChartView {...s.ts} />),
+    bf_card: renderToStaticMarkup(<BfCardView {...s.bf} />),
+    ft_card: renderToStaticMarkup(<FtCardView {...s.ft} />),
+    acl_users: renderToStaticMarkup(<AclUsersView {...s.acl} />),
   };
   for (const id of SHOW_ME_IDS) expect(html[id]).toContain(`data-showme="${id}"`);
   expect(html.kv_card).toContain('483921');

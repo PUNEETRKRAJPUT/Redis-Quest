@@ -126,7 +126,7 @@ verify:
     explanation: "The idle time is how long since the entry was delivered, not whether the worker is alive. A short minimum would take balls away from a worker still finishing them, and two workers would then process the same ball. A minute is a trade: a dead worker's balls wait a minute, a busy worker is left alone. The check uses 0 only because it cannot wait."
 
 show_me:
-  component: stream_log
+  component: stream_groups
   keys: ["match:m-041:balls"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/streams/

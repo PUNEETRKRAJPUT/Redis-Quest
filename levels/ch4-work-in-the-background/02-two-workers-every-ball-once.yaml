@@ -131,7 +131,7 @@ verify:
     explanation: "Delivery puts the entry in the pending list for that consumer, and only XACK removes it. A crash leaves it there, which is what makes recovery possible (the next level) and what makes processing at-least-once: the ball may be counted twice if the crash came after the points were added."
 
 show_me:
-  component: stream_log
+  component: stream_groups
   keys: ["match:m-041:balls"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/streams/

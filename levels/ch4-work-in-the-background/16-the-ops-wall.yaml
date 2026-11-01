@@ -175,8 +175,8 @@ verify:
     explanation: "The page says RETENTION trims relative to the newest sample, so the series keeps a rolling window and needs no EXPIRE. An EXPIRE on the key removes everything at the deadline, and a graph of the last day would go blank."
 
 show_me:
-  component: kv_card
-  keys: ["ts:requests:GET_app_players_:id_stats", "td:latency"]
+  component: ts_chart
+  keys: ["ts:requests:GET_app_players_:id_stats"]
 docs:
   - https://redis.io/docs/latest/develop/use-cases/time-series-dashboard
   - https://redis.io/docs/latest/develop/data-types/timeseries/

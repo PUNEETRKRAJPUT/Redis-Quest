@@ -132,8 +132,8 @@ verify:
     explanation: "ACL CAT lists the categories, and the 8.0 release adds ones for the bundled modules: @search, @json, @timeseries, @bloom, @cuckoo, @cms, @topk and @tdigest. A category names commands; keys are the ~patterns."
 
 show_me:
-  component: kv_card
-  keys: ["queue:x"]
+  component: acl_users
+  keys: []
 docs:
   - https://redis.io/docs/latest/operate/oss_and_stack/management/security/acl/
   - https://redis.io/docs/latest/operate/oss_and_stack/management/admin/

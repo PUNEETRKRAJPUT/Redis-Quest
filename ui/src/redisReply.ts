@@ -56,7 +56,10 @@ function scalar(text: string): Reply {
 }
 
 interface Token {
+  /** Column of the index's first digit. */
   col: number;
+  /** Column of its ")": engine output right-aligns indexes (" 9)", "10)"), so this is what lines up. */
+  end: number;
   text: string | null; // null: the rest of the line starts another marker
 }
 
@@ -67,26 +70,31 @@ function tokenize(line: string): Token[] {
     const m = /^( *)(\d+)\) /.exec(line.slice(off));
     if (!m) break;
     const col = off + (m[1] as string).length;
+    const end = col + (m[2] as string).length;
     off += m[0].length;
     const rest = line.slice(off);
-    out.push({ col, text: /^ *\d+\) /.test(rest) ? null : rest });
+    out.push({ col, end, text: /^ *\d+\) /.test(rest) ? null : rest });
     if (/^ *\d+\) /.test(rest)) continue;
     break;
   }
   return out;
 }
 
-function parseLevel(tokens: Token[], pos: number, col: number): [Reply, number] {
+function parseLevel(tokens: Token[], pos: number, first: Token): [Reply, number] {
   const items: Reply[] = [];
   let p = pos;
-  while (p < tokens.length && (tokens[p] as Token).col === col) {
+  // Same level: the index starts in the same column (left-aligned) or its ")" does (right-aligned).
+  while (
+    p < tokens.length &&
+    ((tokens[p] as Token).col === first.col || (tokens[p] as Token).end === first.end)
+  ) {
     const t = tokens[p] as Token;
     p++;
     if (t.text !== null) items.push(scalar(t.text));
     else {
       const next = tokens[p];
       if (!next) break;
-      const [sub, np] = parseLevel(tokens, p, next.col);
+      const [sub, np] = parseLevel(tokens, p, next);
       items.push(sub);
       p = np;
     }
@@ -98,7 +106,7 @@ export function parseReply(text: string): Reply {
   if (/^ *\d+\) /.test(text)) {
     const tokens = text.split('\n').flatMap(tokenize);
     const first = tokens[0];
-    if (first) return parseLevel(tokens, 0, first.col)[0];
+    if (first) return parseLevel(tokens, 0, first)[0];
   }
   return scalar(text);
 }

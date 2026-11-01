@@ -86,4 +86,65 @@ export const SAMPLE = {
     members: null,
     pingRequests: 126,
   },
+  groups: {
+    name: 'match:m-041:balls',
+    length: 1840,
+    groups: [
+      {
+        name: 'scorer',
+        consumers: 2,
+        pending: 3,
+        lag: 0,
+        lastDeliveredId: '1730000002000-0',
+        perConsumer: [
+          { consumer: 'w1', pending: 2 },
+          { consumer: 'w2', pending: 1 },
+        ],
+      },
+      {
+        name: 'analytics',
+        consumers: 1,
+        pending: 0,
+        lag: 412,
+        lastDeliveredId: '1730000001000-0',
+        perConsumer: [],
+      },
+    ],
+  },
+  ts: {
+    name: 'ts:requests:GET_app_players_:id_stats',
+    info: {
+      retentionMs: 3600000,
+      totalSamples: 482,
+      labels: [['route', 'stats']] as [string, string][],
+    },
+    values: [12, 15, 14, 22, 31, 28, 35, 33, 40, 38, 36, 41],
+  },
+  bf: {
+    name: 'bf:usernames',
+    info: { capacity: 10000, sizeBytes: 18006, filters: 1, inserted: 5000, expansion: 2 },
+    card: 5000,
+  },
+  ft: {
+    name: 'idx:contest',
+    info: {
+      numDocs: 200,
+      prefixes: ['contest:'],
+      fields: [
+        { name: 'name', type: 'TEXT' },
+        { name: 'entry_fee', type: 'NUMERIC' },
+        { name: 'status', type: 'TAG' },
+      ],
+    },
+    docIds: ['contest:9101', 'contest:9102', 'contest:9103'],
+  },
+  acl: {
+    users: [
+      { name: 'default', rules: 'on nopass sanitize-payload ~* &* +@all' },
+      {
+        name: 'scorer',
+        rules: 'on sanitize-payload #<hash> resetchannels -@all +xreadgroup +xack ~match:*',
+      },
+    ],
+  },
 };

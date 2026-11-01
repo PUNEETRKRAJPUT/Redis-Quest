@@ -613,3 +613,265 @@ export function OtpLimiterView({
     </Card>
   );
 }
+
+// ---- stream_groups ---------------------------------------------------------------------------------------
+export interface StreamGroupsProps {
+  name: string;
+  /** XLEN; null when the key does not exist. */
+  length: number | null;
+  groups: {
+    name: string;
+    consumers: number;
+    pending: number;
+    /** null when Redis cannot tell. */
+    lag: number | null;
+    lastDeliveredId: string;
+    /** XPENDING summary: pending entries per consumer. */
+    perConsumer: { consumer: string; pending: number }[];
+  }[];
+}
+export function StreamGroupsView({ name, length, groups }: StreamGroupsProps) {
+  return (
+    <Card title="Stream consumer groups" name={name} kind="stream_groups">
+      {length === null || (length === 0 && groups.length === 0) ? (
+        <Empty>no stream yet</Empty>
+      ) : (
+        <>
+          <dl className="facts">
+            <div>
+              <dt>entries</dt>
+              <dd data-testid="stream-length">{length}</dd>
+            </div>
+            <div>
+              <dt>groups</dt>
+              <dd>{groups.length}</dd>
+            </div>
+          </dl>
+          {groups.length === 0 ? (
+            <Empty>No consumer group yet. Nothing is reading this stream.</Empty>
+          ) : (
+            <table className="kv-table" data-testid="stream-groups">
+              <thead>
+                <tr>
+                  <th>group</th>
+                  <th>consumers</th>
+                  <th>pending</th>
+                  <th>lag</th>
+                  <th>last delivered</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((g) => (
+                  <tr key={g.name} data-group={g.name}>
+                    <td>
+                      <code>{g.name}</code>
+                      {g.perConsumer.length > 0 ? (
+                        <div className="muted">
+                          {g.perConsumer.map((c) => `${c.consumer}: ${c.pending}`).join(', ')}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td>{g.consumers}</td>
+                    <td>{g.pending}</td>
+                    <td>{g.lag === null ? 'unknown' : g.lag}</td>
+                    <td>
+                      <code>{g.lastDeliveredId}</code>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---- ts_chart --------------------------------------------------------------------------------------------
+export interface TsChartProps {
+  name: string;
+  /** TS.INFO; null when the key does not exist. */
+  info: { retentionMs: number; totalSamples: number; labels: [string, string][] } | null;
+  /** Average per minute over the last 60 buckets, oldest first. */
+  values: number[];
+}
+export function fmtRetention(ms: number): string {
+  if (ms <= 0) return 'forever';
+  if (ms % 86400000 === 0) return `${ms / 86400000} d`;
+  if (ms % 3600000 === 0) return `${ms / 3600000} h`;
+  if (ms % 60000 === 0) return `${ms / 60000} min`;
+  return `${ms} ms`;
+}
+export function TsChartView({ name, info, values }: TsChartProps) {
+  return (
+    <Card title="Time series" name={name} kind="ts_chart">
+      {info === null || (info.totalSamples === 0 && values.length === 0) ? (
+        <Empty>no samples yet</Empty>
+      ) : (
+        <>
+          <Sparkline
+            label="avg per minute"
+            unit=""
+            period="minutes"
+            values={values}
+            fmt={(n) => (Number.isInteger(n) ? String(n) : n.toFixed(1))}
+          />
+          <dl className="facts">
+            <div>
+              <dt>samples</dt>
+              <dd>{info.totalSamples}</dd>
+            </div>
+            <div>
+              <dt>retention</dt>
+              <dd>{fmtRetention(info.retentionMs)}</dd>
+            </div>
+            <div>
+              <dt>buckets shown</dt>
+              <dd>{values.length}</dd>
+            </div>
+          </dl>
+          {info.labels.length > 0 ? (
+            <p className="muted" data-testid="ts-labels">
+              labels: {info.labels.map(([k, v]) => `${k}=${v}`).join('  ')}
+            </p>
+          ) : null}
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---- bf_card ---------------------------------------------------------------------------------------------
+export interface BfCardProps {
+  name: string;
+  /** BF.INFO; null when the filter does not exist. */
+  info: {
+    capacity: number | null;
+    sizeBytes: number | null;
+    filters: number | null;
+    inserted: number | null;
+    expansion: number | null;
+  } | null;
+  /** BF.CARD. */
+  card: number | null;
+}
+export function BfCardView({ name, info, card }: BfCardProps) {
+  const show = (n: number | null) => (n === null ? 'n/a' : n.toLocaleString('en-US'));
+  return (
+    <Card title="Bloom filter" name={name} kind="bf_card">
+      {info === null ? (
+        <Empty>no filter yet</Empty>
+      ) : (
+        <dl className="facts" data-testid="bf-facts">
+          <div>
+            <dt>items inserted</dt>
+            <dd>{show(info.inserted)}</dd>
+          </div>
+          <div>
+            <dt>cardinality</dt>
+            <dd>{show(card)}</dd>
+          </div>
+          <div>
+            <dt>capacity</dt>
+            <dd>{show(info.capacity)}</dd>
+          </div>
+          <div>
+            <dt>size</dt>
+            <dd>{info.sizeBytes === null ? 'n/a' : `${show(info.sizeBytes)} bytes`}</dd>
+          </div>
+          <div>
+            <dt>filters</dt>
+            <dd>{show(info.filters)}</dd>
+          </div>
+          <div>
+            <dt>expansion</dt>
+            <dd>{info.expansion === null ? 'none' : show(info.expansion)}</dd>
+          </div>
+        </dl>
+      )}
+    </Card>
+  );
+}
+
+// ---- ft_card ---------------------------------------------------------------------------------------------
+export interface FtCardProps {
+  name: string;
+  /** FT.INFO; null when the index does not exist. */
+  info: { numDocs: number; prefixes: string[]; fields: { name: string; type: string }[] } | null;
+  /** FT.SEARCH <index> * LIMIT 0 3 RETURN 0: up to three document ids. */
+  docIds: string[];
+}
+export function FtCardView({ name, info, docIds }: FtCardProps) {
+  return (
+    <Card title="Search index" name={name} kind="ft_card">
+      {info === null ? (
+        <Empty>no index yet</Empty>
+      ) : (
+        <>
+          <dl className="facts">
+            <div>
+              <dt>documents</dt>
+              <dd data-testid="ft-num-docs">{info.numDocs}</dd>
+            </div>
+            <div>
+              <dt>prefixes</dt>
+              <dd>{info.prefixes.length ? info.prefixes.join(', ') : 'none'}</dd>
+            </div>
+          </dl>
+          {info.fields.length > 0 ? (
+            <table className="kv-table" data-testid="ft-fields">
+              <tbody>
+                {info.fields.map((f) => (
+                  <tr key={f.name}>
+                    <th>{f.name}</th>
+                    <td>{f.type}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+          {docIds.length > 0 ? (
+            <ul className="stream" data-testid="ft-docs">
+              {docIds.map((id) => (
+                <li key={id}>
+                  <code>{id}</code>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Empty>No documents indexed yet.</Empty>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---- acl_users -------------------------------------------------------------------------------------------
+export interface AclUsersProps {
+  /** ACL LIST, parsed; the default user first. */
+  users: { name: string; rules: string }[];
+}
+export function AclUsersView({ users }: AclUsersProps) {
+  return (
+    <Card title="ACL users" name="ACL LIST" kind="acl_users">
+      {users.length === 0 ? (
+        <Empty>No ACL users came back.</Empty>
+      ) : (
+        <table className="kv-table" data-testid="acl-users">
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.name} data-user={u.name}>
+                <th>{u.name}</th>
+                <td>
+                  <code>{u.rules}</code>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  );
+}

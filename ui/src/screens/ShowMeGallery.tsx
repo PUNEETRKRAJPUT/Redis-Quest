@@ -1,7 +1,10 @@
 import { SAMPLE } from '../showme/sample';
 import {
+  AclUsersView,
+  BfCardView,
   BitmapStreakView,
   CacheStatsView,
+  FtCardView,
   GeoMapView,
   HashCardView,
   HllCounterView,
@@ -12,7 +15,9 @@ import {
   OtpLimiterView,
   SetChipsView,
   StatsLatencyView,
+  StreamGroupsView,
   StreamLogView,
+  TsChartView,
   TtlTimerView,
 } from '../showme/views';
 
@@ -38,6 +43,11 @@ export function ShowMeGallery() {
         <CacheStatsView {...s.cache} />
         <StatsLatencyView {...s.stats} />
         <OtpLimiterView {...s.limiter} />
+        <StreamGroupsView {...s.groups} />
+        <TsChartView {...s.ts} />
+        <BfCardView {...s.bf} />
+        <FtCardView {...s.ft} />
+        <AclUsersView {...s.acl} />
       </div>
     </main>
   );

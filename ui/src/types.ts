@@ -11,10 +11,21 @@ export type LevelStatus = 'locked' | 'available' | 'in_progress' | 'passed';
 export type Mode = 'cli' | 'code' | 'ops' | 'decision';
 export type Verdict = 'right' | 'works_but_wrong' | 'wrong' | 'not_implemented';
 
+/** E-04: what a traffic check measured, kept on the verdict record. Only the numbers the check produced. */
+export interface VerdictMetrics {
+  p99Ms?: number;
+  baselineP99Ms?: number;
+  dbPerRequest?: number;
+  baselineDbPerRequest?: number;
+  redisPerRequest?: number;
+  hitRatio?: number;
+  rps?: number;
+}
+
 export interface ProgressLevel {
   status: LevelStatus;
   attempts: number;
-  verdicts: { at: string; verdict: Verdict }[];
+  verdicts: { at: string; verdict: Verdict; metrics?: VerdictMetrics; elapsedMs?: number }[];
   brainstorm?: { optionId: string; text: string; at: string };
   completedAt?: string;
   startedAt?: string;

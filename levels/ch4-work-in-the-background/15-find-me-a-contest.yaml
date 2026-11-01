@@ -130,8 +130,8 @@ verify:
     explanation: "The tutorial lists TAG as exact labels and TEXT as word-level full-text. A hostel id is a label you match whole, so TAG; a contest name is words people search by, so TEXT. Numbers you filter by range or sort on are NUMERIC."
 
 show_me:
-  component: json_tree
-  keys: ["contest:9101"]
+  component: ft_card
+  keys: ["idx:contest"]
 docs:
   - https://redis.io/docs/latest/develop/get-started/search-tutorial/
   - https://redis.io/docs/latest/develop/data-types/json/

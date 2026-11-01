@@ -5,6 +5,8 @@ import { ShowMe } from '../showme';
 import { useQuest } from '../store';
 import { rebuiltIn } from '../level/interview';
 import type { LevelData } from '../types';
+import { buildImpact } from '../impact';
+import { ImpactLog } from './ImpactLog';
 import { Story } from './Story';
 
 const DEFAULT_INSIGHT_PORT = '5540';
@@ -116,6 +118,7 @@ export function Built() {
         to see the same keys with a mouse.
       </p>
       <Story />
+      <ImpactLog impact={buildImpact(chapters.chapters, progress)} />
       {passed.length === 0 ? (
         <p className="callout">Nothing yet. Pass your first level and it shows up here.</p>
       ) : null}

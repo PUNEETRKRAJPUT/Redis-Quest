@@ -106,7 +106,7 @@ verify:
     explanation: "A Bloom filter cannot delete, and there is no BF.DEL. The cuckoo filter can, at the cost of slower inserts. The docs name coupon validation (remove the coupon on use) as a use case, with the caution that inserting the same item repeatedly can fill the filter."
 
 show_me:
-  component: kv_card
+  component: bf_card
   keys: ["bf:usernames"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/probabilistic/bloom-filter/

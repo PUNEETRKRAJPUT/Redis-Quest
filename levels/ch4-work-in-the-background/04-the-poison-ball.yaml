@@ -106,8 +106,8 @@ verify:
     explanation: "An old entry may only mean its worker is slow or dead. An entry that has been handed out five times and is still not acknowledged has failed five times. That is the dead-letter signal in the streaming guide: when deliveries reach a limit, move it to a dead-letter stream and acknowledge it on the original."
 
 show_me:
-  component: stream_log
-  keys: ["match:m-041:balls", "match:m-041:balls:dead"]
+  component: stream_groups
+  keys: ["match:m-041:balls"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/streams/
   - https://redis.io/docs/latest/develop/use-cases/streaming

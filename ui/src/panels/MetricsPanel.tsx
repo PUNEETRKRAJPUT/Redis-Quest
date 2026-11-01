@@ -8,11 +8,14 @@ export function Sparkline({
   label,
   unit,
   fmt = (n: number) => n.toFixed(0),
+  period = 'seconds',
 }: {
   values: number[];
   label: string;
   unit: string;
   fmt?: (n: number) => string;
+  /** What one point is, for the screen-reader label. */
+  period?: string;
 }) {
   const W = 220;
   const H = 44;
@@ -34,7 +37,7 @@ export function Sparkline({
         viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label={`${label} over the last ${values.length} seconds`}
+        aria-label={`${label} over the last ${values.length} ${period}`}
       >
         {values.length > 1 ? (
           <polyline

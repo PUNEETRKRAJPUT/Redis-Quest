@@ -120,7 +120,7 @@ verify:
     explanation: "Trimming works on the stream and does not look at any group's pending list. The streaming guide describes the result: the id can still be pending while its payload is gone, and XAUTOCLAIM (Redis 7.0 and later) returns those ids in deletedMessages and drops them from the pending list, so you can log them or route them to a dead-letter store."
 
 show_me:
-  component: stream_log
+  component: stream_groups
   keys: ["match:m-041:balls"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/streams/

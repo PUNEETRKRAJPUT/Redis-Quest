@@ -142,7 +142,7 @@ verify:
     explanation: "Lag is how many entries in the stream the group has not been handed; pending is how many it was handed and has not acknowledged. The guide tells you to alert on both: a growing lag means the group's workers are too slow, a growing pending means they are crashing or forgetting to acknowledge."
 
 show_me:
-  component: stream_log
+  component: stream_groups
   keys: ["match:m-041:balls"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/streams/
