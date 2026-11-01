@@ -1,0 +1,129 @@
+id: ch3-11-at-most-once
+chapter: ch3
+title: "At most once"
+mode: cli
+
+story: |
+  It is 10:36 pm. The ticker works. Then Teja sends a screenshot of his phone: the score jumped from ball 1 straight to ball 4.
+  "Where did two and three go? I did not touch ANYTHING. I only locked my phone for a second."
+
+  He did not lose them. They were never delivered to him. Pub/Sub is a broadcast, and a broadcast reaches whoever is listening
+  at the instant it goes out. A subscriber that blinks (a restart, a network hiccup, a reconnect) misses everything published
+  while it was away, and neither Redis nor the publisher knows or remembers.
+
+  You will watch it happen on purpose. The game has a drill, `scripts/ticker-drill.sh`: it publishes ball 1, makes the app's
+  subscriber leave the channel for two seconds, publishes balls 2 and 3 into the gap, brings it back, publishes ball 4, and
+  then shows you what the app received. Before you run it, learn how to ask Redis who is listening at all.
+
+brainstorm:
+  prompt: "A phone's connection drops for two seconds while three balls are bowled. When it reconnects, what does Pub/Sub do for it?"
+  options:
+    - id: nothing-it-is-gone
+      label: "Nothing: the messages published while it was away are lost, and nobody is told they were missed"
+      is_reasonable: true
+    - id: redis-replays
+      label: "Redis keeps them for a while and replays them when the subscriber reconnects"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: have the phone ask the server for 'everything since ball 1' when it reconnects"
+      is_reasonable: true
+
+teach: |
+  The pub/sub page in the docs promises **at-most-once** delivery: a message is delivered zero or one times, never more, and a
+  subscriber that errors or disconnects loses a message for good. Messages arrive in the order they were published, but only
+  to subscribers that are connected. Use Streams when you need stronger guarantees, which is Chapter 4.
+
+  Redis can tell you who is listening right now:
+
+  - `PUBSUB NUMSUB channel [channel ...]` answers with each channel name and its subscriber count. This game's app subscribes
+    from every copy, so with two copies running the answer for `score:match:m-041` is 2.
+  - `PUBSUB CHANNELS [pattern]` lists the channels that have at least one subscriber, filtered by a glob pattern. A channel
+    nobody listens to is not listed.
+  - `PUBSUB NUMPAT` counts pattern subscriptions (`PSUBSCRIBE`), a different thing from subscribers of a named channel.
+
+  Reading the drill's output: balls 1 and 4 reached the subscriber. Balls 2 and 3 were published while that copy was off the
+  channel, so `PUBLISH` told you how many receivers it had (fewer, or none), and the copy that was off never saw them. The app's
+  subscriber checks the sequence number on every message: when it sees 4 after 1 it knows 2 and 3 are missing, and tells the game
+  (a `ticker_gap` event). That is the right detection and the wrong cure: it knows what it missed and has no way to get it back.
+
+  The docs' remedy for a subscriber that cannot afford to miss: keep a durable record and reconcile from it on reconnect. That is
+  why the last ball lives in a key in level 10, and why a feed that must be complete needs a stream.
+
+task: |
+  Run these in order.
+
+  1. In the game terminal, ask Redis who is listening: `PUBSUB NUMSUB score:match:m-041` and `PUBSUB CHANNELS score:*`. Note
+     the count (1 per copy of the app) and that the channel is listed.
+  2. In your own terminal, from the repo root, run the drill: `scripts/ticker-drill.sh`. It takes about five seconds.
+  3. Read what it prints. Each `PUBLISH` line shows how many receivers got the ball. The summary shows, for each copy of the
+     app, how many messages it received, the last `seq` it saw and its `gaps`. The last lines are the `ticker_gap` event the
+     game recorded.
+  4. Answer the two questions and press Verify.
+
+hints:
+  - "If PUBSUB NUMSUB says 0, the app's subscriber is not connected. Check `curl -s localhost:3000/app/ticker/m-041` says subscribed: true."
+  - "With two copies running, only one copy pauses during the drill. The other hears every ball, so the two summary lines differ."
+  - "If the game shows no ticker_gap, run the drill again and wait a few seconds before pressing Verify."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [PUBSUB, NUMSUB, "score:match:m-041"]
+        oneOf:
+          - ["score:match:m-041", 1]
+          - ["score:match:m-041", 2]
+          - ["score:match:m-041", 3]
+        message: "Nobody is subscribed to score:match:m-041 right now. The app's ticker subscriber should be (one subscription per copy of the app). Check curl -s localhost:3000/app/ticker/m-041."
+      - cmd: [PUBSUB, CHANNELS, "score:match:m-041"]
+        contains: "score:match:m-041"
+        message: "PUBSUB CHANNELS should list score:match:m-041, a channel with a subscriber. It is not listed, so nobody is listening."
+  - type: event
+    kind: custom
+    match: { name: ticker_gap }
+    timeoutMs: 180000
+    message: "The game has not seen a ticker_gap since you started this level. Run scripts/ticker-drill.sh from the repo root, wait a few seconds for it to finish, and press Verify."
+  - type: quiz
+    question: "In the drill, balls 2 and 3 were published while one copy of the app was off the channel. Why did that copy never get them?"
+    options:
+      - id: no-buffer-for-absent-subscriber
+        label: "Pub/Sub keeps nothing: a message goes to the subscribers connected at that instant, and one that is away loses it. That is at-most-once delivery"
+      - id: redis-dropped-them
+        label: "Redis dropped them because the channel was busy"
+      - id: publish-failed
+        label: "PUBLISH failed for those two balls and returned an error"
+      - id: gap-too-short
+        label: "Two seconds was too short for Redis to deliver them"
+    correct: no-buffer-for-absent-subscriber
+    explanation: "PUBLISH does not queue anything for a subscriber that is not there: it hands the message to whoever is subscribed that instant and answers with how many that was. During the pause that copy was not one of them. Nothing failed and nothing was dropped, which is why it is dangerous: nobody is told. The app only noticed because it counts the seq numbers."
+  - type: quiz
+    question: "The match feed must reach every phone completely and in order, even after a reconnect. What does it need instead of Pub/Sub?"
+    options:
+      - id: a-stream
+        label: "A stream: entries are kept, a reader remembers where it was, and a reconnecting reader asks for everything after the last entry it saw"
+      - id: bigger-channel
+        label: "A Pub/Sub channel with a bigger buffer"
+      - id: publish-twice
+        label: "Publish every ball twice, in case one is missed"
+      - id: poll-faster
+        label: "Poll the key faster"
+    correct: a-stream
+    explanation: "A stream is a log: entries stay in it, each consumer tracks its position, and a reader that was away resumes from where it stopped. The docs name Streams as the answer when Pub/Sub's at-most-once is not enough, and consumer groups for at-least-once. That is Chapter 4. Pub/Sub has no buffer to enlarge, and publishing twice only duplicates the balls that arrive."
+
+show_me:
+  component: kv_card
+  keys: ["score:match:m-041:last"]
+docs:
+  - https://redis.io/docs/latest/develop/pubsub/
+  - https://redis.io/docs/latest/develop/use-cases/pub-sub
+  - https://redis.io/docs/latest/develop/use-cases/streaming
+
+reward:
+  xp: 40
+  badge: "Heard it, or not"
+
+solutions:
+  reference: solutions/11-reference.redis
+  wrong:
+    - path: solutions/11-wrong-numpat.redis
+      expect: wrong
+      because: "PUBSUB NUMPAT counts pattern subscriptions, not the subscribers of score:match:m-041, so it never shows who is listening on the match channel. It also skips the drill, so the game never records a ticker_gap."

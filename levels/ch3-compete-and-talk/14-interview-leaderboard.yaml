@@ -1,0 +1,121 @@
+id: ch3-14-interview-leaderboard
+chapter: ch3
+title: "Interview: a leaderboard from a blank file"
+mode: code
+
+interview:
+  minutes: 25
+  rebuild_of: ch3-06-the-real-leaderboard
+  hint_xp_cost: 10
+
+story: |
+  Second round. The interviewer has your fantasy app open on his laptop and has looked at the contest page. "Forty thousand
+  teams, points arriving all night, everyone refreshing. How do you keep the leaderboard? Do it in the blank files, and I
+  will load it with a hundred connections while you watch."
+
+  There is no teaching page open. If you like the files you have now, copy them to safe names first.
+
+brainstorm:
+  prompt: "Before you type: what do you keep the board in, what do the three operations cost, and what must a read never do?"
+  options:
+    - id: sorted-set-per-contest
+      label: "A sorted set per contest, reading only the rows the page shows"
+      is_reasonable: true
+    - id: sort-in-the-app
+      label: "The scores in Redis, sorted in the app on every request"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: an indexed ORDER BY in Postgres"
+      is_reasonable: true
+
+task: |
+  Design and implement a contest leaderboard. Three files in `workspace/ch3/`, each with `{ redis }` in `deps`, all on the sorted
+  set `lb:contest:<contestId>` (member = team id string, score = points; the contest id arrives as a number).
+
+  - **`leaderboard.js`: `top(deps, contestId, limit)`**: the best `limit` teams, best first, as `[{ teamId, points }]`.
+  - **`leaderboard-add.js`: `addPoints(deps, contestId, teamId, delta)`**: add `delta` and return the new score as a number, or
+    `null` (without creating the team) when the team is not on the board.
+  - **`leaderboard-rank.js`: `rank(deps, contestId, teamId)`**: `{ rank, score, around }`, with `rank` counting from 1 at the top and
+    `around` the team with up to two above and two below it, best first, as `[{ teamId, score }]`; `null` when the team is not on the board.
+
+  The check loads the board under a hundred connections: p99 under 60 ms, no errors, no Postgres query.
+
+hints:
+  - "Ask Redis for exactly the rows you show. What would a read of the whole board cost at forty thousand members?"
+  - "ZINCRBY creates members that do not exist, and the contract says null for an unknown team."
+
+verify:
+  - type: behavior
+    slot: leaderboard.top
+    fixtures: fixtures/14-seed-40k.yaml
+    assertions:
+      - call: { args: [9001, 3] }
+        expect:
+          - { teamId: "ft-29284", points: 9999.6 }
+          - { teamId: "ft-11605", points: 9999.5 }
+          - { teamId: "ft-23210", points: 9999 }
+        message: "top(9001, 3) should return the three best teams, best first, as { teamId, points }: ft-29284 with 9999.6, ft-11605 with 9999.5 and ft-23210 with 9999."
+  - type: behavior
+    slot: leaderboard.addPoints
+    fixtures: fixtures/14-seed-40k.yaml
+    assertions:
+      - call: { args: [9001, "ft-5", 100] }
+        expect: 4059.5
+        message: "ft-5 starts with 3959.5 points. addPoints(9001, 'ft-5', 100) should return the new score, 4059.5, as a number."
+        sideEffect:
+          - cmd: [ZSCORE, "lb:contest:9001", "ft-5"]
+            equals: 4059.5
+            message: "The score of ft-5 in lb:contest:9001 should now be 4059.5. Add to the score in the sorted set itself."
+      - call: { args: [9001, "ft-nobody", 5] }
+        expect: null
+        message: "ft-nobody is not on the board. addPoints should return null for a team that is not in the contest."
+        sideEffect:
+          - cmd: [ZSCORE, "lb:contest:9001", "ft-nobody"]
+            equals: null
+            message: "addPoints created ft-nobody on the board. A team that is not in the contest must stay off the board."
+  - type: behavior
+    slot: leaderboard.rank
+    fixtures: fixtures/14-seed-40k.yaml
+    assertions:
+      - call: { args: [9001, "ft-5"] }
+        expect:
+          rank: 24161
+          score: 3959.5
+          around:
+            - { teamId: "ft-35363", score: 3959.7 }
+            - { teamId: "ft-17684", score: 3959.6 }
+            - { teamId: "ft-5", score: 3959.5 }
+            - { teamId: "ft-29289", score: 3959.1 }
+            - { teamId: "ft-11610", score: 3959 }
+        message: "rank(9001, 'ft-5') should return { rank: 24161, score: 3959.5, around } where around lists two teams above ft-5, ft-5 and two below, best first, each as { teamId, score }. rank counts from 1 at the top."
+      - call: { args: [9001, "ft-nobody"] }
+        expect: null
+        message: "ft-nobody is not on the board. rank should return null."
+  - type: traffic
+    scenario: leaderboard-storm
+    baseline: false
+    assertions:
+      p99_ms_lte: 60
+      error_rate_lte: 0
+      db_queries_lte: 0
+    message: "Under a hundred connections the leaderboard is too slow, errors, or still asks Postgres. Read the top with ZRANGE ... LIMIT-sized, not the whole board, and keep every read in Redis."
+
+show_me:
+  component: leaderboard_panel
+  keys: ["lb:contest:9001"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/leaderboard
+
+reward:
+  xp: 80
+  badge: "Leaderboard, from memory"
+
+solutions:
+  reference: solutions/06-reference.js
+  wrong:
+    - path: solutions/06-wrong-postgres.js
+      expect: wrong
+      because: "top reads contest_entries in Postgres, which holds nothing for contest 9001, so it returns an empty list instead of the board that lives in Redis. A leaderboard that is a database query is the page you started with."
+    - path: solutions/06-wrong-sort-in-js.js
+      expect: wrong
+      because: "Right answers, wrong shape: it pulls the whole sorted set (forty thousand members) into JavaScript and sorts it on every request. One call at a time passes every check; a hundred connections fail the p99, so only the load test catches it."

@@ -1,0 +1,155 @@
+id: ch3-06-the-real-leaderboard
+chapter: ch3
+title: "The real leaderboard"
+mode: code
+
+story: |
+  It is 10:22 pm. The Nukkad Cup contest, number 9001, now has forty thousand fantasy teams, and every one of their owners
+  is refreshing the leaderboard because the Gomti Gang's scripts made it a habit. The leaderboard page asks Postgres: sort
+  forty thousand rows by points and send back ten. The roommate counted three seconds a refresh.
+
+  Worse, the scoring job adds points to a team the moment a boundary is hit, and each of those is an UPDATE on the same table
+  the page is sorting. The page and the scoring fight over the same rows.
+
+  The leaderboard is the textbook case for a sorted set: Redis keeps the members in order as they are written, so reading the
+  top ten is a lookup, not a sort. You will build three functions on it: the top of the board, adding points to a team, and
+  "where am I?", which shows a team its rank and the teams just above and below it.
+
+  This time the board lives in Redis. The game has put contest 9001 there for you: forty thousand teams, `ft-1` to `ft-40000`.
+
+brainstorm:
+  prompt: "A live board of 40,000 teams, read by thousands of people every second, with points being added all the time. How do you keep it?"
+  options:
+    - id: sorted-set-per-contest
+      label: "One sorted set per contest: the team is the member, the points are the score"
+      is_reasonable: true
+    - id: sort-in-the-app
+      label: "Keep the scores in Redis, but read them all and sort in the app on every request"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: an index on points in Postgres and ORDER BY points DESC LIMIT 10"
+      is_reasonable: true
+
+teach: |
+  The docs' leaderboard recommendation is a **sorted set per board**: the member is the thing being ranked, the score is the
+  number it is ranked by. Every operation is O(log N) and the ordering is kept by the data structure, not worked out when you ask.
+
+  - `ZINCRBY key delta member` adds to a score in one step, with no read-modify-write cycle in your code.
+  - `ZRANGE key 0 9 REV WITHSCORES` is the top ten, best first. `LIMIT` and `REV` belong to the one unified `ZRANGE`.
+  - `ZREVRANK key member` is the position from the top, starting at 0. The docs build an "around me" view from the rank:
+    take the positions just before and after it with a second `ZRANGE ... REV`.
+  - `ZSCORE key member` reads one score, and answers nil if the member is not on the board.
+
+  Two things the docs warn about. **Ties are broken lexicographically** by member, so if two teams must rank by who got there
+  first you have to encode that in the score. And the sorted set holds only the ranking: anything else about a team (its
+  name, its owner) belongs in a hash per team, to keep the set small.
+
+  Do not ask for more than you show. `ZRANGE key 0 -1` on forty thousand members sends forty thousand members over the
+  wire for a page that shows ten. The docs also say a leaderboard needs "tighter concurrency control" in production: here,
+  `ZINCRBY` is what keeps two simultaneous scoring events from losing a point.
+
+  A worked example, not your task:
+
+      ZADD demo:board 120 alpha 90 beta
+      ZINCRBY demo:board 40 beta       -> 130
+      ZRANGE demo:board 0 0 REV WITHSCORES
+
+task: |
+  Three functions, three files in `workspace/ch3/`. Each gets `{ redis }` as `deps` and uses the sorted set
+  `lb:contest:<contestId>`, member = team id (a string like `ft-5`), score = points. The contest id arrives as a number.
+
+  **`leaderboard.js`: `top(deps, contestId, limit)`.** The best `limit` teams, best first, as an array of
+  `{ teamId, points }`. Ask Redis for exactly `limit` members.
+
+  **`leaderboard-add.js`: `addPoints(deps, contestId, teamId, delta)`.** Add `delta` to the team's score and return the new
+  score as a number. If the team is not on the board, return `null` and do not create it.
+
+  **`leaderboard-rank.js`: `rank(deps, contestId, teamId)`.** Return `{ rank, score, around }`: `rank` is the position from the
+  top starting at **1**, `score` is the team's score, `around` is the team with up to two teams above and two below it, best
+  first, each as `{ teamId, score }`. Return `null` if the team is not on the board.
+
+  The check also loads the whole board under a hundred connections, seventy percent of them asking for the top ten and thirty
+  percent asking `rank` for five different teams. It wants a p99 under 60 ms, no errors, and not a single Postgres query. To
+  see the page yourself: turn on "Run my code in the app" and open `localhost:3000/app/leaderboard/9001?limit=10`.
+
+hints:
+  - "zRangeWithScores(key, 0, limit - 1, { REV: true }) is the top `limit`, best first. Each row is { value, score }."
+  - "ZINCRBY creates a member that is not there. Check with ZSCORE first, so an unknown team stays unknown."
+  - "For rank: pos = zRevRank(...) is 0-based. The window is positions max(0, pos - 2) to pos + 2 in the same REV order, and rank is pos + 1."
+
+verify:
+  - type: behavior
+    slot: leaderboard.top
+    fixtures: fixtures/06-seed-40k.yaml
+    assertions:
+      - call: { args: [9001, 3] }
+        expect:
+          - { teamId: "ft-29284", points: 9999.6 }
+          - { teamId: "ft-11605", points: 9999.5 }
+          - { teamId: "ft-23210", points: 9999 }
+        message: "top(9001, 3) should return the three best teams, best first, as { teamId, points }: ft-29284 with 9999.6, ft-11605 with 9999.5 and ft-23210 with 9999."
+  - type: behavior
+    slot: leaderboard.addPoints
+    fixtures: fixtures/06-seed-40k.yaml
+    assertions:
+      - call: { args: [9001, "ft-5", 100] }
+        expect: 4059.5
+        message: "ft-5 starts with 3959.5 points. addPoints(9001, 'ft-5', 100) should return the new score, 4059.5, as a number."
+        sideEffect:
+          - cmd: [ZSCORE, "lb:contest:9001", "ft-5"]
+            equals: 4059.5
+            message: "The score of ft-5 in lb:contest:9001 should now be 4059.5. Add to the score in the sorted set itself."
+      - call: { args: [9001, "ft-nobody", 5] }
+        expect: null
+        message: "ft-nobody is not on the board. addPoints should return null for a team that is not in the contest."
+        sideEffect:
+          - cmd: [ZSCORE, "lb:contest:9001", "ft-nobody"]
+            equals: null
+            message: "addPoints created ft-nobody on the board. A team that is not in the contest must stay off the board."
+  - type: behavior
+    slot: leaderboard.rank
+    fixtures: fixtures/06-seed-40k.yaml
+    assertions:
+      - call: { args: [9001, "ft-5"] }
+        expect:
+          rank: 24161
+          score: 3959.5
+          around:
+            - { teamId: "ft-35363", score: 3959.7 }
+            - { teamId: "ft-17684", score: 3959.6 }
+            - { teamId: "ft-5", score: 3959.5 }
+            - { teamId: "ft-29289", score: 3959.1 }
+            - { teamId: "ft-11610", score: 3959 }
+        message: "rank(9001, 'ft-5') should return { rank: 24161, score: 3959.5, around } where around lists two teams above ft-5, ft-5 and two below, best first, each as { teamId, score }. rank counts from 1 at the top."
+      - call: { args: [9001, "ft-nobody"] }
+        expect: null
+        message: "ft-nobody is not on the board. rank should return null."
+  - type: traffic
+    scenario: leaderboard-storm
+    baseline: false
+    assertions:
+      p99_ms_lte: 60
+      error_rate_lte: 0
+      db_queries_lte: 0
+    message: "Under a hundred connections the leaderboard is too slow, errors, or still asks Postgres. Read the top with ZRANGE ... LIMIT-sized, not the whole board, and keep every read in Redis."
+
+show_me:
+  component: leaderboard_panel
+  keys: ["lb:contest:9001"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/leaderboard
+  - https://redis.io/docs/latest/develop/data-types/sorted-sets/
+
+reward:
+  xp: 60
+  badge: "Top of the board"
+
+solutions:
+  reference: solutions/06-reference.js
+  wrong:
+    - path: solutions/06-wrong-postgres.js
+      expect: wrong
+      because: "top reads contest_entries in Postgres, which holds nothing for contest 9001, so it returns an empty list instead of the board that lives in Redis. And a leaderboard that is a database query is the page you started with: under load every refresh would be a query."
+    - path: solutions/06-wrong-sort-in-js.js
+      expect: wrong
+      because: "Right answers, wrong shape: it pulls the whole sorted set (ZRANGE 0 -1, forty thousand members) into JavaScript and sorts it there on every request. One call at a time passes every check. A hundred connections each moving forty thousand members per page view fail the p99, so only the load test catches it."

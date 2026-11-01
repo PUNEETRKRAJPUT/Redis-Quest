@@ -1,0 +1,3 @@
+# Every run starts with no window open for either test user.
+steps:
+  - cmd: [DEL, "ratelimit:fixed:u-limit-1", "ratelimit:fixed:u-limit-2"]

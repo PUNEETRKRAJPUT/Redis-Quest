@@ -1,0 +1,91 @@
+id: ch3-13-interview-rate-limiter
+chapter: ch3
+title: "Interview: a rate limiter from a blank file"
+mode: code
+
+interview:
+  minutes: 20
+  rebuild_of: ch3-03-token-bucket
+  hint_xp_cost: 10
+
+story: |
+  The placement season has reached the part of the day where the interviewer is a backend lead from a payments company,
+  and she has one question she asks everyone. "Your app sends OTPs and somebody is abusing it, from many machines, through
+  several copies of your server. Build me a rate limiter. Ten per user, refilling slowly. I will watch the clock and I will
+  run it with a hundred requests at once."
+
+  No roommate to panic, no chat to ask, no teaching page next to you. If you like the file you have now, copy it to a safe
+  name first. Then open the empty one.
+
+brainstorm:
+  prompt: "Before you type: what is your design for a limiter that many app copies share, and what is the one thing the hundred-at-once test is looking for?"
+  options:
+    - id: atomic-shared-bucket
+      label: "A bucket per user in Redis, with the read, the decision and the write done as one atomic step"
+      is_reasonable: true
+    - id: read-then-write
+      label: "A bucket per user in Redis, read and written back from JavaScript"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: an in-memory limiter in each app copy"
+      is_reasonable: false
+
+task: |
+  Design and implement a rate limiter. Fill in `allow(deps, userId)` in `workspace/ch3/ratelimit.js` from a blank file. It gets
+  `{ redis }` as `deps` and returns `true` to allow a request, `false` to refuse it.
+
+  - A user has a bucket of **10** tokens, refilled at **1 token per 60 seconds**. Each request costs one token.
+  - The bucket is a hash at `ratelimit:<userId>` with the fields `tokens` and `last_refill` (milliseconds).
+  - It must be correct when many requests for the same user arrive at once, and across any number of app copies.
+
+  The check sends fifteen requests for one user, then a hundred at the same instant for another.
+
+hints:
+  - "The read, the decision and the write have to be one step on the server. What runs atomically in Redis?"
+  - "Pass the clock into the script as an argument, and handle the script being missing from the server's cache."
+
+verify:
+  - type: behavior
+    slot: ratelimit.allow
+    fixtures: fixtures/13-reset-buckets.yaml
+    assertions:
+      - call: { args: ["u-limit-1"] }
+        repeat: 15
+        expectCount: { value: true, equals: 10 }
+        message: "Sent 15 requests for u-limit-1 one after another; exactly 10 should be allowed (a bucket of 10 that refills one token a minute)."
+        sideEffect:
+          - cmd: [TYPE, "ratelimit:u-limit-1"]
+            equals: hash
+            message: "The bucket for u-limit-1 should be a hash at ratelimit:u-limit-1."
+          - cmd: [HGET, "ratelimit:u-limit-1", tokens]
+            equals: "0"
+            message: "After 10 allowed requests the bucket should hold 0 tokens, in the tokens field of the hash."
+  - type: antipattern
+    slot: ratelimit.allow
+    fixtures: fixtures/13-reset-buckets.yaml
+    concurrency: 100
+    assertions:
+      - call: { args: ["u-limit-2"] }
+        repeat: 100
+        expectCount: { value: true, lte: 10 }
+        message: "This passes one request at a time, but 100 concurrent requests got more than 10 through. Your read and your write are separate commands, so requests interleave between them and all see a full bucket. Put the read, the decision and the write in one Lua script."
+
+show_me:
+  component: otp_limiter_panel
+  keys: ["ratelimit:u-limit-1"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/rate-limiter
+
+reward:
+  xp: 80
+  badge: "Limiter, from memory"
+
+solutions:
+  reference: solutions/03-reference.js
+  wrong:
+    - path: solutions/03-wrong-allow-all.js
+      expect: wrong
+      because: "Allows every request: 15 of 15 are allowed and no ratelimit:<userId> hash is ever written."
+    - path: solutions/03-works-but-wrong-js-race.js
+      expect: works_but_wrong
+      because: "A correct bucket one request at a time, but it reads with HMGET, does the maths in JavaScript and writes with HSET. A hundred concurrent requests all read a full bucket before any of them writes, and all are allowed."

@@ -1,0 +1,3 @@
+# Wrong: NUMPAT counts pattern subscriptions (PSUBSCRIBE), not the subscribers of the match channel. The ticker
+# subscribes to score:match:m-041 by exact name, so this says nothing about it, and the drill is never run.
+PUBSUB NUMPAT

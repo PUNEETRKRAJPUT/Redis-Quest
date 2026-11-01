@@ -1,0 +1,119 @@
+id: ch3-10-the-ticker
+chapter: ch3
+title: "The ticker"
+mode: code
+
+story: |
+  It is 10:33 pm. Match m-041 is in its last over and the match page has a problem it has had all along: to show the new score
+  it asks the server every two seconds. A thousand open pages is five hundred questions a second, almost every answer is "same as
+  before", and the number on the screen is always a little behind the truth.
+
+  Teja wants the opposite: the app tells the pages the moment a ball is bowled. The app already has the listening half: a small
+  subscriber that every copy of the app runs, waiting on one channel for each live match. What is missing is the speaking half.
+  When a ball is posted, someone has to publish it.
+
+  There is one trap, and the warden's mess-hall television knows it. A phone that opens the match page a minute after the last
+  ball has nobody to tell it the score, because a broadcast is heard only by whoever was listening at the time.
+
+brainstorm:
+  prompt: "Every open match page should learn about a ball the moment it is bowled, and a page that opens later should not show an empty score. What do you use?"
+  options:
+    - id: publish-and-keep-last
+      label: "Publish each ball on a channel for the pages that are listening, and also store the last ball in a key for the ones that arrive later"
+      is_reasonable: true
+    - id: only-publish
+      label: "Publish each ball on a channel, and let late pages wait for the next one"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: WebSockets from the app, with each copy tracking its own connected pages"
+      is_reasonable: true
+
+teach: |
+  **Pub/Sub** is a broadcast. `PUBLISH channel message` hands the message to every client that is subscribed to that channel
+  **right now**, and answers with the number of subscribers it reached. Nothing is stored: delivery is at-most-once, and a
+  subscriber that is offline when the message is published loses it for good. The pub/sub page in the docs says so, and says to
+  use Streams when you cannot lose events (Chapter 4).
+
+  - A connection that has subscribed can do nothing but subscribe, unsubscribe and ping (in RESP2), so a subscriber needs its
+    own connection: in node-redis, `client.duplicate()`, then `connect()`, then `subscribe(channel, listener)`. This game's app
+    already does that in `app/src/workers/ticker.ts`, one subscription per live match, by exact channel name.
+  - `PUBLISH` returning **0** means nobody heard it. The docs' hint: a steady 0 usually means a typo in the channel name.
+  - Channels are not keys. `KEYS *` and `SCAN` will not show them. `PUBSUB CHANNELS` will, but only the ones with a subscriber.
+
+  The docs' production advice for offline subscribers is to write a durable record and then publish, and to reconcile from the
+  durable store when a subscriber reconnects. So this function does two things for every ball: it publishes, and it keeps the last
+  ball in an ordinary key with an expiry, `score:match:<matchId>:last`, for any page that opens later.
+
+  A worked example, not your task:
+
+      PUBLISH news:demo "hello"          -> 0   (nobody is listening)
+      SET news:demo:last "hello" EX 60
+
+task: |
+  Fill in `publish(deps, matchId, ball)` in `workspace/ch3/ticker-publish.js`. `ball` is an object like
+  `{ seq: 7, over: 2, ball: 1, runs: 6, batter: "p-028" }`. Return the reply of `PUBLISH`.
+
+  1. Make the message: the ball as JSON with `matchId` added to it (`{ ...ball, matchId }`, `JSON.stringify`).
+  2. `PUBLISH` it on the channel `score:match:<matchId>`.
+  3. `SET score:match:<matchId>:last` to the same JSON, expiring in **3600** seconds, so a late page can read it.
+
+  The check calls your function for `m-041` and looks at the key. Then comes the part only you can do, live, with the app in the loop:
+
+  1. Turn on **Run my code in the app** below, then press Verify. The checker now waits, up to two minutes, for a message on `score:match:m-041`.
+  2. While it waits, in your own terminal, post one ball:
+
+         curl -s -X POST localhost:3000/app/matches/m-041/balls -H 'content-type: application/json' -d '{"seq":1,"over":1,"ball":1,"runs":4,"batter":"p-028"}'
+
+  3. Then see what the app's own subscriber heard: `curl -s localhost:3000/app/ticker/m-041`. `received` should be 1 or more.
+
+  A function that publishes inside the check's own call does not satisfy it: that call happens before the checker starts
+  listening. The ball you post with `curl` is the message it is waiting for.
+
+hints:
+  - "redis.publish(channel, message) returns the number of subscribers that received it. Return that."
+  - "redis.set(key, value, { expiration: { type: 'EX', value: 3600 } }) sets the value and the expiry together."
+  - "If received stays 0, check the channel name character by character: it is score:match:m-041, with 'match' in the middle."
+
+verify:
+  - type: behavior
+    slot: ticker.publish
+    fixtures: fixtures/10-clean-last.yaml
+    assertions:
+      - call:
+          args:
+            - "m-041"
+            - { seq: 7, over: 2, ball: 1, runs: 6, batter: "p-028" }
+        message: "ticker.publish for m-041 should leave the last ball in the key score:match:m-041:last, with a one hour expiry."
+        sideEffect:
+          - cmd: [GET, "score:match:m-041:last"]
+            matches: '"seq":7'
+            message: "score:match:m-041:last should hold the ball as JSON, including its seq. A page that opens late reads this key because a broadcast leaves nothing behind."
+          - cmd: [TTL, "score:match:m-041:last"]
+            between: [1, 3600]
+            message: "score:match:m-041:last should expire within 3600 seconds (SET ... EX 3600), so an old match does not sit in Redis for ever."
+  - type: event
+    kind: channel_message
+    match: { channel: "score:match:m-041" }
+    timeoutMs: 120000
+    message: "Nothing was published on score:match:m-041 while the checker waited. Turn on Run my code in the app, press Verify, and then post a ball with the curl command from the task. Check the channel name, and that the function really calls PUBLISH."
+
+show_me:
+  component: kv_card
+  keys: ["score:match:m-041:last"]
+docs:
+  - https://redis.io/docs/latest/develop/pubsub/
+  - https://redis.io/docs/latest/develop/use-cases/pub-sub
+
+reward:
+  xp: 50
+  badge: "On air"
+
+solutions:
+  reference: solutions/10-reference.js
+  wrong:
+    - path: solutions/10-wrong-no-publish.js
+      expect: wrong
+      because: "The last ball is stored but nothing is published. A page that opens later finds the key, but every page that is already watching hears nothing, and the app's subscriber receives zero messages."
+    - path: solutions/10-wrong-wrong-channel.js
+      expect: wrong
+      because: "Published on score:m-041 instead of score:match:m-041. PUBLISH does not complain, it answers 0 receivers, and nobody is subscribed to that name, so the ticker stays silent."

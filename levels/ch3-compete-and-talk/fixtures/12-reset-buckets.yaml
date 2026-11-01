@@ -1,0 +1,3 @@
+# Full buckets only: the library the behavior step just loaded stays where it is.
+steps:
+  - cmd: [DEL, "ratelimit:u-limit-1", "ratelimit:u-limit-2"]

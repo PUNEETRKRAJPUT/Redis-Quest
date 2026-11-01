@@ -1,0 +1,7 @@
+# Reference: the week is the sum of its seven days. ZUNIONSTORE adds the scores of members that appear on several days.
+ZUNIONSTORE lb:week:2026-45 7 lb:daily:2026-11-01 lb:daily:2026-11-02 lb:daily:2026-11-03 lb:daily:2026-11-04 lb:daily:2026-11-05 lb:daily:2026-11-06 lb:daily:2026-11-07
+# Keep the top ten: remove ranks 0 to -11 counted from the lowest score, which leaves the ten highest.
+ZREMRANGEBYRANK lb:week:2026-45 0 -11
+# A week board is only needed for a week.
+EXPIRE lb:week:2026-45 604800
+ZRANGE lb:week:2026-45 0 9 REV WITHSCORES

@@ -1,0 +1,132 @@
+id: ch3-02-fixed-window
+chapter: ch3
+title: "The fixed window"
+mode: code
+
+story: |
+  It is 10:12 pm and TextTara Sir's invoice has arrived. "Kindly find attached. A few numbers received 600 OTP requests in
+  one hour. Is this expected? 🙂" It is not expected. The Gomti Gang's script presses "send OTP" as fast as it can, from
+  Lucknow, and every press is an SMS the hostel pays for.
+
+  You have just watched the limiter let twice its quota through, because each copy counts for itself. The count has
+  to live somewhere both copies ask. The simplest limiter that can do that is a counter per user that resets every
+  minute: add one on each request, and when it passes ten, say no.
+
+  Build that one first. It is two commands, it works across any number of copies, and it has one flaw you should know
+  by name before the Gomti Gang finds it.
+
+brainstorm:
+  prompt: "Ten OTP requests per user per minute, counted so that every copy of the app agrees. What is the smallest thing that does it?"
+  options:
+    - id: counter-with-expiry
+      label: "One counter per user in Redis that you add one to on every request, and that disappears after a minute"
+      is_reasonable: true
+    - id: read-then-write
+      label: "Read the counter, add one in JavaScript, write it back"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: put the limit in the SMS vendor's dashboard and let them block abusers"
+      is_reasonable: true
+
+teach: |
+  The rate-limiter page in the Redis docs lists several designs. The simplest is the **fixed window counter**: one
+  string per subject, `INCR` on every request, and an `EXPIRE` when the reply is 1. When the key expires the next
+  request starts a new window. The docs describe it as approximate and cheap: one key per user.
+
+  - `INCR key` adds one, atomically, and answers with the new count. A missing key counts as 0, so the first answer is 1.
+    Because the add happens inside Redis, a hundred concurrent requests get a hundred different counts.
+  - `EXPIRE key 60` starts the 60 second clock. Do it when `INCR` answers 1, so the window opens with the first request.
+  - `PTTL key` answers with the milliseconds the window has left: the number for a `Retry-After` header.
+
+  The known flaw, which the docs name too: the window is a fixed slot on the clock. A user who sends ten requests in
+  the last seconds of one window and ten in the first seconds of the next gets twenty through in a few seconds: up to
+  twice the limit around the boundary. In this level that is a flaw you accept and write down, not a failure, and the
+  check does not try to catch it. The two designs after this one do not have it.
+
+  A worked example, not your task:
+
+      INCR visits:demo        -> 1
+      EXPIRE visits:demo 30
+      INCR visits:demo        -> 2
+      PTTL visits:demo        -> about 29990
+
+task: |
+  Fill in `allow(deps, userId)` in `workspace/ch3/ratelimit.js`. It gets `{ redis }` as `deps` and returns `true` if the
+  request may go ahead, `false` if not.
+
+  - The key is `ratelimit:fixed:<userId>`, a plain string holding the count.
+  - Allow while the count is **10 or less**. The first request of a window sets the key to expire in **60 seconds**.
+  - Use `INCR`, not a read followed by a write.
+
+  The check sends fifteen requests for `u-limit-1` one after another, then a hundred at the same instant for
+  `u-limit-2`. To try it by hand, turn on "Run my code in the app" below and use `scripts/hit.sh 30 u-000012`.
+
+hints:
+  - "INCR answers with the new count. You do not need to read the key first."
+  - "Call EXPIRE only when INCR answered 1, so a busy user's window does not keep sliding forward."
+  - "redis.incr(key) and redis.expire(key, 60) are the node-redis names."
+
+verify:
+  - type: behavior
+    slot: ratelimit.allow
+    fixtures: fixtures/02-reset-fixed.yaml
+    assertions:
+      - call: { args: ["u-limit-1"] }
+        repeat: 15
+        expectCount: { value: true, equals: 10 }
+        message: "Sent 15 requests for u-limit-1 one after another; exactly 10 should be allowed."
+        sideEffect:
+          - cmd: [GET, "ratelimit:fixed:u-limit-1"]
+            equals: "15"
+            message: "ratelimit:fixed:u-limit-1 should hold the count of requests seen, a string reading 15 after fifteen calls. A limiter that keeps its count in the app's memory leaves nothing in Redis, and a second copy of the app would not see it."
+  - type: antipattern
+    checks:
+      - cmd: [TTL, "ratelimit:fixed:u-limit-1"]
+        between: [1, 60]
+        message: "This passes today, but the counter has no expiry. The window never closes: after ten requests a user is blocked for good, and every user ever seen stays in Redis for ever. Call EXPIRE 60 when INCR answers 1."
+  - type: antipattern
+    slot: ratelimit.allow
+    fixtures: fixtures/02-reset-fixed.yaml
+    concurrency: 100
+    assertions:
+      - call: { args: ["u-limit-2"] }
+        repeat: 100
+        expectCount: { value: true, lte: 10 }
+        message: "This passes one request at a time, but 100 concurrent requests got more than 10 through. You read the count and wrote it back as two commands, so requests interleave between them and all see the same count. That is exactly how the Gomti Gang's script gets past a limiter. INCR does the read and the add as one step."
+  - type: quiz
+    question: "A user sends 10 requests in the last two seconds of one window and 10 more in the first two seconds of the next. The fixed window allows all 20. Which designs do not have that flaw?"
+    options:
+      - id: token-bucket
+        label: "A token bucket: the most it can let through is its capacity plus what it has refilled since"
+      - id: sliding-window-log
+        label: "A sliding window log: it counts the requests of the last 60 seconds, wherever the window started"
+      - id: bigger-window
+        label: "A fixed window with a longer expiry"
+      - id: smaller-counter
+        label: "A fixed window that resets the count at midnight instead"
+    correct: [token-bucket, sliding-window-log]
+    explanation: "The flaw comes from the window being a fixed slot, so a burst can straddle two slots. A token bucket tracks what has been spent and refilled, and a sliding log looks back from now instead of from a boundary: the docs list both as having no 2x burst. A longer or later fixed window has the same boundary, just somewhere else. You will build both of the good ones next."
+
+show_me:
+  component: otp_limiter_panel
+  keys: ["ratelimit:fixed:u-limit-1"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/rate-limiter
+  - https://redis.io/docs/latest/develop/data-types/strings/
+
+reward:
+  xp: 40
+  badge: "Counting"
+
+solutions:
+  reference: solutions/02-reference.js
+  wrong:
+    - path: solutions/02-wrong-in-memory.js
+      expect: wrong
+      because: "A Map in the process. It counts correctly for one copy of the app, but nothing is written to Redis, so there is no ratelimit:fixed:u-limit-1 key, a second copy has its own count and a restart forgets every window."
+    - path: solutions/02-works-but-wrong-get-then-set.js
+      expect: works_but_wrong
+      because: "The count is in Redis and expires, and one request at a time it is exact. But it reads the count with GET and writes it with SET, so a hundred concurrent requests all read the same number and all are allowed."
+    - path: solutions/02-works-but-wrong-no-expire.js
+      expect: works_but_wrong
+      because: "INCR is atomic and the counting is right, but nothing ever sets an expiry. The window never closes, so a user who has used ten requests is blocked for good, and every user stays in Redis for ever."

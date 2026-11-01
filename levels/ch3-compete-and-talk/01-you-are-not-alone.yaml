@@ -1,0 +1,114 @@
+id: ch3-01-you-are-not-alone
+chapter: ch3
+title: "You are not alone"
+mode: ops
+
+story: |
+  It is 10:10 pm and the leaderboard is slow, because the Gomti Gang's scripts are refreshing it every second and
+  poking the OTP endpoint in between. Mukul calls it a friendly stress test. Harry Bhaiya has the answer he always
+  has: while you were eating, he started a second copy of the app "for capacity". Nobody told you.
+
+  The OTP endpoint already has a limiter: ten requests per minute per user. It is a Map inside the app process.
+  Harry Bhaiya's second copy is another process, with a Map of its own that has never heard of the first.
+
+  Before you build anything, see it happen. The game has a small script, `scripts/hit.sh`, that sends requests as one
+  user, counts how many get through and tells you which copy answered. You will run it against one copy, add a second
+  copy, and run it again. The code will not change between the two runs.
+
+brainstorm:
+  prompt: "The limiter allows 10 requests per user per minute, and the app now runs as two copies behind one address. Where should the count live?"
+  options:
+    - id: one-shared-place
+      label: "In one place that both copies ask, so there is one count per user however many copies there are"
+      is_reasonable: true
+    - id: halve-the-limit
+      label: "Keep counting in each copy, and set each copy's limit to 5 so two copies add up to 10"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a counter table in Postgres, updated on every request"
+      is_reasonable: true
+
+teach: |
+  A limiter that counts in the memory of its own process is right for exactly one process. Put a balancer in front of
+  two copies and each copy keeps its own count, so each lets a user through up to the limit: twice what you meant. A
+  third copy makes it three times. Nothing in the code looks wrong, which is what makes it a good bug.
+
+  The rate-limiter page in the Redis docs says it plainly: use Redis for a centralised quota across instances, because
+  local per-process counters break behind load balancers. The whole of this chapter's first half is that sentence.
+
+  How this level works:
+
+  - `scripts/hit.sh [count] [userId]` sends `count` requests (default 30) as `userId` (default `u-000010`) to the app's
+    built-in limiter, prints one line per request with the status and the first four characters of the answering
+    copy's name, then a summary: `allowed=... denied=... instances=...`. A `200` is allowed, a `429` is denied.
+  - The app reports the copy that answered in an `x-quest-instance` header, which is how the script counts copies.
+  - The game notices a second copy within a few seconds of it starting, because every copy reports its own metrics.
+  - `docker compose up -d --scale app=2 app` starts a second copy of the app service. `--scale app=1` goes back.
+
+  The limiter here is a fixed window that follows the clock minute, so a run that crosses a minute boundary starts a
+  new window and lets more through. If a number looks wrong, run it again with a fresh user id.
+
+task: |
+  Run these in your own terminal on your Mac, from the repo root (the game cannot run Docker commands for you). Start
+  this level first: the game only counts a second copy that appeared after the level started. If you scaled early, run
+  `docker compose up -d --scale app=1 app`, then do step 2 again.
+
+  1. `scripts/hit.sh 30` sends 30 requests as `u-000010` to the limiter, which allows 10 per 60 seconds per user and
+     counts in the app's own memory. Expect `allowed=10 denied=20 instances=1`.
+  2. `docker compose up -d --scale app=2 app`, then wait about 10 seconds for the second copy.
+  3. `scripts/hit.sh 30 u-000011`. This is a different user, because `u-000010`'s window is still running. About twenty
+     get through and the summary says `instances=2`. Nothing in the code changed.
+  4. Leave both copies running for the rest of the chapter. Every level from here assumes two.
+
+  Then answer the two questions and press Verify.
+
+hints:
+  - "Press Verify only after the second copy has been up for a few seconds: the game learns about it from that copy's own metrics."
+  - "If instances still says 1 after step 3, check `docker compose ps`: there should be two app containers."
+  - "The check looks at what happened since you started this level. If you scaled before starting it, scale to 1 and back to 2."
+
+verify:
+  - type: event
+    kind: service_scaled
+    match: { service: app, instances: 2 }
+    timeoutMs: 120000
+    message: "The game has not seen a second copy of the app since you started this level. Run docker compose up -d --scale app=2 app in your own terminal, wait about ten seconds, then press Verify. If you scaled before starting the level, scale to 1 and then to 2 again."
+  - type: quiz
+    question: "The first run allowed 10 of 30 and the second allowed about 20 of 30, with no code change. Why?"
+    options:
+      - id: each-copy-has-its-own-map
+        label: "Each copy keeps its own count in its own memory, so each allowed 10 for the user and two copies let 20 through"
+      - id: clock-skew
+        label: "The two copies' clocks disagree, so the window was longer"
+      - id: new-user-limit
+        label: "A new user id gets a bigger limit than one that has already been used"
+    correct: each-copy-has-its-own-map
+    explanation: "The limiter is a Map in the process, and the balancer spreads the requests across two processes. Each process counted its own share and stopped at ten, so ten per copy: twenty in all. The limit was never ten per user, it was ten per user per copy."
+  - type: quiz
+    question: "What is the fix that keeps working however many copies Harry Bhaiya starts?"
+    options:
+      - id: count-in-redis
+        label: "Keep the count in one place every copy asks, so the limit applies to the user and not to the copy"
+      - id: divide-the-limit
+        label: "Divide the limit by the number of copies"
+      - id: pin-users-to-copies
+        label: "Send each user to the same copy every time"
+    correct: count-in-redis
+    explanation: "A shared count has one answer however many copies ask. Dividing the limit breaks the moment the number of copies changes, or the balancer sends one copy more than its share. Pinning users to copies is a second system to build and it falls over when that copy restarts."
+
+show_me:
+  component: cache_stats
+  keys: []
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/rate-limiter
+
+reward:
+  xp: 30
+  badge: "Not alone"
+
+solutions:
+  reference: solutions/01-reference.sh
+  wrong:
+    - path: solutions/01-wrong-restart.sh
+      expect: wrong
+      because: "Restarting the app does not add a copy. There is still one instance, so the game never sees two, and the limiter still counts in one process's memory."

@@ -1,0 +1,9 @@
+# Contest 9001 starts with 40,000 teams ft-1 .. ft-40000. Score of team i is ((i * 7919) % 100000) / 10, and 7919 shares no
+# factor with 100000, so no two teams tie. One EVAL writes the lot (the board key travels in KEYS).
+steps:
+  - cmd: [DEL, "lb:contest:9001"]
+  - cmd:
+      - EVAL
+      - "for i = 1, 40000 do redis.call('ZADD', KEYS[1], ((i * 7919) % 100000) / 10, 'ft-' .. i) end return 40000"
+      - 1
+      - "lb:contest:9001"

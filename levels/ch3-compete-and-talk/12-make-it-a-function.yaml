@@ -1,0 +1,135 @@
+id: ch3-12-make-it-a-function
+chapter: ch3
+title: "Make it a function"
+mode: code
+
+story: |
+  It is 10:42 pm. Harry Bhaiya restarted Redis to "free up some memory". Nothing was lost, the bucket data is all there, and
+  the OTP page kept working. But the log shows something the roommate wants explained: for a second after the restart, every OTP
+  request ran the slow way, and the app warned about a missing script.
+
+  That is the cost of the level 3 design. The limiter's Lua script lives in Redis's script cache, which is not saved to disk,
+  so a restart forgets it, and the app has to notice, fall back and load it again. The app owns a piece of the server's logic
+  and has to re-teach it every time Redis forgets.
+
+  Redis has a second way to ship server-side code that does not have that problem. A **function** is loaded once, becomes part of
+  the database, is saved and copied along with the data, and is called by name. Move the token bucket into one.
+
+brainstorm:
+  prompt: "The token bucket's script has to be sent to Redis again after every restart. Where should server-side code like this live?"
+  options:
+    - id: in-redis-as-a-library
+      label: "In Redis itself, as a named library that is stored with the data, so a restart cannot lose it"
+      is_reasonable: true
+    - id: in-the-app-as-eval
+      label: "In the app: keep sending the script with EVAL on every call"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: move the limiter into a small service of its own"
+      is_reasonable: true
+
+teach: |
+  The programmability docs describe two engines for the same Lua: **scripts** (`EVAL`, since 2.6) and **Redis Functions**
+  (since 7.0). They differ in where the code lives.
+
+  - A script belongs to the application. Its cache is volatile: not persisted, lost on restart or failover, which is why you
+    handle `NOSCRIPT` by loading and retrying.
+  - A function is a first-class database object. A library is loaded with `FUNCTION LOAD`, **persists** to the AOF and RDB,
+    **replicates** to replicas, and is "as durable as the data itself".
+
+  The shape of it:
+
+  - A library is Lua with a first line `#!lua name=limiter`, then one or more `redis.register_function('name', function(keys, args) ... end)`.
+    The function receives the keys and arguments as two tables.
+  - `FUNCTION LOAD [REPLACE] code` stores it. A library's contents are immutable, so changing it means `REPLACE`ing the whole library.
+  - `FCALL name numkeys key [key ...] arg [arg ...]` runs it, with the same rule as `EVAL`: every key goes in `keys`.
+  - `FUNCTION LIST [LIBRARYNAME name]` shows what is loaded; `FUNCTION DELETE` removes a library.
+
+  When does the code get loaded? The docs show it done once by an operator or at deploy time. In this level your file has no
+  connection until it is called, so load it **lazily**: call `FCALL`, and when Redis answers `Function not found`, run
+  `FUNCTION LOAD REPLACE` and call again. `REPLACE` makes loading safe to repeat. Loading once at module load is the other
+  fair choice, where the module owns its connection; here it does not.
+
+task: |
+  Fill in `allow(deps, userId)` in `workspace/ch3/ratelimit.js` one last time: the same token bucket as level 3, now as a Redis
+  Function.
+
+  - Library name **`limiter`**, function name **`tb_allow`**. Source: `#!lua name=limiter` on the first line, then
+    `redis.register_function('tb_allow', function(keys, args) ... end)`.
+  - Same bucket: hash `ratelimit:<userId>` with `tokens` and `last_refill`, capacity 10, refill 1 token per 60,000 ms.
+  - Call it with `FCALL tb_allow 1 <key> <capacity> <refillRate> <refillIntervalMs> <nowMs>`. If the answer is the error
+    `Function not found`, load the library with `FUNCTION LOAD REPLACE <source>` and call again.
+  - Return `true` to allow, `false` to refuse.
+
+  The check clears every library first, so a leftover one cannot hide a function you never loaded. It then sends 15 requests for
+  `u-limit-1` and looks at the library list, and finally sends 100 at once for `u-limit-2`.
+
+hints:
+  - "Your Lua from level 3 almost works: take it out of the script, put it inside the function, and read the keys and args from the two tables instead of KEYS and ARGV."
+  - "The error text for a missing function contains 'Function not found'. Catch the error, check err.message, load, and call again once."
+  - "redis.sendCommand(['FUNCTION', 'LOAD', 'REPLACE', source]) loads it. The source must start with the #!lua name=limiter line, at the very start of the text."
+
+verify:
+  - type: behavior
+    slot: ratelimit.allow
+    fixtures: fixtures/12-reset-function.yaml
+    assertions:
+      - call: { args: ["u-limit-1"] }
+        repeat: 15
+        expectCount: { value: true, equals: 10 }
+        message: "Sent 15 requests for u-limit-1 one after another; exactly 10 should be allowed (a bucket of 10 that refills one token a minute)."
+        sideEffect:
+          - cmd: [TYPE, "ratelimit:u-limit-1"]
+            equals: hash
+            message: "The bucket for u-limit-1 should be a hash at ratelimit:u-limit-1."
+  - type: redis
+    checks:
+      - cmd: [FUNCTION, LIST, LIBRARYNAME, limiter]
+        exists: true
+        message: "There is no library named limiter in Redis. The check starts with no functions at all, so your code has to load one: FUNCTION LOAD REPLACE with a source that starts with #!lua name=limiter and registers tb_allow. Scripts run with EVAL or EVALSHA do not count."
+  - type: antipattern
+    slot: ratelimit.allow
+    fixtures: fixtures/12-reset-buckets.yaml
+    concurrency: 100
+    assertions:
+      - call: { args: ["u-limit-2"] }
+        repeat: 100
+        expectCount: { value: true, lte: 10 }
+        message: "This passes one request at a time, but 100 concurrent requests got more than 10 through. Read, decide and write must happen inside the function, as one step on the server."
+  - type: quiz
+    question: "Redis restarts. What happens to a Lua script loaded with SCRIPT LOAD, and to a function loaded with FUNCTION LOAD?"
+    options:
+      - id: script-lost-function-kept
+        label: "The script is gone (the script cache is not persisted) and EVALSHA answers NOSCRIPT; the function is still there, because libraries are saved and replicated with the data"
+      - id: both-kept
+        label: "Both are kept, because Redis saves everything to disk"
+      - id: both-lost
+        label: "Both are gone: server-side Lua is always volatile"
+      - id: function-lost-script-kept
+        label: "The function is gone and the script is kept, because scripts are saved in the AOF"
+    correct: script-lost-function-kept
+    explanation: "The docs say the script cache is always volatile: lost on restart and failover, so code that uses EVALSHA must handle NOSCRIPT. Functions are database objects that persist to the AOF and RDB and replicate, as durable as the data. That is the whole difference, and it is why shipping logic to Redis is moving from scripts to functions."
+
+show_me:
+  component: otp_limiter_panel
+  keys: ["ratelimit:u-limit-1"]
+docs:
+  - https://redis.io/docs/latest/develop/programmability/
+  - https://redis.io/docs/latest/develop/programmability/functions-intro/
+
+reward:
+  xp: 60
+  badge: "Called by name"
+
+solutions:
+  reference: solutions/12-reference.js
+  wrong:
+    - path: solutions/12-wrong-evalsha-only.js
+      expect: wrong
+      because: "Level 3's script with SCRIPT LOAD and EVALSHA. It counts correctly, but no library named limiter is ever loaded, so the code still lives in the volatile script cache and the library check fails."
+    - path: solutions/12-wrong-allow-all.js
+      expect: wrong
+      because: "Allows every request: 15 of 15 are allowed, no bucket is written and no function is loaded."
+    - path: solutions/12-works-but-wrong-js-race.js
+      expect: works_but_wrong
+      because: "It loads a library named limiter, so the library check passes, but never calls it: the bucket is still HMGET, maths in JavaScript and HSET. Exact one request at a time, but a hundred concurrent requests all read a full bucket before any of them writes, and all are allowed."

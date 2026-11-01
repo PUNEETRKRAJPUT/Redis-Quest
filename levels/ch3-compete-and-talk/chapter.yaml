@@ -1,0 +1,43 @@
+id: ch3
+title: "Compete and talk"
+incident:
+  - from: roommate
+    time: "22:10"
+    text: "bhai the leaderboard takes 3 seconds and someone keeps pressing send-OTP on the same number 😭"
+  - from: sms-vendor
+    time: "22:11"
+    text: "Good evening. Interim invoice attached. 600 OTP requests to one number in an hour, as per our logs. Is this expected? 🙂"
+  - from: rival-college
+    time: "22:12"
+    text: "Nothing personal. Our scripts refresh your leaderboard every second. A friendly stress test."
+  - from: senior
+    time: "22:14"
+    text: "Scene kya hai? I started a second copy of the app for capacity. Fest budget hai, no problem"
+  - from: roommate
+    time: "22:16"
+    text: "bhai the limiter says 10 per minute and I just counted 20 get through. we have TWO apps now"
+  - from: you
+    time: "22:17"
+    text: "each copy is counting in its own memory. the count has to live in one place both of them ask"
+  - from: sms-vendor
+    time: "22:18"
+    text: "Sir, 11 numbers have received 40 OTPs each since 22:10. Kindly advise before the next invoice."
+  - from: senior
+    time: "22:20"
+    text: "I do not follow but I trust you. Before the final, please. Mukul's friends are everywhere"
+levels:
+  - ch3-01-you-are-not-alone
+  - ch3-02-fixed-window
+  - ch3-03-token-bucket
+  - ch3-04-sliding-window-log
+  - ch3-05-fail-open-or-fail-closed
+  - ch3-06-the-real-leaderboard
+  - ch3-07-hostel-college-india
+  - ch3-08-forty-thousand-updates
+  - ch3-09-money-moves
+  - ch3-10-the-ticker
+  - ch3-11-at-most-once
+  - ch3-12-make-it-a-function
+  - ch3-13-interview-rate-limiter
+  - ch3-14-interview-leaderboard
+  - ch3-15-interview-ticker

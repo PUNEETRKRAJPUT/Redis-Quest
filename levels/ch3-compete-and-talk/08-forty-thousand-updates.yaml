@@ -1,0 +1,121 @@
+id: ch3-08-forty-thousand-updates
+chapter: ch3
+title: "Forty thousand updates"
+mode: code
+
+story: |
+  It is 10:28 pm. Eight matches finished this afternoon and the scoring job found a mistake in the points rules: a
+  wicketkeeper's stumpings were counted as catches. Every fantasy team in eight matches has the wrong total. The fix is to
+  recompute and rebuild every contest board from the corrected rows.
+
+  The roommate has written the obvious loop, one `ZADD` for each row, and started it. It has been running since the
+  commentary break. The app is not slow, it is waiting: each of those writes goes to Redis and comes back before the next
+  one is sent, and there are about forty thousand of them. At a fraction of a millisecond each way that adds up to a coffee.
+
+  The rows are not the problem and Redis is not the problem. The round trips are. Send the writes in batches, without
+  waiting for each answer, and the whole rebuild is over before the roommate has finished typing "bhai".
+
+brainstorm:
+  prompt: "Forty thousand independent writes to Redis, none depending on another. What is the cost you pay when you send them one at a time?"
+  options:
+    - id: round-trips
+      label: "A network round trip for every write: the time is spent waiting for answers, not working"
+      is_reasonable: true
+    - id: redis-is-slow
+      label: "Redis itself is slow at ZADD, so a faster data structure is needed"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: load the new totals into Postgres with one bulk statement"
+      is_reasonable: true
+
+teach: |
+  Every command normally costs a **round trip**: send, wait for the reply, send the next. The pipelining page in the docs makes
+  the point with a slow link (a 250 ms round trip allows four requests a second however fast the server is), and says the cost
+  is not only the network: without pipelining each command also costs the server read and write system calls, so throughput
+  with a pipeline rises, by the docs' measurement, towards ten times the baseline.
+
+  A **pipeline** sends many commands without waiting for the replies, and collects them all at the end.
+
+  - In node-redis, `redis.multi()` collects commands, and `execAsPipeline()` sends them as a plain pipeline: no `MULTI`/`EXEC`,
+    no atomicity. The docs' prefetch example loads its cache exactly this way.
+  - Pipelines are **not atomic**. Contrast `multi().exec()`, which wraps the commands in `MULTI`/`EXEC` so nobody else's command
+    runs in between. Here nothing reads the boards while they load, so atomic is not needed.
+  - **Send batches.** The server holds every reply in memory until you read them, so the docs suggest batches of, for example,
+    10,000 commands, not one pipeline of everything. This level uses 5,000.
+  - node-redis also pipelines commands issued in the same tick automatically (`Promise.all` of many calls), but with an
+    `await` inside a loop each command is its own tick, so nothing is pipelined.
+
+  A worked example, not your task:
+
+      const p = redis.multi();
+      for (const n of names) p.zAdd('demo:board', { score: 1, value: n });
+      await p.execAsPipeline();
+
+task: |
+  Fill in `recompute(deps, rows)` in `workspace/ch3/leaderboard-recompute.js`. `rows` is an array of
+  `{ contestId, teamId, points }`. For every row, set the team's score in the sorted set `lb:contest:<contestId>` to `points`
+  with `ZADD`.
+
+  - Build the commands with `redis.multi()` and send them with `execAsPipeline()`, **5,000 per batch**.
+  - Return anything you like (an object with how many rows you wrote is nice).
+
+  The load test calls `POST /app/leaderboards/recompute` with the eight matches `m-001` to `m-008`, which is **40,098 rows** (the
+  game's builder measured that, and 120 milliseconds for a pipelined version on its Mac). Two connections, eight seconds, and the
+  whole call has to stay under 2.5 seconds at the 99th percentile with no errors. To try it by hand: turn on "Run my code in the
+  app" and run
+
+      curl -s -X POST localhost:3000/app/leaderboards/recompute -H 'content-type: application/json' -d '{"matchIds":["m-001","m-002","m-003","m-004","m-005","m-006","m-007","m-008"]}'
+
+  The answer includes `ms`, the time your function took.
+
+hints:
+  - "multi() does not send anything until you call execAsPipeline() (or exec()). Build a batch of 5,000 zAdd calls, send it, then start the next."
+  - "rows.slice(i, i + 5000) gives you the batch starting at i."
+  - "Do not await inside the loop that builds a batch. Await once per batch, on execAsPipeline()."
+
+verify:
+  - type: behavior
+    slot: leaderboard.recompute
+    fixtures: fixtures/08-clean.yaml
+    assertions:
+      - call:
+          args:
+            - - { contestId: 9002, teamId: "ft-a", points: 10 }
+              - { contestId: 9002, teamId: "ft-b", points: 20.5 }
+              - { contestId: 9003, teamId: "ft-c", points: 7 }
+        message: "Three rows across two contests should leave ft-a (10) and ft-b (20.5) in lb:contest:9002 and ft-c (7) in lb:contest:9003."
+        sideEffect:
+          - cmd: [ZSCORE, "lb:contest:9002", "ft-a"]
+            equals: 10
+            message: "ft-a should be in lb:contest:9002 with 10 points."
+          - cmd: [ZSCORE, "lb:contest:9002", "ft-b"]
+            equals: 20.5
+            message: "ft-b should be in lb:contest:9002 with 20.5 points."
+          - cmd: [ZSCORE, "lb:contest:9003", "ft-c"]
+            equals: 7
+            message: "ft-c should be in lb:contest:9003 with 7 points: rows for different contests go to different sorted sets."
+  - type: traffic
+    scenario: recompute-storm
+    baseline: false
+    assertions:
+      p99_ms_lte: 2500
+      error_rate_lte: 0
+    message: "Rebuilding the boards from 40,098 rows is too slow or fails under load. Sending one ZADD at a time costs a round trip each; build batches with multi() and send them with execAsPipeline()."
+
+show_me:
+  component: leaderboard_panel
+  keys: ["lb:contest:1"]
+docs:
+  - https://redis.io/docs/latest/develop/using-commands/pipelining/
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+
+reward:
+  xp: 50
+  badge: "One round trip"
+
+solutions:
+  reference: solutions/08-reference.js
+  wrong:
+    - path: solutions/08-wrong-one-at-a-time.js
+      expect: wrong
+      because: "One awaited ZADD per row: forty thousand round trips back to back. The boards come out right, so the three-row check passes, but the call takes seconds instead of a tenth of a second, and under load the recompute requests queue behind each other and fail the p99."

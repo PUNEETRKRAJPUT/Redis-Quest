@@ -1,0 +1,3 @@
+# The last ball of m-041 is not stored yet.
+steps:
+  - cmd: [DEL, "score:match:m-041:last"]

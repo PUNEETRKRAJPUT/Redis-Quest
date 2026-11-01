@@ -1,0 +1,5 @@
+# Starts from no library at all, so a function that was never loaded cannot hide behind a leftover one. FUNCTION FLUSH
+# removes every library (this game uses none outside level 12 and its interview rebuild), and the buckets start full.
+steps:
+  - cmd: [FUNCTION, FLUSH]
+  - cmd: [DEL, "ratelimit:u-limit-1", "ratelimit:u-limit-2"]

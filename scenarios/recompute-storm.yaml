@@ -1,0 +1,18 @@
+# Chapter 3, level 3.8: rebuild every contest board of eight matches (40,098 rows) from Postgres. Two connections for 8 s,
+# no warmup, each request is one full recompute of m-001 .. m-008. Used by the traffic verifier of level 08.
+id: recompute-storm
+description: "2 connections, 8 s, POST /app/leaderboards/recompute for matches m-001 to m-008 (40,098 rows)."
+durationSec: 8
+connections: 2
+pipelining: 1
+seed: 20260302
+users:
+  count: 10
+  distribution: uniform
+requests:
+  - method: POST
+    path: /app/leaderboards/recompute
+    weight: 1
+    userIdHeader: x-user-id
+    body:
+      matchIds: [m-001, m-002, m-003, m-004, m-005, m-006, m-007, m-008]

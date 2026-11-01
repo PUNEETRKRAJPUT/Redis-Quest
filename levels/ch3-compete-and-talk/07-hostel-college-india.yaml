@@ -1,0 +1,126 @@
+id: ch3-07-hostel-college-india
+chapter: ch3
+title: "Hostel, college, India"
+mode: cli
+
+story: |
+  It is 10:25 pm. The contest leaderboard works and the hostels have noticed. Shivneri Hostel wants to know where it stands
+  in the college. The college wants to know where it stands against the other eleven. And Harry Bhaiya, who talks to the
+  sponsors, wants "the week", the total of seven days, as the number on the big screen.
+
+  You do not have a week of data to recompute. You have seven daily boards, one sorted set a day, and each hostel appears on
+  several of them. The week board is those seven added together, trimmed to the top ten, and thrown away after seven days so
+  next week's can take its place.
+
+  The game has put seven daily boards in Redis for you: `lb:daily:2026-11-01` to `lb:daily:2026-11-07`, a dozen hostels each,
+  overlapping. Build the week.
+
+brainstorm:
+  prompt: "Seven daily leaderboards, and a weekly board that is their total, top ten only, gone after a week. How do you build it?"
+  options:
+    - id: union-store
+      label: "Ask Redis to add the seven sorted sets into a new one, trim it to the top ten, and give it an expiry"
+      is_reasonable: true
+    - id: loop-in-app
+      label: "Read all seven boards into the app, add the scores up in JavaScript and write the result back"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a weekly SUM ... GROUP BY query in Postgres"
+      is_reasonable: true
+
+setup:
+  # Seven daily boards of twelve hostels each: hostel idx = (day * 7 + j * 5) mod 24, so every day is a different dozen of the
+  # 24 hostels and each hostel is on several days. Score = 200 - j * 10 + day, so there are no ties at the cut.
+  - cmd:
+      - EVAL
+      - "for d = 1, 7 do local key = 'lb:daily:2026-11-0' .. d redis.call('DEL', key) for j = 1, 12 do local idx = (d * 7 + j * 5) % 24 local member = string.format('h-c-%02d-%d', math.floor(idx / 4) + 1, idx % 4 + 1) redis.call('ZADD', key, 200 - j * 10 + d, member) end end return 7"
+      - 0
+  - cmd: [DEL, "lb:week:2026-45"]
+
+teach: |
+  The docs' leaderboard page builds daily, weekly and monthly boards with `ZUNIONSTORE` and gives each window its own key
+  with an `EXPIRE`. Name the key for the window (`lb:week:2026-45` is week 45) and the old ones disappear by themselves.
+
+  - `ZUNIONSTORE dest numkeys key [key ...]` combines several sorted sets into a new one at `dest`, replacing whatever was
+    there. A member that appears in more than one input gets the **sum** of its scores. (`AGGREGATE MIN` or `MAX` change that
+    rule; the sum is what a weekly total needs.)
+  - `ZREMRANGEBYRANK key start stop` removes by position, counting from the lowest score. `0 -11` removes everything except the
+    top ten: the last ten positions are `-10` to `-1`.
+  - `EXPIRE key seconds` removes the key later. A week is `604800` seconds.
+
+  The docs also list `ZUNION` and `ZINTER` (read without storing) and the `STORE` variants since Redis 6.2.
+
+  Ties break lexicographically by member, so two hostels on the same total are ordered by their ids, not by who got there
+  first. The leaderboard docs say to encode a tie-breaker in the score if that matters.
+
+  A worked example, not your task:
+
+      ZUNIONSTORE demo:total 2 demo:a demo:b
+      ZREMRANGEBYRANK demo:total 0 -4      (keeps the top three)
+      EXPIRE demo:total 3600
+
+task: |
+  The seven daily boards are `lb:daily:2026-11-01` to `lb:daily:2026-11-07`. Members are hostel ids like `h-c-04-1`.
+
+  1. Add the seven into `lb:week:2026-45` with `ZUNIONSTORE`, keeping the default rule for a hostel that appears on several days.
+  2. Keep only the top ten with `ZREMRANGEBYRANK`.
+  3. Make the week board expire in one week, **604800** seconds, with `EXPIRE`.
+  4. Look at it with `ZRANGE lb:week:2026-45 0 9 REV WITHSCORES`. The hostel `h-c-04-1` is on four of the seven days: add its four
+     scores up in your head and see that the board agrees.
+
+  Then answer the question and press Verify.
+
+hints:
+  - "ZUNIONSTORE takes the number of input keys first: ZUNIONSTORE lb:week:2026-45 7 key1 key2 ... key7."
+  - "ZREMRANGEBYRANK lb:week:2026-45 0 -11 removes ranks 0 to -11 counted from the lowest score. That leaves the ten highest."
+  - "ZSCORE lb:daily:2026-11-01 h-c-04-1 and its siblings give you the four scores to add up."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "lb:week:2026-45"]
+        equals: zset
+        message: "lb:week:2026-45 should be a sorted set. Build it with ZUNIONSTORE."
+      - cmd: [ZCARD, "lb:week:2026-45"]
+        equals: 10
+        message: "The week board should hold exactly the top ten hostels. Trim it with ZREMRANGEBYRANK lb:week:2026-45 0 -11."
+      - cmd: [ZSCORE, "lb:week:2026-45", "h-c-04-1"]
+        equals: 656
+        message: "h-c-04-1 is on four daily boards (191, 173, 155 and 137 points), so its weekly score should be their sum, 656. If you see 191, the scores were not added up: the default rule of ZUNIONSTORE does that."
+  - type: antipattern
+    checks:
+      - cmd: [TTL, "lb:week:2026-45"]
+        between: [1, 604800]
+        message: "This passes today, but the week board never expires. Next week's board and the one after it will sit in Redis for good. A board named for its window should leave with its window: EXPIRE lb:week:2026-45 604800."
+  - type: quiz
+    question: "Two hostels both finish the week on exactly 500 points. Which one does ZRANGE (lowest first) list first?"
+    options:
+      - id: lexicographic-by-member
+        label: "The one whose id sorts first as plain text: ties are broken by comparing the member names"
+      - id: first-to-reach-it
+        label: "The one that reached 500 first"
+      - id: random-order
+        label: "Either: Redis does not promise an order between equal scores"
+    correct: lexicographic-by-member
+    explanation: "A sorted set breaks ties by comparing the member strings byte by byte (the docs say memcmp, no collation), so h-c-02-3 always comes before h-c-04-1 when their scores are equal, however the points arrived. If a tie should go to whoever got there first, put that into the score yourself."
+
+show_me:
+  component: leaderboard_panel
+  keys: ["lb:week:2026-45"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/leaderboard
+  - https://redis.io/docs/latest/develop/data-types/sorted-sets/
+
+reward:
+  xp: 40
+  badge: "College topper"
+
+solutions:
+  reference: solutions/07-reference.redis
+  wrong:
+    - path: solutions/07-wrong-aggregate-max.redis
+      expect: wrong
+      because: "AGGREGATE MAX keeps a hostel's best single day instead of adding the days. h-c-04-1 shows 191 instead of 656. The board has ten members and an expiry, but it is not the weekly total."
+    - path: solutions/07-works-but-wrong-no-expire.redis
+      expect: works_but_wrong
+      because: "The union, the trim and the sums are right, but the week board never expires, so every week's board stays in Redis for good."

@@ -1,0 +1,5 @@
+# Wrong: AGGREGATE MAX keeps a member's best single day, not the total of the week. Everything else is right, so the
+# board has ten members and an expiry, but the scores are not the weekly points.
+ZUNIONSTORE lb:week:2026-45 7 lb:daily:2026-11-01 lb:daily:2026-11-02 lb:daily:2026-11-03 lb:daily:2026-11-04 lb:daily:2026-11-05 lb:daily:2026-11-06 lb:daily:2026-11-07 AGGREGATE MAX
+ZREMRANGEBYRANK lb:week:2026-45 0 -11
+EXPIRE lb:week:2026-45 604800

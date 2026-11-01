@@ -1,0 +1,4 @@
+# Works, but wrong: the union, the trim and the sums are right, but the week board never expires. Next week's
+# board and the one after sit in Redis for good.
+ZUNIONSTORE lb:week:2026-45 7 lb:daily:2026-11-01 lb:daily:2026-11-02 lb:daily:2026-11-03 lb:daily:2026-11-04 lb:daily:2026-11-05 lb:daily:2026-11-06 lb:daily:2026-11-07
+ZREMRANGEBYRANK lb:week:2026-45 0 -11

@@ -1,0 +1,3 @@
+# u-000011 has 5 points: the fee is 10, so the join must be refused and the wallet left alone.
+steps:
+  - cmd: [SET, "wallet:u-000011", 5]

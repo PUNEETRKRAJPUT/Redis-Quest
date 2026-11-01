@@ -112,18 +112,32 @@ export async function createLearnerDeps(
 }
 
 async function closeRedis(client: LearnerRedis): Promise<void> {
+  // The fallback timer must be cleared when close() wins, or it fires destroy() on an already closed client two
+  // seconds later and that throws ClientClosedError out of the timer (seen by every request that opens a duplicate).
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     if (!client.isOpen) return;
     await Promise.race([
       client.close(),
-      new Promise<void>((resolve) =>
-        setTimeout(() => {
-          client.destroy();
+      new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+          try {
+            client.destroy();
+          } catch {
+            // already closed
+          }
           resolve();
-        }, 2000).unref(),
-      ),
+        }, 2000);
+        timer.unref();
+      }),
     ]);
   } catch {
-    client.destroy();
+    try {
+      client.destroy();
+    } catch {
+      // already closed
+    }
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

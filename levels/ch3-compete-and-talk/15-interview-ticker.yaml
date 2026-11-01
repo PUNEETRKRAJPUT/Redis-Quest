@@ -1,0 +1,89 @@
+id: ch3-15-interview-ticker
+chapter: ch3
+title: "Interview: a ticker from a blank file"
+mode: code
+
+interview:
+  minutes: 15
+  rebuild_of: ch3-10-the-ticker
+  hint_xp_cost: 10
+
+story: |
+  Third round, and the interviewer wants to see you ship a small thing end to end. "A ball is bowled. Every page that is open
+  should hear about it at once. A page that opens a minute later should not be blank. Write the function that handles a ball.
+  Then post one while I watch, and show me the page heard it."
+
+  There is no teaching page open. If you like the file you have now, copy it to a safe name first.
+
+brainstorm:
+  prompt: "Before you type: how do the pages that are open hear about a ball, and how does a page that opens later learn the score?"
+  options:
+    - id: publish-and-keep-last
+      label: "Publish the ball on a channel, and also store the last ball in a key with an expiry"
+      is_reasonable: true
+    - id: only-publish
+      label: "Publish the ball on a channel and nothing else"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: each app copy pushes to its own connected pages"
+      is_reasonable: true
+
+task: |
+  Design and implement the speaking half of a live ticker. Fill in `publish(deps, matchId, ball)` in
+  `workspace/ch3/ticker-publish.js` from a blank file. `ball` is an object like `{ seq: 7, over: 2, ball: 1, runs: 6, batter: "p-028" }`.
+  Return the reply of `PUBLISH`.
+
+  - Broadcast the ball (as JSON, with `matchId` added) on the channel `score:match:<matchId>`.
+  - Keep the same JSON in `score:match:<matchId>:last` for **3600** seconds, for pages that open later.
+
+  The check calls your function for `m-041` and reads the key. Then turn on "Run my code in the app", press Verify, and while
+  it waits post a ball:
+
+      curl -s -X POST localhost:3000/app/matches/m-041/balls -H 'content-type: application/json' -d '{"seq":1,"over":1,"ball":1,"runs":4,"batter":"p-028"}'
+
+hints:
+  - "Pub/Sub keeps nothing for a subscriber that is not there. Where would a late page read the score from?"
+  - "PUBLISH answers with how many subscribers it reached. A steady 0 usually means a typo in the channel."
+
+verify:
+  - type: behavior
+    slot: ticker.publish
+    fixtures: fixtures/15-clean-last.yaml
+    assertions:
+      - call:
+          args:
+            - "m-041"
+            - { seq: 7, over: 2, ball: 1, runs: 6, batter: "p-028" }
+        message: "ticker.publish for m-041 should leave the last ball in the key score:match:m-041:last, with a one hour expiry."
+        sideEffect:
+          - cmd: [GET, "score:match:m-041:last"]
+            matches: '"seq":7'
+            message: "score:match:m-041:last should hold the ball as JSON, including its seq. A page that opens late reads this key because a broadcast leaves nothing behind."
+          - cmd: [TTL, "score:match:m-041:last"]
+            between: [1, 3600]
+            message: "score:match:m-041:last should expire within 3600 seconds (SET ... EX 3600), so an old match does not sit in Redis for ever."
+  - type: event
+    kind: channel_message
+    match: { channel: "score:match:m-041" }
+    timeoutMs: 120000
+    message: "Nothing was published on score:match:m-041 while the checker waited. Turn on Run my code in the app, press Verify, and then post a ball with the curl command from the task. Check the channel name, and that the function really calls PUBLISH."
+
+show_me:
+  component: kv_card
+  keys: ["score:match:m-041:last"]
+docs:
+  - https://redis.io/docs/latest/develop/pubsub/
+
+reward:
+  xp: 80
+  badge: "Ticker, from memory"
+
+solutions:
+  reference: solutions/10-reference.js
+  wrong:
+    - path: solutions/10-wrong-no-publish.js
+      expect: wrong
+      because: "The last ball is stored but nothing is published, so pages that are already watching hear nothing and the app's subscriber receives zero messages."
+    - path: solutions/10-wrong-wrong-channel.js
+      expect: wrong
+      because: "Published on score:m-041 instead of score:match:m-041. PUBLISH answers 0 receivers without complaining, and nobody is subscribed to that name."

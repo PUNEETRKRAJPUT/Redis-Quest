@@ -1,0 +1,4 @@
+# u-000010 has 100 points and no entries have been taken for contest 9001.
+steps:
+  - cmd: [SET, "wallet:u-000010", 100]
+  - cmd: [DEL, "contest:9001:entries"]

@@ -1,0 +1,27 @@
+# Chapter 3, level 3.6: the leaderboard under the Gomti Gang. 100 connections for 8 s on contest 9001: 70% read the top
+# ten, 30% ask where one of five teams stands. The warmup is discarded. Used by the traffic verifier of levels 06 and 14.
+id: leaderboard-storm
+description: "100 connections, 8 s: 70% GET /app/leaderboard/9001?limit=10, 30% GET /app/leaderboard/9001/teams/{team} for five fixed teams."
+durationSec: 8
+connections: 100
+pipelining: 1
+seed: 20260301
+warmup:
+  durationSec: 2
+  connections: 10
+users:
+  count: 100
+  distribution: uniform
+params:
+  team:
+    values: [ft-1, ft-5, ft-777, ft-12345, ft-39999]
+    distribution: uniform
+requests:
+  - method: GET
+    path: /app/leaderboard/9001?limit=10
+    weight: 70
+    userIdHeader: x-user-id
+  - method: GET
+    path: /app/leaderboard/9001/teams/{team}
+    weight: 30
+    userIdHeader: x-user-id

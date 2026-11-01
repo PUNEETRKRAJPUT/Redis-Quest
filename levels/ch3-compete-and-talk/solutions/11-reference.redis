@@ -1,0 +1,5 @@
+# Reference: who is listening right now?
+# How many subscribers does the match channel have? (the reply is the channel name, then the count)
+PUBSUB NUMSUB score:match:m-041
+# Which channels have at least one subscriber, matching a pattern? (a channel nobody listens to is not listed)
+PUBSUB CHANNELS score:*

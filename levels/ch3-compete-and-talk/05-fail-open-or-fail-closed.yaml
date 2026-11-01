@@ -1,0 +1,107 @@
+id: ch3-05-fail-open-or-fail-closed
+chapter: ch3
+title: "Fail open or fail closed"
+mode: decision
+
+story: |
+  It is 10:20 pm. The limiter works, the roommate has pinned its design on the wall, and then Harry Bhaiya asks the
+  question nobody asked while you were building it: "What does it do when Redis is not there?"
+
+  You have seen one answer already. In Chapter 2 the stats cache lost Redis and the page kept serving from Postgres.
+  But that was a cache. The limiter, the contest wallet and the OTP page all ask Redis a question and need an answer,
+  and Redis can be unreachable for ninety seconds on any night. In each place the code has to pick one of two
+  behaviours, and the right pick depends on what the thing protects.
+
+  **Fail open** means: when I cannot check, let the request through. **Fail closed** means: when I cannot check, refuse it.
+  Neither is the safe one. Each is safe for something and expensive for something else.
+
+  Three places, three decisions. There is no code in this level. The reasoning is the work.
+
+brainstorm:
+  prompt: "Redis is unreachable and a piece of code that needs an answer from it has to do something. What is the first thing you ask before choosing?"
+  options:
+    - id: what-does-it-protect
+      label: "What does this check protect, and what does it cost to be wrong in each direction?"
+      is_reasonable: true
+    - id: always-fail-open
+      label: "Always let the request through: an error page is the worst outcome"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: make the check not depend on Redis at all"
+      is_reasonable: true
+
+teach: |
+  The rate-limiter page in the Redis docs says only this about it: if `allow()` loses its connection it throws, and you
+  choose to "fail open or closed depending on your policy". The policy is yours, and it comes from three questions:
+
+  - **What is wrong if I let a bad request through?** For a points wallet, a fee that is not taken is points that were
+    not paid, and a wallet that went negative is a number you cannot unsee. For a stats page, the answer is "nothing".
+  - **What is wrong if I refuse a good request?** For stats, a stats page that errors on every refresh is a bad night. For
+    login, nobody can log in at all.
+  - **Is there a weaker check I can run instead?** A limiter that cannot ask Redis can still count in the memory of its own
+    process. You saw in 3.1 why that is weaker (each copy counts alone), but a weak limit is better than none.
+
+  So a good answer is often neither open nor closed, but "degrade to something smaller, say so loudly". Chapter 2's cache
+  did exactly that: a Redis failure became a miss, Postgres answered, and the log said what happened.
+
+  One thing stays true for all three: whichever you pick, **log it and alert on it**. A system that is silently failing open
+  is a system that has stopped doing its job and told nobody.
+
+task: |
+  Answer all three questions. For each one, pick the behaviour you would ship. The explanation next to the right answer
+  gives the reasoning, so read it even if you were right.
+
+verify:
+  - type: quiz
+    question: "Redis is unreachable while a player taps Join on a contest with a 10-point entry fee. The join code cannot read the wallet. What does it do?"
+    options:
+      - id: join-fail-closed
+        label: "Refuse the join with a clear 'try again in a moment': a fee that cannot be checked is not given away"
+      - id: join-fail-open
+        label: "Let them in now and settle the wallet once Redis is back"
+      - id: join-guess-balance
+        label: "Use the last balance this app copy saw, and let them in if that was enough"
+    correct: join-fail-closed
+    explanation: "The wallet is the one thing in this app that must never be wrong. Letting a join through without checking means entries nobody paid for, and settling later means chasing balances that other joins have since changed. A player who sees 'try again' loses a minute. The last balance a copy saw can be stale by a whole stream of joins, which is exactly the race you spent level 9 removing."
+  - type: quiz
+    question: "Redis is unreachable and the stats page asks the cache first, as it did in Chapter 2. What does the page do?"
+    options:
+      - id: stats-fail-open
+        label: "Treat it as a cache miss: answer from Postgres, a little slower, and log that the cache was unavailable"
+      - id: stats-fail-closed
+        label: "Show an error until Redis is back: serving stats without the cache could overload Postgres"
+      - id: stats-retry-forever
+        label: "Keep retrying Redis until it answers, however long that takes"
+    correct: stats-fail-open
+    explanation: "A cache is allowed to forget, which means it is allowed to be absent. The page is still correct without it, only slower, so there is nothing to protect by refusing. Postgres takes the crowd for a minute, which is the price the cache was always saving you from. Retrying forever just turns a missing optimisation into an outage."
+  - type: quiz
+    question: "Redis is unreachable and the OTP limiter cannot answer. TextTara Sir is billing per SMS and the Gomti Gang's script is running. What does the limiter do?"
+    options:
+      - id: otp-open-with-fallback
+        label: "Fail open, but under a small limit that each copy counts in its own memory, and raise an alert that the shared limiter is down"
+      - id: otp-open-plain
+        label: "Fail open completely: the limiter is a nicety, and login matters more"
+      - id: otp-closed
+        label: "Fail closed: refuse every OTP until Redis is back"
+    correct: otp-open-with-fallback
+    explanation: "Refusing every OTP means no student can log in for as long as Redis is down, so a fault in your infrastructure becomes an outage for everyone. Letting everything through gives the Gomti Gang the unlimited SMS meter they have been trying to find. The middle path keeps real users logging in and keeps a ceiling on the damage. You saw in 3.1 that a per-copy count is weaker than a shared one, which is why it is the fallback and not the design, and why the alert matters: it tells you the strong limiter is not running."
+
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/rate-limiter
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+
+reward:
+  xp: 35
+
+solutions:
+  reference: [join-fail-closed, stats-fail-open, otp-open-with-fallback]
+  wrong:
+    - option: join-fail-open
+      expect: wrong
+      because: "The wallet is the one check that must never be skipped. Entries nobody paid for, and balances to chase afterwards, cost more than a player seeing 'try again'."
+    - option: stats-fail-closed
+      expect: wrong
+      because: "Refusing to serve stats because the cache is gone turns an optimisation into an outage. The page is correct from Postgres, only slower."
+    - option: otp-open-plain
+      expect: wrong
+      because: "With no limit at all during the outage the Gomti Gang's script has an unlimited SMS meter, and nobody is told. Open is acceptable only with a small fallback limit and an alert."

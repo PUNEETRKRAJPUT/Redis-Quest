@@ -1,0 +1,27 @@
+# u-limit-1 starts with ten log entries scored 1700000000000 (November 2023, long outside any window). A limiter that
+# never trims the log sees ten entries and refuses everything. u-limit-2 starts empty.
+steps:
+  - cmd: [DEL, "ratelimit:log:u-limit-1", "ratelimit:log:u-limit-2"]
+  - cmd:
+      - ZADD
+      - "ratelimit:log:u-limit-1"
+      - 1700000000000
+      - "old-01"
+      - 1700000000000
+      - "old-02"
+      - 1700000000000
+      - "old-03"
+      - 1700000000000
+      - "old-04"
+      - 1700000000000
+      - "old-05"
+      - 1700000000000
+      - "old-06"
+      - 1700000000000
+      - "old-07"
+      - 1700000000000
+      - "old-08"
+      - 1700000000000
+      - "old-09"
+      - 1700000000000
+      - "old-10"

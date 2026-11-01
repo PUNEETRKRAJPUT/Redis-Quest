@@ -1,0 +1,119 @@
+id: ch3-09-money-moves
+chapter: ch3
+title: "Points that cannot go negative"
+mode: code
+
+story: |
+  It is 10:30 pm and the warden's phone is ringing. His nephew Bunty has worked out that if he taps "Join" fifty times very fast,
+  the contest takes the entry fee fifty times. The wallet is at minus 400, and his whole class is in a contest that costs
+  10 points with a balance that should have paid for ten of them. "One entry fee per tap, same as the mess token," the warden
+  says. "And nobody pays what they do not have."
+
+  Back in Chapter 1 you made the wallet a number that changes in one step, and for adding a number that was enough. But joining
+  a contest is not an addition. It is: look at the balance, decide whether it is enough, and only then take the fee and count the
+  entry. Between "look" and "take" another tap can change the balance, and the decision you made is about a number that is no
+  longer true.
+
+  You need the check and the debit to behave as one step, even with fifty taps in the same millisecond.
+
+brainstorm:
+  prompt: "Fifty simultaneous joins on a wallet of 100 points, fee 10. Exactly ten may succeed. Where does the decision have to be made?"
+  options:
+    - id: guarded-transaction
+      label: "In Redis, in a way that is aborted or retried if the balance changes between looking and taking"
+      is_reasonable: true
+    - id: check-then-decrby
+      label: "In the app: read the balance, if it is enough take the fee with DECRBY"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: UPDATE wallets SET balance = balance - 10 WHERE balance >= 10 in Postgres"
+      is_reasonable: true
+
+teach: |
+  The transactions page in the docs gives two tools. A `MULTI`/`EXEC` block makes its commands run together with nobody else's in
+  between, but it cannot read a value and decide: inside `MULTI` every command only answers `QUEUED`. For read-decide-write you
+  want **optimistic locking**: `WATCH` the key, read it normally, decide, then `MULTI` ... `EXEC`. If a watched key changed in the
+  meantime (a write by anyone, or an expiry), the transaction is aborted and **nothing in it runs**, and you try again.
+
+  How it looks in this node-redis:
+
+  - `await conn.watch(wallet)`, then `await conn.get(wallet)`, then `conn.multi().decrBy(...).incr(...).exec()`.
+  - When the watched key has changed, `exec()` **throws a `WatchError`** (the docs say the exec rejects). Its `name` is just
+    `"Error"`, so recognise it with `err.constructor.name === 'WatchError'`, and loop. `unwatch()` if you decide not to go on.
+  - A `WATCH` belongs to one **connection**. The shared client serves every request at once, so a `WATCH` on it is shared by all of
+    them, and one call's `EXEC` clears every other call's watch. The docs say to use a pool of connections (`createClientPool()`,
+    `pool.execute(...)`) in a server. Here, take your own with `deps.redis.duplicate()` and `await conn.connect()` it: a
+    duplicate starts closed. The game closes it when your call ends, so do not close it yourself.
+
+  The other tool the docs offer is a Lua script: everything you can do with a transaction you can also do with a script, and
+  usually it is simpler and faster. Read the wallet, compare, `DECRBY`, `INCR` and return, all inside one script, and there is
+  no retry loop at all. WATCH is how you learn the problem; a script is often how you would ship the answer.
+
+task: |
+  Fill in `join(deps, userId, contestId, fee)` in `workspace/ch3/contest-join.js`. It returns `true` if the fee was taken and
+  the user is in, `false` if the balance is too low. It must be exactly one or the other: `true` or `false`, nothing else.
+
+  - The wallet is the string `wallet:<userId>` holding the points. The entry counter is the string `contest:<contestId>:entries`.
+  - If the balance is at least `fee`: take `fee` from the wallet and add one to the entries counter **together**, and return `true`.
+  - Otherwise change nothing and return `false`.
+  - Use `WATCH` on your own connection (`deps.redis.duplicate()`, then `connect()`), and retry when the transaction is aborted. A Lua
+    script is also accepted.
+
+  The check gives `u-000010` a wallet of 100 and sends **fifty joins at the same time** with fee 10. Exactly ten must succeed, the
+  wallet must end at 0 and the entries counter at 10. A user with 5 points must be refused and keep their 5.
+
+hints:
+  - "WATCH, GET, decide, MULTI ... EXEC, and wrap the EXEC in try/catch: an aborted transaction throws, it does not return null."
+  - "With fifty rivals you may need to retry many times. Allow a few hundred attempts, not three."
+  - "Calling conn.watch() on deps.redis itself looks like it works one request at a time. Use deps.redis.duplicate() and await conn.connect()."
+
+verify:
+  - type: behavior
+    slot: contest.join
+    fixtures: fixtures/09-wallet-100.yaml
+    concurrency: 50
+    assertions:
+      - call: { args: ["u-000010", 9001, 10] }
+        repeat: 50
+        expectCount: { value: true, equals: 10 }
+        message: "Fifty joins at once on a wallet of 100 with a fee of 10: exactly 10 should succeed. More means the balance was checked and then changed by someone else (the check and the debit are not one step); fewer means a retry gave up."
+        sideEffect:
+          - cmd: [GET, "wallet:u-000010"]
+            equals: "0"
+            message: "The wallet should end at exactly 0 after ten fees of 10. Below zero means fees were taken that the balance could not pay."
+          - cmd: [GET, "contest:9001:entries"]
+            equals: "10"
+            message: "contest:9001:entries should read 10: one count for every fee taken, not one more or less."
+  - type: behavior
+    slot: contest.join
+    fixtures: fixtures/09-wallet-5.yaml
+    assertions:
+      - call: { args: ["u-000011", 9001, 10] }
+        expect: false
+        message: "u-000011 has 5 points and the fee is 10. contest.join should return false."
+        sideEffect:
+          - cmd: [GET, "wallet:u-000011"]
+            equals: "5"
+            message: "A refused join must leave the wallet alone: u-000011 should still have 5 points."
+
+show_me:
+  component: kv_card
+  keys: ["wallet:u-000010"]
+docs:
+  - https://redis.io/docs/latest/develop/using-commands/transactions/
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+  - https://redis.io/docs/latest/develop/programmability/eval-intro/
+
+reward:
+  xp: 60
+  badge: "Never negative"
+
+solutions:
+  reference: solutions/09-reference.js
+  wrong:
+    - path: solutions/09-wrong-get-then-decrby.js
+      expect: wrong
+      because: "Reads the balance, decides in JavaScript, then DECRBY. Fifty joins at once all read 100, all decide there is enough and all fifty fees are taken: far more than ten succeed and the wallet goes below zero."
+    - path: solutions/09-wrong-watch-on-shared-client.js
+      expect: wrong
+      because: "WATCH on the shared client. A watch belongs to the connection, and every request uses this one, so the first EXEC clears the watch for all of them and the rest run unguarded. More than ten joins succeed. The fix is a connection of your own: deps.redis.duplicate() and connect()."

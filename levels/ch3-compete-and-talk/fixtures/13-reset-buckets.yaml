@@ -1,0 +1,3 @@
+# Every run starts with full buckets.
+steps:
+  - cmd: [DEL, "ratelimit:u-limit-1", "ratelimit:u-limit-2"]

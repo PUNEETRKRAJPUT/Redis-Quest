@@ -1,0 +1,117 @@
+id: ch3-03-token-bucket
+chapter: ch3
+title: "The token bucket"
+mode: code
+
+story: |
+  It is 10:14 pm. The fixed window held for about four minutes. Mukul worked out that a script which waits for the
+  top of the minute can send ten requests at 10:14:59 and ten more at 10:15:00, and the SMS meter spun twenty times.
+  "Only a friendly stress test, bhai."
+
+  Harry Bhaiya, who has now read the rate-limiter page, wants "the official one". The docs recommend a **token bucket**:
+  every user has a bucket of ten tokens, each OTP costs one, and one token drips back every minute. A user who has been
+  quiet can send ten in a burst, a user who has been busy waits for the drip, and there is no boundary to straddle.
+
+  The bucket is a small piece of state (two numbers) that must be read, changed and written back as one step, even when a
+  hundred requests arrive in the same millisecond. That is a job for a Lua script running inside Redis.
+
+brainstorm:
+  prompt: "A bucket of 10 tokens per user that refills one token a minute. The read, the decision and the write must not be interleaved with anyone else's. Where does that logic run?"
+  options:
+    - id: lua-in-redis
+      label: "In a Lua script on the Redis server: the whole read-decide-write runs as one step"
+      is_reasonable: true
+    - id: js-read-write
+      label: "In the app: read the bucket, do the maths in JavaScript, write it back"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a library that keeps buckets in each app's memory"
+      is_reasonable: false
+
+teach: |
+  The docs' token bucket keeps one **hash** per user at `ratelimit:<userId>` with two fields, `tokens` and
+  `last_refill`. On each request the script:
+
+  - reads both fields with `HMGET` (a missing hash means a full bucket),
+  - works out `refills = floor(elapsed / refill_interval)` and sets `tokens = min(capacity, tokens + refills * refill_rate)`,
+  - spends one token if there is at least one, and writes both fields back with `HSET`,
+  - answers 1 (allowed) or 0 (denied).
+
+  A script runs atomically: it blocks everything else on the server while it executes, so keep it short. All the key
+  names go in `KEYS` and everything else, including the current time, in `ARGV`, so the script stays a function of its inputs.
+
+  - `EVAL script numkeys key [key ...] arg [arg ...]` sends the whole script text on every call.
+  - `SCRIPT LOAD script` stores it on the server and answers with its SHA1. `EVALSHA sha numkeys ...` then runs it by
+    that hash: a short command instead of the whole text.
+  - The script cache is volatile. It is not persisted, so a restart or a failover empties it and `EVALSHA` answers
+    `NOSCRIPT`. The docs' advice: on `NOSCRIPT`, load and retry; in a pipeline, fall back to `EVAL`. This is why every
+    real client wraps `EVALSHA` with a fallback.
+
+  A worked example, not your task:
+
+      SCRIPT LOAD "return redis.call('SET', KEYS[1], ARGV[1])"
+      EVALSHA <the sha it printed> 1 foo bar
+
+task: |
+  Fill in `allow(deps, userId)` in `workspace/ch3/ratelimit.js` again, replacing the fixed window. It returns `true` to allow,
+  `false` to refuse.
+
+  - The key is `ratelimit:<userId>`, a hash with the fields `tokens` and `last_refill` (milliseconds).
+  - Capacity **10**, refill **1 token every 60 seconds** (60,000 ms). A user with no hash has a full bucket.
+  - Read, decide and update in **one Lua script**. Load it with `SCRIPT LOAD`, run it with `EVALSHA`, and when Redis
+    answers `NOSCRIPT` run the full `EVAL` instead. `redis.sendCommand([...])` takes the raw command as a list of strings.
+  - Pass the current time in milliseconds as an argument.
+
+  The check sends 15 requests for `u-limit-1`, then 100 at once for `u-limit-2`.
+
+hints:
+  - "The script returns 1 or 0; your function returns allowed === 1."
+  - "Compute sha once with SCRIPT LOAD and keep it in a variable outside the function. Redis can forget it, so be ready to catch the NOSCRIPT error and send EVAL."
+  - "HSET the tokens and last_refill fields back in the script, every time, even when the request was denied."
+
+verify:
+  - type: behavior
+    slot: ratelimit.allow
+    fixtures: fixtures/03-reset-buckets.yaml
+    assertions:
+      - call: { args: ["u-limit-1"] }
+        repeat: 15
+        expectCount: { value: true, equals: 10 }
+        message: "Sent 15 requests for u-limit-1 one after another; exactly 10 should be allowed (a bucket of 10 that refills one token a minute)."
+        sideEffect:
+          - cmd: [TYPE, "ratelimit:u-limit-1"]
+            equals: hash
+            message: "The bucket for u-limit-1 should be a hash at ratelimit:u-limit-1."
+          - cmd: [HGET, "ratelimit:u-limit-1", tokens]
+            equals: "0"
+            message: "After 10 allowed requests the bucket should hold 0 tokens, in the tokens field of the hash."
+  - type: antipattern
+    slot: ratelimit.allow
+    fixtures: fixtures/03-reset-buckets.yaml
+    concurrency: 100
+    assertions:
+      - call: { args: ["u-limit-2"] }
+        repeat: 100
+        expectCount: { value: true, lte: 10 }
+        message: "This passes one request at a time, but 100 concurrent requests got more than 10 through. Your read and your write are separate commands, so requests interleave between them and all see a full bucket. Put the read, the decision and the write in one Lua script."
+
+show_me:
+  component: otp_limiter_panel
+  keys: ["ratelimit:u-limit-1"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/rate-limiter
+  - https://redis.io/docs/latest/develop/programmability/eval-intro/
+
+reward:
+  xp: 60
+  badge: "Atomic"
+
+solutions:
+  reference: solutions/03-reference.js
+  wrong:
+    - path: solutions/03-wrong-allow-all.js
+      expect: wrong
+      because: "Allows every request, which is what the app does before you touch it: 15 of 15 are allowed and no ratelimit:<userId> hash is ever written."
+    - path: solutions/03-works-but-wrong-js-race.js
+      expect: works_but_wrong
+      because: "A correct bucket one request at a time, but it reads with HMGET, does the maths in JavaScript and writes with HSET. A hundred concurrent requests all read a full bucket before any of them writes, and all are allowed."

@@ -1,0 +1,3 @@
+# The two boards the check writes to start empty.
+steps:
+  - cmd: [DEL, "lb:contest:9002", "lb:contest:9003"]

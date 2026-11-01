@@ -1,0 +1,129 @@
+id: ch3-04-sliding-window-log
+chapter: ch3
+title: "The sliding window log"
+mode: code
+
+story: |
+  It is 10:16 pm. Mukul has been told by a friend that the bucket allows a burst of ten, and he has taken that as a challenge:
+  ten requests, wait for the drip, one more, wait, one more. The bucket does exactly what it says. The warden, on the
+  other hand, has been reading over the roommate's shoulder and wants to know why one student can fire ten OTPs in a
+  second at all. "A rule is a rule. Ten in a minute means any minute."
+
+  He has a point. There is a stricter design: remember every allowed request with its time, and on each new request
+  look back exactly sixty seconds from now. No boundary, no burst beyond the limit, always an exact answer. It costs more
+  memory, and the level asks you to say how much more in words, not in bytes.
+
+brainstorm:
+  prompt: "At most 10 requests in any 60-second stretch, exact, with no boundary effect. What do you remember about each user?"
+  options:
+    - id: timestamps-in-a-zset
+      label: "The time of every allowed request, in a sorted set scored by time, trimmed on each call"
+      is_reasonable: true
+    - id: counter-per-minute
+      label: "A counter per clock minute, adding this minute and last minute together"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a rate limiter in the load balancer"
+      is_reasonable: true
+
+teach: |
+  The docs' **sliding window log** keeps one sorted set per user at `ratelimit:log:<userId>`. Each allowed request is one
+  member, scored with the time in milliseconds. A request does four things:
+
+  - `ZREMRANGEBYSCORE key 0 <now - window>` drops everything older than the window,
+  - `ZCARD key` counts what is left,
+  - if that is under the limit, `ZADD key <now> <member>` records this request,
+  - `EXPIRE` (or `PEXPIRE`) on the key, the docs use twice the window, so an idle user's log cleans itself up.
+
+  The **member must be unique**. The docs use a UUID. Two requests in the same millisecond with the same member would be
+  one entry in the set and one request would go uncounted. Make the member in JavaScript, for example the time plus random
+  hex, and pass it to the script in `ARGV`.
+
+  As with the bucket, the trim, the count and the add must be one step, so they go in a Lua script. Written as three commands
+  from JavaScript they race, exactly like the read-then-write counter did.
+
+  The docs rate the log as exact, with no bursts, and O(n) in memory: it stores one entry per allowed request, up to the
+  limit, for every user, where the bucket stores two fields per user.
+
+  A worked example, not your task:
+
+      ZADD demo:log 1000 req-a 1500 req-b
+      ZREMRANGEBYSCORE demo:log 0 1200
+      ZCARD demo:log                 -> 1
+
+task: |
+  Fill in `allow(deps, userId)` in `workspace/ch3/ratelimit.js` once more, this time as a sliding window log.
+
+  - The key is `ratelimit:log:<userId>`, a sorted set. Member: unique per request (make it in JavaScript and pass it in).
+    Score: the time in milliseconds.
+  - Limit **10** requests in any **60,000 ms**. In one Lua script: trim entries older than the window, count, and only if
+    the count is under 10 add this request and set the key to expire in 120,000 ms.
+  - Return `true` if allowed, `false` if not.
+
+  The check starts `u-limit-1` with ten old entries scored in 2023, so a limiter that never trims has nothing left to give.
+  Then it sends 15 requests, then 100 at once for `u-limit-2`.
+
+hints:
+  - "Pass now, the window, the limit and the unique member as ARGV. ZREMRANGEBYSCORE key 0 (now - window) removes the old ones."
+  - "Only ZADD when ZCARD is below the limit, so a denied request does not add to the log."
+  - "A member like `${now}-${randomBytes(6).toString('hex')}` is unique enough."
+
+verify:
+  - type: behavior
+    slot: ratelimit.allow
+    fixtures: fixtures/04-seed-old-entries.yaml
+    assertions:
+      - call: { args: ["u-limit-1"] }
+        repeat: 15
+        expectCount: { value: true, equals: 10 }
+        message: "u-limit-1 starts with ten log entries from 2023, which are long outside the 60 second window. Sent 15 requests one after another, exactly 10 should be allowed: the old entries must be trimmed away, not counted."
+        sideEffect:
+          - cmd: [ZCARD, "ratelimit:log:u-limit-1"]
+            equals: 10
+            message: "The log for u-limit-1 should hold exactly the ten requests that were allowed. The old entries should be gone and the refused requests should not be recorded."
+          - cmd: [TTL, "ratelimit:log:u-limit-1"]
+            between: [1, 120]
+            message: "The log should expire on its own, within 120 seconds of the last request."
+  - type: antipattern
+    slot: ratelimit.allow
+    fixtures: fixtures/04-seed-old-entries.yaml
+    concurrency: 100
+    assertions:
+      - call: { args: ["u-limit-2"] }
+        repeat: 100
+        expectCount: { value: true, lte: 10 }
+        message: "This passes one request at a time, but 100 concurrent requests got more than 10 through. Trim, count and add are separate commands, so requests interleave between them and all see an empty log. Put the three steps in one Lua script."
+  - type: quiz
+    question: "What does the sliding window log cost compared with the token bucket?"
+    options:
+      - id: one-entry-per-request
+        label: "Memory that grows with the limit: one entry for every allowed request per user, where the bucket keeps two fields per user"
+      - id: more-round-trips
+        label: "Two round trips per request instead of one"
+      - id: less-exact
+        label: "It is only approximate, so it lets through a few extra requests"
+      - id: no-expiry
+        label: "It cannot expire on its own, so someone has to clean it up"
+    correct: one-entry-per-request
+    explanation: "The log stores a member for every request it allowed in the last window, so a limit of 10 means up to 10 entries per user and a limit of 1,000 means up to 1,000, times the number of users. That is the docs' O(n) memory. The bucket stores two fields per user whatever the limit is. In exchange the log is exact with no bursts. It is still one script call and it does expire (PEXPIRE)."
+
+show_me:
+  component: kv_card
+  keys: ["ratelimit:log:u-limit-1"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/rate-limiter
+  - https://redis.io/docs/latest/develop/data-types/sorted-sets/
+
+reward:
+  xp: 60
+  badge: "Exact"
+
+solutions:
+  reference: solutions/04-reference.js
+  wrong:
+    - path: solutions/04-wrong-no-trim.js
+      expect: wrong
+      because: "The log is written but never trimmed, so it counts every request ever made. u-limit-1 starts with ten old entries, the count is already at the limit, and every request is refused."
+    - path: solutions/04-works-but-wrong-js-race.js
+      expect: works_but_wrong
+      because: "Exact one request at a time, but trim, count and add are three commands from JavaScript. A hundred concurrent requests all count an empty log before any of them adds an entry, and all are allowed."
