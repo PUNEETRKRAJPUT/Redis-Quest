@@ -88,13 +88,15 @@ export function evaluateTraffic(
   const app = run.app;
   const noApp = 'no app metrics arrived during the run, so this cannot be measured';
 
-  if (run.load.ok2xx === 0) {
+  // A 4xx is an answer (a missing player is a 404, a throttled client a 429); only 5xx and no reply count as failure.
+  const answered = run.load.ok2xx + Math.max(0, run.load.non2xx - run.load.status5xx);
+  if (answered === 0) {
     add(
       'requests',
       false,
       0,
-      'some successful responses',
-      'no request got a successful response during the run',
+      'some answered requests',
+      'no request got an answer during the run (every one failed or got a 5xx)',
     );
   }
   const ratio = (num: number, den: number) => (den > 0 ? num / den : null);
