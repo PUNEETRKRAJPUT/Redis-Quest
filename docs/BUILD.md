@@ -27,7 +27,7 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 | P0-07 | App skeleton: baseline routes, slot registry, target switching | 3 | done | opus | specs/P0-07 | check/P0-07.sh | handoffs/P0-07 |
 | P0-08 | Runner: load workspace module, call with deps, metrics, crash isolation | 3 | done | sonnet | specs/P0-08 | check/P0-08.sh | handoffs/P0-08 |
 | P0-09 | Verifier engine: redis, antipattern, quiz, event; traffic + behavior wiring | 4 | in progress | opus | specs/P0-09 | check/P0-09.sh | |
-| P0-10 | UI shell: chapter map, level view (seven beats), terminal, editor, logs, show-me | 4 | in progress | sonnet | specs/P0-10 | check/P0-10.sh | |
+| P0-10 | UI shell: chapter map, level view (seven beats), terminal, editor, logs, show-me | 4 | done | sonnet | specs/P0-10 | check/P0-10.sh | handoffs/P0-10 |
 | P0-11 | Redis Insight auto-provisioning via its API | 3 | done | sonnet | specs/P0-11 | check/P0-11.sh | handoffs/P0-11 |
 | P0-12 | CI: build, lint, level validation, checks, Playwright Chapter 0 | 5 | done (green run 41255059415; Playwright hook filled by P0-10) | sonnet | specs/P0-12 | check/P0-12.sh | handoffs/P0-12 |
 
@@ -41,6 +41,11 @@ start early if everything it depends on is `done`.
 | F-01 | Caddy: use dynamic A-record upstreams for `app` so requests round-robin across scaled instances without the app closing every connection (`APP_MAX_REQUESTS_PER_SOCKET=1` is the current workaround) | todo |
 | F-02 | Engine metrics aggregate must sum `dbQueries` and `redisCommands` (P0-09 is making this change) | in progress |
 | F-03 | `.prettierignore` exists; add a `format:check` step to CI once the tree is stable | todo |
+| F-04 | UI: render the `ideal` object from the verify response and call `GET /api/levels/:id/ideal` for "reveal anyway" (P0-09 is adding the endpoint) | todo |
+| F-05 | Schema: `show_me` should carry the key(s) to display (`{ component, keys }`), additive; UI stops hard-coding keys per level | todo |
+| F-06 | UI: clicking away from a focused terminal makes the page jump; fix for real users | todo |
+| F-07 | UI: Redis Insight link should use the configured `INSIGHT_PORT`, not 5540 | todo |
+| F-08 | Playwright e2e: set `ALLOW_DEV_COMPLETE_FALLBACK=false` now that verify works | todo |
 
 ## Content (after Phase 0)
 

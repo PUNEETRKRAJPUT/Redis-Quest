@@ -1,0 +1,27 @@
+# Isolation for scripts/check/P0-10.sh (compose project quest-p10). The base docker-compose.yml bind-mounts
+# ./logs into proxy, engine, app, runner and postgres, and ./workspace and ./.progress into app and runner.
+# Those are shared with every other agent's stack, so this override points them at a scratch tree under
+# ui/e2e/.scratch. The engine's own workspace, progress and levels mounts are redirected through
+# QUEST_WORKSPACE_DIR, QUEST_PROGRESS_DIR and QUEST_LEVELS_DIR in .env.p10 (the base file reads those).
+# The scratch levels directory holds only levels/ch0-boot, so a half-written Chapter 1 cannot make the
+# engine answer levels_invalid.
+services:
+  proxy:
+    volumes:
+      - ${P10_LOGS_DIR}:/logs
+  postgres:
+    volumes:
+      - ${P10_LOGS_DIR}:/logs
+  engine:
+    volumes:
+      - ${P10_LOGS_DIR}:/logs
+  app:
+    volumes:
+      - ${P10_LOGS_DIR}:/logs
+      - ${QUEST_WORKSPACE_DIR}:/workspace
+      - ${QUEST_PROGRESS_DIR}:/progress
+  runner:
+    volumes:
+      - ${P10_LOGS_DIR}:/logs
+      - ${QUEST_WORKSPACE_DIR}:/workspace
+      - ${QUEST_PROGRESS_DIR}:/progress

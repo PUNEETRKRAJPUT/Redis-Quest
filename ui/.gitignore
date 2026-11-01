@@ -1,0 +1,5 @@
+e2e/screenshots/
+e2e/.scratch/
+e2e/test-results/
+test-results/
+playwright-report/
