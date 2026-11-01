@@ -359,6 +359,13 @@ files hold one command per line in `redis-cli` syntax, `#` for comments, and may
 template variables. In a `decision` level option ids are unique across all its quizzes, the
 reference lists every correct option, and each wrong entry names an incorrect option.
 
+A `code` level whose verify specs name several slots has one solution path, so each solution is a **bundle**: one
+module with a named export per slot (the part of the slot name after the dot: `prefetch.bulkLoad` is `bulkLoad`,
+`session.destroyAll` is `destroyAll`) and a default export. `scripts/grade/grade.sh` copies the bundle to
+`_bundle-<level-id>-<solution>.js` beside the first slot's workspace file and writes each slot file as a two-line shim
+(`import * as bundle from './_bundle-....js'; export default bundle.<name>;`), so the learner-facing contract of one
+default export per file is unchanged. See `docs/grading.md`.
+
 CI runs every verifier against the reference (must be `right`), each wrong solution (must give
 its declared verdict) and an empty stub (must be `wrong`).
 

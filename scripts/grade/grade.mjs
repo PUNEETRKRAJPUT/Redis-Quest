@@ -347,14 +347,45 @@ async function buildAnswers(lv, good) {
 const touched = new Map(); // rel -> original content (string) or null when it did not exist
 
 function slotOf(lv) {
-  const slots = new Set(
-    lv.level.verify.filter((v) => typeof v.slot === 'string').map((v) => v.slot),
-  );
-  if (slots.size === 0) return { err: 'no slot' };
-  if (slots.size > 1) return { err: `several slots (${[...slots].join(', ')})` };
-  const slot = [...slots][0];
-  const rel = slotFiles[slot];
-  return rel ? { slot, rel } : { err: `unknown slot ${slot}` };
+  const slots = [
+    ...new Set(lv.level.verify.filter((v) => typeof v.slot === 'string').map((v) => v.slot)),
+  ];
+  if (slots.length === 0) return { err: 'no slot' };
+  const unknown = slots.find((s) => !slotFiles[s]);
+  if (unknown) return { err: `unknown slot ${unknown}` };
+  const list = slots.map((slot) => ({ slot, rel: slotFiles[slot] }));
+  return { slots: list, rel: list[0].rel };
+}
+
+/**
+ * Several slots, one solution file ("bundle"): the bundle's named export for a slot is the part of the slot
+ * name after the first dot (prefetch.bulkLoad -> bulkLoad). The bundle goes next to the first slot's file as
+ * _bundle-<level-id>-<solution>.js and each slot's own file becomes a two-line shim that re-exports that name
+ * as its default export. docs/grading.md, "Bundle solutions".
+ */
+function bundleFiles(lv, solPath, slots, source) {
+  const dir = dirname(slots[0].rel);
+  const bundleName = `_bundle-${lv.level.id}-${basename(solPath, extname(solPath))}.js`;
+  const files = [[`${dir === '.' ? '' : `${dir}/`}${bundleName}`, source]];
+  for (const { slot, rel } of slots) {
+    const exp = slot.slice(slot.indexOf('.') + 1);
+    // Relative path from the shim's directory to the bundle (slot files of one level may sit in different dirs).
+    const from = dirname(rel);
+    const bdir = dirname(files[0][0]);
+    const up =
+      from === '.'
+        ? ''
+        : from
+            .split('/')
+            .map(() => '..')
+            .join('/') + '/';
+    const spec = from === bdir ? `./${bundleName}` : `${up || './'}${files[0][0]}`;
+    files.push([
+      rel,
+      `import * as bundle from '${spec}'; // grade.mjs bundle shim for ${slot}\nexport default bundle.${exp};\n`,
+    ]);
+  }
+  return files;
 }
 
 async function readWorkspace(rel) {
@@ -366,7 +397,7 @@ async function readWorkspace(rel) {
   return r.status === 200 ? r.body.content : null;
 }
 
-async function writeWorkspace(rel, content) {
+async function writeWorkspace(rel, content, settle = true) {
   if (!touched.has(rel)) touched.set(rel, await readWorkspace(rel));
   if (opts.workspace) {
     const f = join(opts.workspace, rel);
@@ -378,7 +409,7 @@ async function writeWorkspace(rel, content) {
       throw new Error(`PUT /api/workspace/file ${rel} -> ${r.status} ${JSON.stringify(r.body)}`);
   }
   // The app polls workspace files once a second; let it see this version before the engine activates the slot.
-  await sleep(2000);
+  if (settle) await sleep(2000);
 }
 
 async function restoreWorkspace() {
@@ -517,8 +548,16 @@ async function gradeLevel(lv) {
         continue;
       }
       await start(id);
-      await writeWorkspace(sl.rel, readFileSync(file, 'utf8'));
-      note = `workspace/${sl.rel}`;
+      const source = readFileSync(file, 'utf8');
+      if (sl.slots.length === 1) {
+        await writeWorkspace(sl.rel, source);
+        note = `workspace/${sl.rel}`;
+      } else {
+        const files = bundleFiles(lv, s.path, sl.slots, source);
+        for (let k = 0; k < files.length; k++)
+          await writeWorkspace(files[k][0], files[k][1], k === files.length - 1);
+        note = `bundle ${files[0][0]} + ${files.length - 1} shims`;
+      }
     } else if (ext === '.redis') {
       await start(id);
       transcript = await runRedisFile(file, ctxOf(lv));
@@ -538,6 +577,17 @@ async function gradeLevel(lv) {
     const answers = await buildAnswers(lv, good);
     const out = await verify(id, answers);
     record(lv, label, s.expect, out, { because: s.because, note });
+    // Bundle shims and the bundle are removed (or emptied through the API) after each solution.
+    if (touched.size > 1) await restoreWorkspace();
+    // A solution that changed server config (ops levels such as ch2-09) must not poison later levels: a wrong one
+    // that sets noeviction at 64mb makes every later write fail with OOM. Re-apply the stack's defaults.
+    if (/CONFIG\s+SET/i.test(readFileSync(file, 'utf8'))) {
+      await cli('CONFIG SET maxmemory 536870912');
+      await cli('CONFIG SET maxmemory-policy noeviction');
+      log(
+        `      reset maxmemory 536870912 and maxmemory-policy noeviction after ${label} (it contains CONFIG SET)`,
+      );
+    }
     // A solution that wiped Redis leaves the game's own mirror missing: put it back before the next one.
     if (wipes(transcript)) await api('POST', '/api/progress/restore');
   }

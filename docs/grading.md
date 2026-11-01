@@ -50,9 +50,29 @@ Then it fills the other verifiers:
 - `event`: `cli_ping` comes from a `PING` in the solution; `ui_connected` is posted as the UI would; `progress_restored` is
   produced by the harness calling `POST /api/progress/restore` (what accepting the restore offer does), and **only the
   restore**, so an engine that never emits the event is a mismatch, not hidden.
+- After any solution file that contains `CONFIG SET` (ops levels such as ch2-09) the tool re-applies the stack's defaults through `/api/cli` (`CONFIG SET maxmemory 536870912`, `CONFIG SET maxmemory-policy noeviction`) and prints one line, so a wrong solution that set `noeviction` at 64mb cannot poison later levels with OOM errors.
 - A solution that ran `FLUSHALL`/`FLUSHDB` is followed by a restore, so the game's own mirror is back for the next one.
 
 Traffic levels print progress (`load baseline`, `load run`, `still verifying`) from the engine's WebSocket events.
+
+## Bundle solutions (levels with several slots)
+
+A level whose verify specs name more than one slot (ch2-07, 08, 12, 13) still has one `reference` path per solution, so
+each solution is a **bundle module**: one file with a named export per slot and a default export. The convention: the
+named export for a slot is the part of the slot name after the first dot (`prefetch.bulkLoad` -> `bulkLoad`,
+`session.destroyAll` -> `destroyAll`). The harness copies the bundle to
+`<workspace>/<dir of the first slot's file>/_bundle-<level-id>-<solution-basename>.js` and writes each slot's own workspace
+file as a two-line shim:
+
+```js
+import * as bundle from './_bundle-ch2-07-fixtures-must-never-miss-07-reference.js';
+export default bundle.bulkLoad;
+```
+
+The relative import resolves in both the app and the runner. Activation and verification then go exactly as for a
+single-slot level. After each solution the shims and the bundle are restored (deleted with `--workspace`, emptied through
+the API, which cannot delete; an empty file has no default export). A bundle that lacks an export a slot needs leaves that
+slot's default `undefined`, which the engine reports as the slot failing, so name exports exactly.
 
 ## Reading the table
 
@@ -76,7 +96,7 @@ down, level not known to the engine, files invalid). `--json FILE` writes the sa
 | `works_but_wrong` declared, engine `right` | the antipattern check did not fire. Remember antipattern checks describe the **healthy** state, and a failing one is a hit |
 | `works_but_wrong` declared, engine `wrong` | an ordinary verifier already fails it, so the antipattern can never be the only failure; either make the solution correct apart from the smell or declare it `wrong` |
 | engine `HTTP 4xx/5xx` | the engine refused the call; the body is in the feedback |
-| `SKIPPED (no slot ...)` | a code level whose verifiers name no slot, or several; there is nowhere to put the solution |
+| `SKIPPED (no slot ...)` | a code level whose verifiers name no slot (or a slot the app does not know); there is nowhere to put the solution |
 
 Do not edit a level just to make the harness green if the level is right and the engine or UI is not; report it.
 
