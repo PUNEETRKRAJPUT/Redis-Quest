@@ -1,8 +1,14 @@
 # C2b: Chapter 2, levels 2.5 to 2.11
 
-> Draft against the A-01 and F-12 specs; the orchestrator confirms slot names, the stream entry format,
-> the fail-fast error shape and the `interview` field against `docs/handoffs/A-01.md` and
-> `docs/handoffs/F-12.md` before this is spawned.
+> A-01 facts confirmed from `docs/handoffs/A-01.md` (binding): slot files are `ch2/prefetch-bulk.js`,
+> `ch2/prefetch-apply.js`, `ch3/session-create.js`, `ch3/session-get.js`, `ch3/session-destroy.js`,
+> `ch3/session-destroy-all.js`; `bulkLoad` rows are the 60 `matches` rows joined with team names
+> (`id, season, home_team_id, away_team_id, home_team_name, away_team_name, venue, starts_at, status`);
+> `applyChange` events are `{ aggregate, aggregateId, op, payload }` with a parsed payload and arrive for
+> every aggregate (the learner filters `matches`); the fail-fast errors are `Error: The client is offline`
+> (Redis stopped, about 10 ms) and `RedisCommandTimeoutError` (Redis hung, 2 s), so level 10 teaches a
+> catch-all around the Redis calls. The `interview` field is confirmed against `docs/handoffs/F-12.md`
+> by the orchestrator before this is spawned.
 
 **Goal.** Finish Chapter 2: negative caching, the hit ratio as the number, the prefetch cache fed by
 CDC, sessions done properly, eviction, the Redis-is-down drill, and the first three interview rebuilds.
