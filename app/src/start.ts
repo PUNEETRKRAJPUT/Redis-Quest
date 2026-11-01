@@ -14,7 +14,7 @@ import { ChangeConsumer } from './workers/changes.js';
 import { OutboxDrainer } from './workers/outbox.js';
 import { OpsHook } from './workers/ops.js';
 import { TickerSubscriber } from './workers/ticker.js';
-import { loadMatchRows } from './slots/baselines.js';
+import { closeOncallLeaks, configureOncall, loadMatchRows } from './slots/baselines.js';
 import { RequestScope } from './slots/runtime.js';
 
 const env = loadEnv();
@@ -108,6 +108,7 @@ const ticker = new TickerSubscriber({
 });
 
 const ops = new OpsHook({ slots, redis, pool, log });
+configureOncall({ redisUrl: () => redis.url, log: (obj, msg) => log.warn(obj, msg) });
 
 const app = buildServer({
   instance: env.instance,
@@ -148,6 +149,7 @@ async function shutdown(): Promise<void> {
   outbox.stop();
   await changes.stop();
   await ticker.stop();
+  closeOncallLeaks();
   await app.close().catch(() => undefined);
   await Promise.all([
     slots.close(),

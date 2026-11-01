@@ -148,6 +148,6 @@ export function buildServer(ctx: AppContext): FastifyInstance {
     lastWindow: ctx.lastWindow() ?? null,
   }));
 
-  registerRoutes(app, ctx.slots, ctx.ticker);
+  registerRoutes(app, ctx.slots, ctx.ticker, ctx.instance);
   return app;
 }

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { createClient } from 'redis';
 import type { LearnerDeps } from '@quest/shared';
 import { HttpError } from '../errors.js';
 
@@ -528,6 +529,145 @@ export async function opsRange(
   route: string,
 ): Promise<{ route: string; buckets: unknown[] }> {
   return { route, buckets: [] };
+}
+
+// ---- Chapter 4b "On call": planted faults. Every baseline below is wrong ON PURPOSE; the level asks the
+// learner to name the problem under traffic before touching it. Do not "fix" them.
+
+/** Where `oncall.lookupTeam` dials: the instance's current Redis URL (set at boot, follows target switches). */
+let oncallRedisUrl: () => string = () => process.env.REDIS_URL ?? 'redis://localhost:6379';
+let oncallLog: (obj: object, msg: string) => void = () => undefined;
+export function configureOncall(opts: {
+  redisUrl: () => string;
+  log: (obj: object, msg: string) => void;
+}): void {
+  oncallRedisUrl = opts.redisUrl;
+  oncallLog = opts.log;
+}
+
+/** FAULT: KEYS walks the whole keyspace in one blocking command. Fine on a laptop, a stall on a big keyspace. */
+export async function oncallCountUsers(deps: LearnerDeps, prefix: string): Promise<number> {
+  const keys = (await deps.redis.keys(`${prefix}*`)) as string[];
+  return keys.length;
+}
+
+/** FAULT: the view key is written with no TTL, so every page view stays in memory for ever. */
+export async function oncallRecordView(
+  deps: LearnerDeps,
+  userId: string,
+  matchId: string,
+): Promise<unknown> {
+  await deps.redis.set(`view:${userId}:${matchId}`, new Date().toISOString());
+  return { ok: true };
+}
+
+/** The repair the learner writes (SCAN + EXPIRE, pipelined). The baseline gives no key a TTL. */
+export async function oncallAddTtls(): Promise<number> {
+  return 0;
+}
+
+/** How long the planted Lua loop spins: `ONCALL_SPIN_MS`, default 20000, clamped to 1 ms .. 120 s. */
+export function oncallSpinMs(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number(env.ONCALL_SPIN_MS);
+  return env.ONCALL_SPIN_MS !== undefined && env.ONCALL_SPIN_MS !== '' && Number.isFinite(n)
+    ? Math.min(120_000, Math.max(1, Math.trunc(n)))
+    : 20_000;
+}
+
+// Read-only on purpose: Redis can SCRIPT KILL a script only until its first write (digest, programmability).
+// Bounded by os.clock() (CPU seconds, one of the few library calls the Redis Lua sandbox allows), so nothing
+// hangs for ever even if nobody kills it. redis.call('TIME') cannot be the clock: inside a script Redis freezes
+// it at the script's start (measured on redis 8.10.3), so a loop waiting on TIME never ends.
+const BADGE_LOOP = `
+local spinMs = tonumber(ARGV[1])
+local start = os.clock()
+while (os.clock() - start) * 1000 < spinMs do
+end
+return 'done'
+`;
+
+/**
+ * FAULT: "recompute badges" as one EVAL whose loop blocks every other client of this Redis until it ends.
+ * Note the app's learner Redis wrapper rejects after 2 s, so the route answers 500 long before the script ends;
+ * the script keeps running inside Redis.
+ */
+export async function oncallRecomputeBadges(deps: LearnerDeps): Promise<unknown> {
+  return deps.redis.eval(BADGE_LOOP, { keys: [], arguments: [String(oncallSpinMs())] });
+}
+
+type LeakClient = ReturnType<typeof createClient>;
+const leaked: LeakClient[] = [];
+let leakCapLoggedAt = 0;
+
+/** Safety cap for the leak (a demo must not take the app or Redis down): 2000 clients, `ONCALL_LEAK_CAP` overrides in tests. */
+function leakCap(): number {
+  const n = Number(process.env.ONCALL_LEAK_CAP);
+  return Number.isInteger(n) && n >= 1 ? n : 2000;
+}
+
+/** How many never-closed clients this instance holds (GET /app/oncall/status). 0 after a restart. */
+export function oncallLeakedClients(): number {
+  return leaked.length;
+}
+
+/** Shutdown and tests: close what the faulty baseline left open. */
+export function closeOncallLeaks(): void {
+  for (const c of leaked.splice(0)) {
+    try {
+      c.destroy();
+    } catch {
+      /* already closed */
+    }
+  }
+}
+
+/**
+ * FAULT: a new Redis client per call, connected, used once and never closed. Every request adds a connection
+ * (`INFO clients` connected_clients climbs) until the cap, when the oldest leaked client is closed and one line a
+ * minute says so.
+ */
+export async function oncallLookupTeam(
+  _deps: LearnerDeps,
+  teamId: string,
+): Promise<{ id: string; name: string } | null> {
+  const client = createClient({ url: oncallRedisUrl(), socket: { connectTimeout: 3000 } });
+  client.on('error', () => undefined); // a leaked client may outlive a Redis restart; never crash on it
+  try {
+    await client.connect();
+  } catch (err) {
+    try {
+      client.destroy();
+    } catch {
+      /* never connected */
+    }
+    throw err;
+  }
+  leaked.push(client); // never closed: that is the fault
+  if (leaked.length > leakCap()) {
+    const oldest = leaked.shift()!;
+    try {
+      oldest.destroy();
+    } catch {
+      /* already closed */
+    }
+    const now = Date.now();
+    if (now - leakCapLoggedAt > 60_000) {
+      leakCapLoggedAt = now;
+      oncallLog(
+        { cap: leakCap() },
+        'oncall.lookupTeam leak cap reached: closing the oldest leaked client',
+      );
+    }
+  }
+  const h = (await client.hGetAll(`team:${teamId}`)) as Record<string, string>;
+  return h.id === undefined && h.name === undefined
+    ? null
+    : { id: h.id ?? teamId, name: h.name ?? '' };
+}
+
+/** The repair the learner writes (HSCAN, HSET into buckets, UNLINK). The baseline moves nothing. */
+export async function oncallSplitBigKey(): Promise<{ fields: number; buckets: number }> {
+  return { fields: 0, buckets: 0 };
 }
 
 /** Test hook: the in-process baselines keep state; tests reset it. */

@@ -3,6 +3,7 @@ import { HttpError } from './errors.js';
 import {
   inMemoryQueueStats,
   loadMatchRows,
+  oncallLeakedClients,
   loadRecomputeRows,
   type SessionUser,
 } from './slots/baselines.js';
@@ -41,6 +42,7 @@ export function registerRoutes(
   app: FastifyInstance,
   slots: SlotRuntime,
   ticker: TickerSubscriber,
+  instance = 'app',
 ): void {
   app.get<{ Params: { id: string } }>('/app/players/:id', async (req) => {
     const { rows } = await scopeOf(req).deps.db.query('SELECT * FROM players WHERE id = $1', [
@@ -670,4 +672,101 @@ export function registerRoutes(
     if (isObj(result) && result.created === false) throw new HttpError(409, 'user_exists');
     return reply.code(201).send({ ok: true, id: user.id, result: result ?? null });
   });
+
+  // ---- Chapter 4b "On call": the baselines behind these routes are planted faults (see baselines.ts) --------
+  // All answers are checked against the slot contract so a wrong learner return is a 500 with x-quest-slot-error.
+
+  const GLOB_CHARS = /[*?[\]\\]/;
+  const SAFE_ID = /^[A-Za-z0-9_.-]{1,64}$/;
+  const RESERVED = 'game:';
+
+  app.get<{ Querystring: { prefix?: string } }>('/app/oncall/users/count', async (req) => {
+    const prefix = req.query.prefix;
+    if (!str(prefix, 64) || GLOB_CHARS.test(prefix))
+      throw new HttpError(
+        400,
+        'invalid_prefix',
+        'prefix must be 1 to 64 characters without glob characters (* ? [ ] \\)',
+      );
+    if (prefix.startsWith(RESERVED) || RESERVED.startsWith(prefix))
+      throw new HttpError(400, 'reserved_prefix', 'keys under game:* belong to the engine');
+    const count = await slots.call(scopeOf(req), 'oncall.countUsers', prefix);
+    if (!intIn(count, 0, Number.MAX_SAFE_INTEGER))
+      throw slots.contractError('oncall.countUsers', 'must return a non-negative integer');
+    return { prefix, count };
+  });
+
+  app.post('/app/oncall/views', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    if (typeof b.userId !== 'string' || !SAFE_ID.test(b.userId))
+      throw new HttpError(400, 'invalid_user_id', 'userId must be 1 to 64 of A-Z a-z 0-9 _ . -');
+    if (typeof b.matchId !== 'string' || !SAFE_ID.test(b.matchId))
+      throw new HttpError(400, 'invalid_match_id', 'matchId must be 1 to 64 of A-Z a-z 0-9 _ . -');
+    await slots.call(scopeOf(req), 'oncall.recordView', b.userId, b.matchId);
+    return { ok: true };
+  });
+
+  app.post('/app/oncall/ttl-sweep', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    const pattern = b.pattern;
+    if (!str(pattern, 128))
+      throw new HttpError(400, 'invalid_pattern', 'pattern must be 1 to 128 characters');
+    // The literal head (before the first glob character) must exist and must not lead towards game:*, so no
+    // pattern can match the engine's keys: "*", "g*", "ga?e:x" and "[g]ame:*" are all refused.
+    const head = pattern.split(/[*?[\\]/)[0] ?? '';
+    if (head.length === 0 || head.startsWith(RESERVED) || RESERVED.startsWith(head))
+      throw new HttpError(
+        400,
+        'reserved_pattern',
+        'a pattern must start with literal characters and must not be able to match game:*',
+      );
+    if (!intIn(b.seconds, 1, 604_800))
+      throw new HttpError(400, 'invalid_seconds', 'seconds must be an integer from 1 to 604800');
+    const expired = await slots.call(scopeOf(req), 'oncall.addTtls', pattern, b.seconds);
+    if (!intIn(expired, 0, Number.MAX_SAFE_INTEGER))
+      throw slots.contractError('oncall.addTtls', 'must return a non-negative integer');
+    return { expired };
+  });
+
+  // The slot call has no deadline of its own in the baseline path; learner code gets SLOT_TIMEOUT_MS (10 s here).
+  // The fault itself blocks Redis for ONCALL_SPIN_MS; the app's learner Redis wrapper answers 500 after 2 s.
+  app.post('/app/oncall/badges/recompute', async (req) => {
+    const result = await slots.call(scopeOf(req), 'oncall.recomputeBadges');
+    return { ok: true, result: result ?? null };
+  });
+
+  app.get<{ Params: { teamId: string } }>('/app/oncall/teams/:teamId', async (req) => {
+    const teamId = req.params.teamId;
+    if (!SAFE_ID.test(teamId)) throw new HttpError(400, 'invalid_team_id');
+    const team = await slots.call(scopeOf(req), 'oncall.lookupTeam', teamId);
+    if (team === null || team === undefined || (isObj(team) && Object.keys(team).length === 0))
+      throw new HttpError(404, 'team_not_found');
+    if (!isObj(team) || typeof team.id !== 'string' || typeof team.name !== 'string')
+      throw slots.contractError('oncall.lookupTeam', 'must return { id, name } (strings) or null');
+    return { id: team.id, name: team.name };
+  });
+
+  app.post('/app/oncall/split', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    if (!str(b.key, 256))
+      throw new HttpError(400, 'invalid_key', 'key must be 1 to 256 characters');
+    if (b.key.startsWith(RESERVED))
+      throw new HttpError(400, 'reserved_key', 'keys under game:* belong to the engine');
+    if (!intIn(b.buckets, 2, 1024))
+      throw new HttpError(400, 'invalid_buckets', 'buckets must be an integer from 2 to 1024');
+    const out = await slots.call(scopeOf(req), 'oncall.splitBigKey', b.key, b.buckets);
+    if (
+      !isObj(out) ||
+      !intIn(out.fields, 0, Number.MAX_SAFE_INTEGER) ||
+      !intIn(out.buckets, 0, 1024)
+    )
+      throw slots.contractError(
+        'oncall.splitBigKey',
+        'must return { fields, buckets } (non-negative integers)',
+      );
+    return { key: b.key, fields: out.fields, buckets: out.buckets };
+  });
+
+  // Not a slot: how many never-closed clients the faulty lookupTeam baseline holds on THIS instance.
+  app.get('/app/oncall/status', async () => ({ leakedClients: oncallLeakedClients(), instance }));
 }

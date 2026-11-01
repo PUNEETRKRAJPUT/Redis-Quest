@@ -38,6 +38,12 @@ export const SLOT_FILES: Readonly<Record<string, string>> = {
   'users.usernameTaken': 'ch4/username-taken.js',
   'ops.record': 'ch4/ops-record.js',
   'ops.range': 'ch4/ops-range.js',
+  'oncall.countUsers': 'ch4b/count-users.js',
+  'oncall.recordView': 'ch4b/record-view.js',
+  'oncall.addTtls': 'ch4b/add-ttls.js',
+  'oncall.recomputeBadges': 'ch4b/recompute-badges.js',
+  'oncall.lookupTeam': 'ch4b/lookup-team.js',
+  'oncall.splitBigKey': 'ch4b/split-big-key.js',
 };
 
 export function slotFile(slot: string): string | undefined {

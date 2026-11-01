@@ -66,6 +66,9 @@ start early if everything it depends on is `done`.
 | C3 | Chapter 3 levels (15) (spec: specs/C3, handoff: handoffs/C3) | done (static check 302 PASS; graded through the engine by G-01: 43/43 incl. both traffic-decided wrongs, pub/sub and ticker_gap events; 3.1 by hand: 10 then 20 allowed, scale event seen; switch verified in a browser) |
 | A-03 | App plumbing for Chapter 4: stream consume/sweep, job queue slots and routes, idempotent credit, delayed jobs, contest lock, TTL jitter, Bloom username check, ops wall with a provided request hook (spec: specs/A-03, handoff: handoffs/A-03) | done (check 195 PASS twice) |
 | C4 | Chapter 4 levels (16 + 3 interviews) (spec: specs/C4, handoff: handoffs/C4) | done (static check 435 PASS; graded through the engine by G-01: 53/53 after two harness timing fixes; tag v0.4.0) |
+| E-02 | Engine for Chapter 4b: on-demand traffic (`POST /api/load/start`, UI button), `redis_busy` and `script_killed` CLI events, `redis_per_request_lte` and `redis_calls_ratio_lte` traffic assertions, `notContains`, harness rules (spec: specs/E-02, handoff: handoffs/E-02) | done (check 60 PASS; BUSY measured at ~5 s) |
+| A-04 | App for Chapter 4b: the planted faults as baselines (KEYS cron, views without TTL, a Lua loop that freezes Redis, a client per request) and the two repair slots (split a big key, TTL sweep) (spec: specs/A-04, handoff: handoffs/A-04) | done (check 80 PASS twice; faults reproduce: KEYS in SLOWLOG, views without TTL, BUSY after 5 s and SCRIPT KILL, 9 to 208 connections) |
+| C4b | Chapter 4b "On call": six diagnose-first levels and a checklist (spec: specs/C4b) | in progress |
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)

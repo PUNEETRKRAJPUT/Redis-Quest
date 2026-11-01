@@ -10,7 +10,7 @@ describe('slot registry', () => {
     expect(validateRegistry(SLOTS)).toEqual([]);
   });
 
-  test('declares every slot (Milestone 1 to Chapter 4)', () => {
+  test('declares every slot (Milestone 1 to Chapter 4b)', () => {
     expect(SLOTS.map((s) => s.name).sort()).toEqual([
       'cache.getPlayerStats',
       'cache.invalidatePlayerStats',
@@ -28,6 +28,12 @@ describe('slot registry', () => {
       'leaderboard.recompute',
       'leaderboard.top',
       'onboarding.registerUser',
+      'oncall.addTtls',
+      'oncall.countUsers',
+      'oncall.lookupTeam',
+      'oncall.recomputeBadges',
+      'oncall.recordView',
+      'oncall.splitBigKey',
       'ops.range',
       'ops.record',
       'points.consume',

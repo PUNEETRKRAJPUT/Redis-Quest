@@ -247,4 +247,48 @@ export const SLOTS: readonly SlotDef[] = [
     returns: '{ route, buckets: [{ at, requests, errors, avgMs }] }, oldest bucket first',
     baseline: b.opsRange,
   },
+  {
+    name: 'oncall.countUsers',
+    file: 'ch4b/count-users.js',
+    signature: '(deps, prefix)',
+    returns: 'the number of keys starting with prefix (a non-negative integer)',
+    baseline: b.oncallCountUsers,
+  },
+  {
+    name: 'oncall.recordView',
+    file: 'ch4b/record-view.js',
+    signature: '(deps, userId, matchId)',
+    returns: 'anything (ignored); the view must be stored under view:<userId>:<matchId>',
+    baseline: b.oncallRecordView,
+  },
+  {
+    name: 'oncall.addTtls',
+    file: 'ch4b/add-ttls.js',
+    signature: '(deps, pattern, seconds)',
+    returns: 'the number of keys matching pattern that were given a TTL (a non-negative integer)',
+    baseline: b.oncallAddTtls,
+  },
+  {
+    name: 'oncall.recomputeBadges',
+    file: 'ch4b/recompute-badges.js',
+    signature: '(deps)',
+    returns:
+      'anything (echoed as result); for every lb:match:<matchId> sorted set, the number of members with score >= 50 in hash badges:fifties field <matchId>',
+    baseline: b.oncallRecomputeBadges,
+  },
+  {
+    name: 'oncall.lookupTeam',
+    file: 'ch4b/lookup-team.js',
+    signature: '(deps, teamId)',
+    returns: '{ id, name } read from the hash team:<teamId>, or null when it does not exist (404)',
+    baseline: b.oncallLookupTeam,
+  },
+  {
+    name: 'oncall.splitBigKey',
+    file: 'ch4b/split-big-key.js',
+    signature: '(deps, key, buckets)',
+    returns:
+      '{ fields, buckets }: fields moved and buckets written; the hash is split into <key>:<n> and the original is gone',
+    baseline: b.oncallSplitBigKey,
+  },
 ];
