@@ -18,6 +18,12 @@ export type LearnerRedis = import('redis').RedisClientType<any, any, any, any, a
 
 export interface LearnerDeps {
   redis: LearnerRedis;
+  /**
+   * A second, long-lived client with RESP 3 and client-side caching (ttl 0, 5000 entries, LRU), created on first
+   * use and shared by every call on the instance. Its commands are NOT counted in `redisCommands`: a cache hit
+   * never reaches the server, so the server's own `INFO commandstats` is the truth. See deps.ts.
+   */
+  redisCached: LearnerRedis;
   db: LearnerDb;
   log: (...args: unknown[]) => void;
 }

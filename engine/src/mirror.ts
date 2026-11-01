@@ -50,19 +50,26 @@ export class Mirror {
     const counts = levelCounts(p);
     const statuses: Record<string, string> = {};
     for (const [id, l] of Object.entries(p.levels)) statuses[id] = l.status;
-    const multi = this.redis.client().multi();
-    multi.hSet(keyPlayer(p.player.id), {
-      name: p.player.name,
-      xp: String(p.xp),
-      created_at: p.player.createdAt,
-      levels_passed: String(counts.passed),
-      levels_in_progress: String(counts.in_progress),
-      levels_available: String(counts.available),
-      levels_locked: String(counts.locked),
-    });
-    multi.del(KEY_PROGRESS);
-    if (Object.keys(statuses).length > 0) multi.hSet(KEY_PROGRESS, statuses);
-    await multi.exec();
+    const cmds: string[][] = [
+      [
+        'HSET',
+        keyPlayer(p.player.id),
+        ...Object.entries({
+          name: p.player.name,
+          xp: String(p.xp),
+          created_at: p.player.createdAt,
+          levels_passed: String(counts.passed),
+          levels_in_progress: String(counts.in_progress),
+          levels_available: String(counts.available),
+          levels_locked: String(counts.locked),
+        }).flat(),
+      ],
+      ['DEL', KEY_PROGRESS],
+    ];
+    if (Object.keys(statuses).length > 0)
+      cmds.push(['HSET', KEY_PROGRESS, ...Object.entries(statuses).flat()]);
+    // MULTI/EXEC on one node; on a cluster the two keys sit on different slots, so the manager runs them in turn.
+    await this.redis.transaction(cmds);
   }
 
   /** Sets the welcome gift once, with a 24 h TTL (Chapter 0.4 reads it). */

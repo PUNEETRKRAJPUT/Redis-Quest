@@ -3,8 +3,18 @@ export * from './types.js';
 export { countRedis } from './counting.js';
 export type { CountingOptions } from './counting.js';
 export { failFast, commandTimeoutFromEnv, RedisCommandTimeoutError } from './failfast.js';
-export { createLearnerDeps } from './deps.js';
-export type { CreateLearnerDepsOptions, LearnerContext } from './deps.js';
+export {
+  createLearnerDeps,
+  createCachedRedis,
+  clientIsReady,
+  reconnectStrategyFor,
+} from './deps.js';
+export type {
+  CreateLearnerDepsOptions,
+  LearnerContext,
+  CreateCachedRedisOptions,
+  CachedRedisHandle,
+} from './deps.js';
 export { loadLearnerModule, resolveWorkspacePath, LearnerModuleError } from './loader.js';
 export type { LoadedLearnerModule } from './loader.js';
 export {
@@ -16,3 +26,12 @@ export {
 } from './call.js';
 export type { RunCallsOptions } from './call.js';
 export { aggregateMetrics, percentile } from './metrics.js';
+export {
+  parseTarget,
+  describeTarget,
+  createTargetClient,
+  isCluster,
+  isSentinel,
+  TargetError,
+} from './target.js';
+export type { TargetKind, ParsedTarget, TargetClientOptions, TargetClient } from './target.js';

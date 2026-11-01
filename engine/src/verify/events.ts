@@ -104,7 +104,10 @@ export function eventMatches(v: Pick<EventVerifier, 'kind' | 'match'>, d: LevelE
     const top = (d as unknown as Record<string, unknown>)[k];
     const nested =
       d.data && typeof d.data === 'object' ? (d.data as Record<string, unknown>)[k] : undefined;
-    if (!looseEqual(top !== undefined ? top : nested, want)) return false;
+    // `kind` on the event itself is already matched above (it is `custom`), so a `kind` in the match can only mean
+    // the payload's own field: redis_target_changed { kind: cluster } (E-03).
+    const got = k === 'kind' && nested !== undefined ? nested : top !== undefined ? top : nested;
+    if (!looseEqual(got, want)) return false;
   }
   return true;
 }

@@ -6,6 +6,24 @@ export const CHANGES_STREAM = 'legacydb:changes';
 const BATCH = 100;
 const MAXLEN = 10_000;
 
+/** Rejects after 3 s unless the command was already given an AbortSignal that does the same. */
+function withDeadline<T>(alreadyAborts: boolean, p: Promise<T>): Promise<T> {
+  if (alreadyAborts) return p;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('XADD got no reply within 3000 ms')), 3000);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 interface OutboxRow {
   id: string;
   aggregate: string;
@@ -35,6 +53,8 @@ export class OutboxDrainer {
   private timer?: NodeJS.Timeout;
   private busy = false;
   private stopped = false;
+  private lastWarn = '';
+  private lastWarnAt = 0;
   /** Rows published since boot (for tests and /app/health-style debugging). */
   published = 0;
 
@@ -67,7 +87,15 @@ export class OutboxDrainer {
         if (n < BATCH) break;
       }
     } catch (err) {
-      this.o.log.warn({ err: (err as Error).message }, 'outbox drain failed; will retry');
+      // Once per distinct message per 10 s: a read-only replica target (READONLY on every XADD) or a Redis that
+      // is down would otherwise write a line every second, for as long as there are unpublished rows.
+      const msg = (err as Error).message;
+      const now = Date.now();
+      if (msg !== this.lastWarn || now - this.lastWarnAt > 10_000) {
+        this.o.log.warn({ err: msg }, 'outbox drain failed; will retry');
+        this.lastWarn = msg;
+        this.lastWarnAt = now;
+      }
     } finally {
       this.busy = false;
     }
@@ -88,17 +116,25 @@ export class OutboxDrainer {
       }
       const redis = this.o.redis();
       const signal = AbortSignal.timeout(3000);
+      // Only a single-node client has withAbortSignal; Sentinel and cluster clients do not, so there the XADD
+      // races a timer instead (a command with no reply by then fails the batch, which rolls back and retries).
+      const abortable = (redis as { withAbortSignal?: (s: AbortSignal) => LearnerRedis })
+        .withAbortSignal;
+      const target = typeof abortable === 'function' ? abortable.call(redis, signal) : redis;
       for (const r of rows) {
-        await redis.withAbortSignal(signal).xAdd(
-          CHANGES_STREAM,
-          '*',
-          {
-            aggregate: r.aggregate,
-            aggregate_id: r.aggregate_id,
-            op: r.op,
-            payload: JSON.stringify(r.payload),
-          },
-          { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: MAXLEN } },
+        await withDeadline(
+          typeof abortable === 'function',
+          target.xAdd(
+            CHANGES_STREAM,
+            '*',
+            {
+              aggregate: r.aggregate,
+              aggregate_id: r.aggregate_id,
+              op: r.op,
+              payload: JSON.stringify(r.payload),
+            },
+            { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: MAXLEN } },
+          ),
         );
       }
       await client.query('UPDATE outbox SET published_at = now() WHERE id = ANY($1::bigint[])', [

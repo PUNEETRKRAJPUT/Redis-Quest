@@ -72,7 +72,7 @@ const bg: BackgroundDeps = { slots, redis, pool, log };
 async function runBulkLoad(): Promise<void> {
   for (let i = 0; i < 25 && !redis.ready; i++) await sleep(200); // Redis may still be connecting at boot
   const scope = await RequestScope.create({
-    redis: redis.shared,
+    ...redis.learner,
     pool,
     log: (line) => log.info({ learner: true, worker: 'prefetch.bulkLoad' }, line),
   });

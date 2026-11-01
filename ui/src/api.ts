@@ -10,6 +10,7 @@ import type {
   MetricsSeries,
   MirrorStatus,
   Progress,
+  TargetInfo,
   VerifyResponse,
   WorkspaceEntry,
 } from './types';
@@ -103,7 +104,10 @@ export const api = {
   loadStatus: () => call<LoadStatus>('GET', '/api/load/status'),
   ideal: (id: string) => call<IdealResponse>('GET', `/api/levels/${enc(id)}/ideal`),
   cli: (command: string) => call<CliReply>('POST', '/api/cli', { command }),
-  target: () => call<{ redisUrl: string; state: 'up' | 'down' }>('GET', '/api/target'),
+  target: () => call<TargetInfo>('GET', '/api/target'),
+  // strict: an unreachable target is refused with 502 and the engine stays on the old one.
+  setTarget: (redisUrl: string) =>
+    call<TargetInfo>('PUT', '/api/target', { redisUrl, strict: true }),
   event: (name: string, data?: unknown) =>
     call<{ ok: boolean }>('POST', '/api/events', { kind: 'custom', name, data }),
   metrics: (seconds = 60) => call<MetricsSeries>('GET', `/api/metrics?seconds=${seconds}`),

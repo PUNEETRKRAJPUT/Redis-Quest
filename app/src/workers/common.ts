@@ -25,7 +25,7 @@ export async function callSlotInBackground(
   ...args: unknown[]
 ): Promise<boolean> {
   const scope = await RequestScope.create({
-    redis: d.redis.shared,
+    ...d.redis.learner,
     pool: d.pool,
     log: (line) => d.log.info({ learner: true, worker: name }, line),
   });

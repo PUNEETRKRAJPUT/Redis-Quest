@@ -1394,6 +1394,74 @@ a.level-link:hover {
   font-weight: 600;
 }
 
+/* ---- Redis target switcher in the terminal header (E-03) ---- */
+.target-switch {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--surface-2);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.workbench .target-switch {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+}
+.target-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.target-label {
+  font-weight: 600;
+}
+.target-switch select,
+.target-switch input[type='text'] {
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.target-switch input[type='text'] {
+  flex: 1 1 260px;
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+.target-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.target-dot.up {
+  background: var(--ok);
+}
+.target-dot.down {
+  background: var(--bad);
+}
+.target-desc {
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+.target-msg {
+  margin: 0;
+  color: var(--bad);
+  font-weight: 600;
+}
+.target-note {
+  margin: 0;
+  color: var(--muted);
+}
+.terminal-panel .terminal-wrap {
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
 /* ---- "Run my code in the app" switch (E-01) ---- */
 .slot-toggle {
   margin: 12px 0;

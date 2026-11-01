@@ -6,7 +6,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance, type FastifyReply } from 'fastify';
 import type { Logger } from 'pino';
-import { renderTemplates, SLOT_NAME, TemplateError } from '@quest/shared';
+import { parseTarget, renderTemplates, SLOT_NAME, TemplateError } from '@quest/shared';
 import { etagOf, matchesEtag, type AppConfig } from './appconfig.js';
 import { cliCommandLabel, DANGEROUS_COMMANDS, isBusyReply, isScriptKilled, runCli } from './cli.js';
 import type { Config } from './config.js';
@@ -702,28 +702,43 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
       });
 
       // ---- target and slots -------------------------------------------------------------------
-      api.get('/target', async () => ({ redisUrl: redisUrl(), state: redis.isUp ? 'up' : 'down' }));
+      // E-03: the three target strings (redis://, sentinel://, cluster://), see packages/shared/src/learner/target.ts.
+      api.get('/target', async () => ({ redisUrl: redisUrl(), ...redis.targetInfo() }));
       api.put('/target', async (req) => {
-        const url = isObject(req.body) ? req.body.redisUrl : undefined;
-        let ok = typeof url === 'string';
-        if (ok) {
-          try {
-            ok = ['redis:', 'rediss:'].includes(new URL(url as string).protocol);
-          } catch {
-            ok = false;
-          }
-        }
-        if (!ok)
-          throw new HttpError(400, 'invalid_url', 'redisUrl must look like redis://host:port');
-        await redis.connect(url as string);
-        runtime.redisUrl = url as string;
-        if (store.current)
-          await commit(
-            'target',
-            undefined,
-            (draft) => void (draft.target.redisUrl = url as string),
+        const body = isObject(req.body) ? req.body : {};
+        const url = body.redisUrl;
+        if (typeof url !== 'string')
+          throw new HttpError(
+            400,
+            'invalid_url',
+            'redisUrl must look like redis://host:port, sentinel://name@host:port,... or cluster://host:port,...',
           );
-        return { redisUrl: url, state: redis.isUp ? 'up' : 'down' };
+        try {
+          parseTarget(url);
+        } catch (err) {
+          throw new HttpError(400, 'invalid_url', (err as Error).message);
+        }
+        const from = redisUrl();
+        if (body.strict === true) {
+          // The UI's switcher: an unreachable target is refused and the engine stays where it was.
+          const r = await redis.switchTo(url);
+          if (!r.ok) throw new HttpError(502, 'target_unreachable', r.message);
+        } else {
+          await redis.connect(url);
+        }
+        runtime.redisUrl = url;
+        if (store.current) {
+          // commit() also rewrites the progress mirror on the new target.
+          await commit('target', undefined, (draft) => void (draft.target.redisUrl = url));
+          if (redis.isUp) await mirror.setGift(store.current);
+        }
+        const info = redis.targetInfo();
+        bus.emit('level.event', {
+          kind: 'custom',
+          name: 'redis_target_changed',
+          data: { from, to: url, kind: info.kind },
+        } satisfies LevelEventData);
+        return { redisUrl: url, ...info };
       });
 
       api.get('/slots', async () => ({ active: activeSlots() }));

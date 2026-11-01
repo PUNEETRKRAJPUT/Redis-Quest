@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 import { useEffect, useRef } from 'react';
 import { api } from '../api';
+import { promptFor, TargetSwitch, useTarget } from './TargetSwitch';
 import { C, colourReply, dangerNote, ESC } from './terminalText';
 
 // The transcript and history outlive the panel so that moving between screens does not wipe the session.
@@ -101,18 +102,16 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
       redraw();
     };
 
-    void api
-      .target()
-      .then((t) => {
-        try {
-          const u = new URL(t.redisUrl);
-          prompt = `${u.hostname}:${u.port || '6379'}> `;
-          if (!busy) redraw();
-        } catch {
-          /* keep the default prompt */
-        }
-      })
-      .catch(() => undefined);
+    // The prompt says where the terminal is connected, and follows a switch made in the header above.
+    const applyPrompt = () => {
+      prompt = promptFor(useTarget.getState().info);
+      if (!busy) redraw();
+    };
+    applyPrompt();
+    void useTarget.getState().refresh();
+    const offTarget = useTarget.subscribe((s, prev) => {
+      if (s.info && promptFor(s.info) !== promptFor(prev.info)) applyPrompt();
+    });
 
     if (transcript) term.write(transcript);
     else
@@ -251,6 +250,7 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
 
     return () => {
       window.removeEventListener('pointerdown', pinScrollOnOutsidePress, true);
+      offTarget();
       sub.dispose();
       ro.disconnect();
       term.dispose();
@@ -258,14 +258,17 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
   }, []);
 
   return (
-    <div className="terminal-wrap" style={{ height }}>
-      <div
-        ref={host}
-        className="terminal"
-        data-testid="terminal"
-        role="group"
-        aria-label="Redis terminal. Click, then type a command and press Enter."
-      />
+    <div className="terminal-panel">
+      <TargetSwitch />
+      <div className="terminal-wrap" style={{ height }}>
+        <div
+          ref={host}
+          className="terminal"
+          data-testid="terminal"
+          role="group"
+          aria-label="Redis terminal. Click, then type a command and press Enter."
+        />
+      </div>
     </div>
   );
 }

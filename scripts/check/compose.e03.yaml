@@ -1,0 +1,25 @@
+# E-03 check override (project quest-e03): the chapter 5 profile services lose their published host ports, so this
+# check can run the profiles at the same time as another check's profiles (A-05's) and a learner's default stack.
+# Everything in the check reaches them by container name over the compose network, as the game itself does.
+# `!reset []` needs Docker Compose 2.24 or newer (the preflight already asks for a current Docker Desktop).
+services:
+  redis-replica:
+    ports: !reset []
+  sentinel-1:
+    ports: !reset []
+  sentinel-2:
+    ports: !reset []
+  sentinel-3:
+    ports: !reset []
+  redis-c1:
+    ports: !reset []
+  redis-c2:
+    ports: !reset []
+  redis-c3:
+    ports: !reset []
+  redis-c4:
+    ports: !reset []
+  redis-c5:
+    ports: !reset []
+  redis-c6:
+    ports: !reset []

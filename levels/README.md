@@ -324,6 +324,12 @@ event's `data`). Custom events the engine produces itself (E-02): `load_started 
 or `POST /api/load/start`; `match: { name: load_finished, scenario: toss-time-100 }`), `redis_busy { command }` (a
 terminal command got a `BUSY` error because a script blocks Redis) and `script_killed { command }` (`SCRIPT KILL` or
 `FUNCTION KILL` answered `OK` in the terminal).
+Chapter 5's two (E-03): `redis_target_changed { from, to, kind }` (the learner switched the game's Redis target from the
+page or with `PUT /api/target`; `from` and `to` are target strings, `kind` is `single`, `sentinel` or `cluster`, the kind
+of `to`; `match: { name: redis_target_changed, kind: cluster }`) and `sentinel_failover { masterName, from, to }`
+(the engine is on a `sentinel://` target and its client followed a new master: `from` and `to` are `host:port`;
+`match: { name: sentinel_failover }`). Both need the compose profiles and a hand on the Docker side, so the grading
+harness skips levels that wait for them.
 
 ### `quiz`
 

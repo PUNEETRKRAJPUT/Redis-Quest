@@ -67,6 +67,8 @@ const EXEMPT = new Set([
   'asap',
   'isolated',
   'duplicate',
+  // Sentinel's use(fn) leases a connection for the whole callback (WATCH loops); the callback is not one command.
+  'use',
   'multi',
   'MULTI',
   'scanIterator',

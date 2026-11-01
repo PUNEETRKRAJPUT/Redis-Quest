@@ -51,7 +51,7 @@ export interface VerifierDeps {
   cfg: VerifyConfig;
   log: Logger;
   bus: Pick<EventBus, 'emit' | 'subscribe' | 'since'>;
-  redis: Pick<RedisManager, 'send' | 'client' | 'onUp' | 'isUp'> & { url: string };
+  redis: Pick<RedisManager, 'send' | 'openSubscriber' | 'onUp' | 'isUp'> & { url: string };
   metrics?: Pick<MetricsStore, 'onPush'>;
   /** Overridable for tests. */
   run?: RunFn;
@@ -346,9 +346,7 @@ export class Verifier {
     v: EventVerifier,
     fn: (d: LevelEventData) => void,
   ): Promise<() => Promise<void>> {
-    const sub = this.d.redis.client().duplicate();
-    sub.on('error', () => undefined);
-    await sub.connect();
+    const sub = await this.d.redis.openSubscriber();
     if (v.kind === 'channel_message') {
       const channel = String(v.match?.channel);
       await sub.subscribe(channel, (message: string) =>

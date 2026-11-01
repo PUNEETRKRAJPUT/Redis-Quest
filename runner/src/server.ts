@@ -1,5 +1,5 @@
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
-import { resolveWorkspacePath } from '@quest/shared';
+import { parseTarget, resolveWorkspacePath } from '@quest/shared';
 import type { RunnerConfig } from './config.js';
 import { crashResults, runInChild } from './executor.js';
 import type { ChildJob } from './protocol.js';
@@ -28,6 +28,21 @@ function optString(body: Record<string, unknown>, key: string): string | undefin
   const v = body[key];
   if (v === undefined) return undefined;
   if (typeof v !== 'string') throw new BadRequest(`"${key}" must be a string`);
+  return v;
+}
+
+/**
+ * `redisUrl` may name any target the engine can: redis://, rediss://, sentinel://<master>@h:p,... or
+ * cluster://h:p,... (the shared parseTarget decides). Anything else is a 400 with the parser's own words.
+ */
+function optTarget(body: Record<string, unknown>, key: string): string | undefined {
+  const v = optString(body, key);
+  if (v === undefined) return undefined;
+  try {
+    parseTarget(v);
+  } catch (err) {
+    throw new BadRequest(`"${key}" is not a valid Redis target: ${(err as Error).message}`);
+  }
   return v;
 }
 
@@ -106,7 +121,7 @@ export function buildServer(config: RunnerConfig, log: FastifyBaseLogger): Fasti
       calls,
       concurrency: optInt(body, 'concurrency', 1, 1, MAX_CONCURRENCY),
       timeoutMs,
-      redisUrl: optString(body, 'redisUrl') ?? config.redisUrl,
+      redisUrl: optTarget(body, 'redisUrl') ?? config.redisUrl,
       databaseUrl: optString(body, 'databaseUrl') ?? config.databaseUrl,
     };
     const started = performance.now();

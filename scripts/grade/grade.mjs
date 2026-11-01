@@ -768,6 +768,9 @@ function skipped(lv, solution, declared, why, because = '') {
 
 // ---- grading one level ----------------------------------------------------------------------------
 
+/** Custom events only a real switch of target, with the compose profiles running, can produce (E-03). */
+const PROFILE_EVENTS = ['redis_target_changed', 'sentinel_failover'];
+
 async function gradeLevel(lv) {
   const x = lv.level;
   const id = x.id;
@@ -800,13 +803,23 @@ async function gradeLevel(lv) {
   const needsOutage = lv.level.verify.some(
     (v) => v.type === 'event' && (v.kind === 'redis_disconnect' || v.kind === 'redis_reconnect'),
   );
-  if (needsOutage) {
+  // E-03: `redis_target_changed` and `sentinel_failover` happen only when the learner switches target on the page and
+  // the Docker side (a profile started, a master stopped) is real, so those levels are graded by hand too.
+  const needsProfiles = lv.level.verify.some(
+    (v) =>
+      v.type === 'event' &&
+      v.kind === 'custom' &&
+      PROFILE_EVENTS.includes(String(v.match && v.match.name)),
+  );
+  if (needsOutage || needsProfiles) {
     for (const s of sols)
       skipped(
         lv,
         s.path,
         s.expect,
-        'SKIPPED (needs a real Redis outage: graded by hand)',
+        needsOutage
+          ? 'SKIPPED (needs a real Redis outage: graded by hand)'
+          : 'SKIPPED (needs the compose profiles: graded by hand)',
         s.because,
       );
     await ensureUnlocked(id);

@@ -82,7 +82,7 @@ export class OpsHook {
     let scope: RequestScope | undefined;
     try {
       scope = await RequestScope.create({
-        redis: this.o.redis.shared,
+        ...this.o.redis.learner,
         pool: this.o.pool,
         log: (line) => this.o.log.info({ learner: true, worker: 'ops.record' }, line),
       });

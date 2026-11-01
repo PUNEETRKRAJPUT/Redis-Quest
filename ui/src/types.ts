@@ -222,6 +222,18 @@ export interface MetricsSeries {
   series: { at: number | string; count: number; errors: number; p50Ms: number; p99Ms: number }[];
 }
 
+/** GET /api/target (E-03): where the engine's Redis connection points, and whether it is up. */
+export interface TargetInfo {
+  redisUrl: string;
+  kind: 'single' | 'sentinel' | 'cluster';
+  description: string;
+  state: 'up' | 'down';
+  /** Sentinel only: the master the engine follows right now, host:port. */
+  master?: string;
+  /** Sentinel: number of sentinels; cluster: nodes the engine knows. */
+  nodes?: number;
+}
+
 export interface Health {
   ok: boolean;
   service: string;

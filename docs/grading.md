@@ -123,6 +123,14 @@ declared `right` or `works_but_wrong`, and produces nothing for one declared `wr
 
 Each rule adds one line to the row's `note`.
 
+Levels the harness does **not** play (E-03). A level with an `event` verifier that names the custom event
+`redis_target_changed` or `sentinel_failover` needs the compose profiles (`replica`, `sentinel`, `cluster`) running and
+a hand on the Docker side (switch the target on the page, `docker compose stop redis`), and nothing the harness does
+through the engine produces them. Every solution of such a level is recorded as `SKIPPED (needs the compose profiles:
+graded by hand)` and the level is completed so later levels unlock, exactly like the outage levels (`redis_disconnect` /
+`redis_reconnect`: `SKIPPED (needs a real Redis outage: graded by hand)`). Grade them by hand once per release, with the
+profiles up.
+
 ## Reading the table
 
 ```

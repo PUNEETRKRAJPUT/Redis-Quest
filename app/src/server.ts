@@ -34,7 +34,7 @@ export interface AppContext {
 }
 
 // Operational routes are not traffic: they get no request scope and no metrics.
-const OPERATIONAL = new Set(['/app/health', '/app/slots', '/app/metrics']);
+const OPERATIONAL = new Set(['/app/health', '/app/slots', '/app/metrics', '/app/target']);
 
 export function buildServer(ctx: AppContext): FastifyInstance {
   const app = Fastify({
@@ -47,7 +47,7 @@ export function buildServer(ctx: AppContext): FastifyInstance {
     const url = req.routeOptions.url;
     if (!url || OPERATIONAL.has(url)) return;
     req.scope = await RequestScope.create({
-      redis: ctx.redis.shared,
+      ...ctx.redis.learner,
       pool: ctx.pool,
       log: (line) => ctx.log.info({ learner: true, route: url }, line),
     });
@@ -121,13 +121,20 @@ export function buildServer(ctx: AppContext): FastifyInstance {
       ok: true,
       service: 'app',
       instance: ctx.instance,
-      target: { redisUrl: ctx.redis.url },
+      target: {
+        redisUrl: ctx.redis.url,
+        kind: ctx.redis.kind,
+        description: ctx.redis.description,
+      },
       activeSlots: ctx.slots.active,
       redis: ctx.redis.ready ? 'up' : 'down',
       engine: s.engine,
       configEtag: s.configEtag,
     };
   });
+
+  // The app's own view of its Redis target (the engine's is /api/target): where the shared client is connected.
+  app.get('/app/target', async () => ctx.redis.view());
 
   app.get('/app/slots', async () => {
     const s = ctx.status();

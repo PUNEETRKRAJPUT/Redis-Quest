@@ -58,6 +58,11 @@ const MULTI_RESET = new Set(['discard', 'DISCARD']);
 export interface CountingOptions {
   /** Called with every client created by `duplicate()` so the owner can close it. */
   onDuplicate?: (client: { close?: () => unknown; destroy?: () => unknown }) => void;
+  /**
+   * Builds the clone for `duplicate()` when the client has no such method (a node-redis Sentinel client does not).
+   * The clone is counted and handed to `onDuplicate` like a real one.
+   */
+  fallbackDuplicate?: () => object;
 }
 
 /**
@@ -95,6 +100,19 @@ export function countRedis<T extends object>(
           value !== null
         ) {
           return wrap(value, 'namespace');
+        }
+        if (
+          kind === 'client' &&
+          prop === 'duplicate' &&
+          typeof value !== 'function' &&
+          opts.fallbackDuplicate
+        ) {
+          const make = opts.fallbackDuplicate;
+          return () => {
+            const clone = make();
+            opts.onDuplicate?.(clone as never);
+            return wrap(clone, 'client', false);
+          };
         }
         if (typeof value !== 'function') return value;
         const fn = value as (...a: unknown[]) => unknown;

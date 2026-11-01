@@ -1,4 +1,5 @@
 import type { Logger } from 'pino';
+import { parseTarget } from '@quest/shared';
 import type { MetricsRecorder, RouteSecond } from './metrics.js';
 
 /** What the engine serves at GET /internal/app-config. */
@@ -11,8 +12,13 @@ export interface AppConfig {
 export function parseAppConfig(body: unknown): AppConfig {
   const b = (body ?? {}) as Record<string, unknown>;
   const target = b.target as Record<string, unknown> | undefined;
-  if (!target || typeof target.redisUrl !== 'string' || !/^rediss?:\/\//.test(target.redisUrl)) {
-    throw new Error('target.redisUrl must be a redis:// URL');
+  if (!target || typeof target.redisUrl !== 'string') {
+    throw new Error('target.redisUrl must be a redis://, sentinel:// or cluster:// URL');
+  }
+  try {
+    parseTarget(target.redisUrl);
+  } catch (err) {
+    throw new Error(`target.redisUrl is not a valid target: ${(err as Error).message}`);
   }
   if (!Array.isArray(b.activeSlots) || !b.activeSlots.every((s) => typeof s === 'string')) {
     throw new Error('activeSlots must be a list of strings');

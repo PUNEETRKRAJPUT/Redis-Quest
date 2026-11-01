@@ -1,4 +1,10 @@
-import { createClient } from 'redis';
+import {
+  clientIsReady,
+  createTargetClient,
+  parseTarget,
+  reconnectStrategyFor,
+  type LearnerRedis,
+} from '@quest/shared';
 import type { Logger } from 'pino';
 import type { ChangeEvent } from '../slots/baselines.js';
 import { CHANGES_STREAM } from './outbox.js';
@@ -7,7 +13,7 @@ import { callSlotInBackground, sleep, type BackgroundDeps } from './common.js';
 const SLOT = 'prefetch.applyChange';
 const BLOCK_MS = 1000;
 
-type Client = ReturnType<typeof createClient>;
+type Client = LearnerRedis;
 
 /** Decode one stream entry; null when it is not one this app understands. */
 export function decodeChange(message: Record<string, string>): ChangeEvent | null {
@@ -53,14 +59,13 @@ export class ChangeConsumer {
   }
 
   private makeClient(url: string, log: Logger): Client {
-    const c = createClient({
-      url,
+    // Its own connection of whatever kind the target is: a blocking XREAD ties the connection up.
+    const target = parseTarget(url);
+    const c = createTargetClient(target, {
       disableOfflineQueue: true,
-      socket: {
-        connectTimeout: 3000,
-        reconnectStrategy: (n: number) => Math.min(100 * 2 ** n, 2000),
-      },
-    });
+      connectTimeoutMs: 3000,
+      reconnectStrategy: reconnectStrategyFor(target.kind),
+    }) as unknown as Client;
     let lastMsg = '';
     c.on('error', (err: Error) => {
       if (err.message !== lastMsg) log.warn({ err: err.message }, 'change consumer redis error');
@@ -69,7 +74,7 @@ export class ChangeConsumer {
     c.on('ready', () => {
       lastMsg = '';
     });
-    c.connect().catch(() => undefined);
+    (c as unknown as { connect(): Promise<unknown> }).connect().catch(() => undefined);
     return c;
   }
 
@@ -78,7 +83,7 @@ export class ChangeConsumer {
     this.client = undefined;
     if (!c) return;
     try {
-      c.destroy();
+      void Promise.resolve(c.destroy()).catch(() => undefined);
     } catch {
       /* already closed */
     }
@@ -105,7 +110,7 @@ export class ChangeConsumer {
           this.clientUrl = url;
           this.lastId = '$';
         }
-        if (!this.client.isReady) {
+        if (!clientIsReady(this.client)) {
           await sleep(200);
           continue;
         }
@@ -113,7 +118,7 @@ export class ChangeConsumer {
           // `$` only means "new" for one call; pin it to the newest id so entries added between two
           // reads are not skipped ('0-0' for an empty or missing stream).
           const tail = await this.client.xRevRange(CHANGES_STREAM, '+', '-', { COUNT: 1 });
-          this.lastId = tail[0]?.id ?? '0-0';
+          this.lastId = String(tail[0]?.id ?? '0-0');
         }
         const res = await this.client.xRead(
           { key: CHANGES_STREAM, id: this.lastId },

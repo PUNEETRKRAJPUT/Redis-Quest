@@ -69,6 +69,9 @@ start early if everything it depends on is `done`.
 | E-02 | Engine for Chapter 4b: on-demand traffic (`POST /api/load/start`, UI button), `redis_busy` and `script_killed` CLI events, `redis_per_request_lte` and `redis_calls_ratio_lte` traffic assertions, `notContains`, harness rules (spec: specs/E-02, handoff: handoffs/E-02) | done (check 60 PASS; BUSY measured at ~5 s) |
 | A-04 | App for Chapter 4b: the planted faults as baselines (KEYS cron, views without TTL, a Lua loop that freezes Redis, a client per request) and the two repair slots (split a big key, TTL sweep) (spec: specs/A-04, handoff: handoffs/A-04) | done (check 80 PASS twice; faults reproduce: KEYS in SLOWLOG, views without TTL, BUSY after 5 s and SCRIPT KILL, 9 to 208 connections) |
 | C4b | Chapter 4b "On call": six diagnose-first levels and a checklist (spec: specs/C4b, handoff: handoffs/C4b) | done (static check 204 PASS; graded through the engine by G-01: 21/21 incl. the busy-then-kill dance and the connection bound; tag v0.4.1) |
+| E-03 | Engine for Chapter 5: sentinel:// and cluster:// targets (shared `target.ts` helper), cluster routing in the CLI and checks, target switcher in the UI, `redis_target_changed` and `sentinel_failover` events, harness skips profile levels (spec: specs/E-03, handoff: handoffs/E-03) | done (check 69 PASS; failover 8.3 s, failback 7.1 s; committed together with A-05 because the shared learner index binds them) |
+| A-05 | App and runner follow replica, sentinel and cluster targets; `deps.redisCached` (RESP3 client-side cache) (spec: specs/A-05, handoff: handoffs/A-05) | done (check 121 PASS twice; READONLY, CROSSSLOT and MOVED texts measured; no WATCH on sentinel or cluster clients) |
+| C5 | Chapter 5 "Survive and scale" (14 levels) (spec: specs/C5) | in progress |
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)

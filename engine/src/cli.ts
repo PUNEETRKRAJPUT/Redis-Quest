@@ -1,4 +1,4 @@
-import { hostPort, isRedisErrorReply, type RedisManager } from './redis.js';
+import { isRedisErrorReply, whereIs, type RedisManager } from './redis.js';
 
 /** Splits a line the way redis-cli does (sdssplitargs): quotes, escapes, `\xHH`. Returns null on bad quoting. */
 export function splitArgs(line: string): string[] | null {
@@ -214,6 +214,6 @@ export async function runCli(redis: RedisManager, line: string): Promise<CliResu
     const msg = err instanceof Error ? err.message : String(err);
     if (/no reply after/.test(msg))
       return done(`(error) ${msg}; the terminal connection was reset`, 'error', argv);
-    return done(`Could not connect to Redis at ${hostPort(redis.url)}: ${msg}`, 'error', argv);
+    return done(`Could not connect to Redis at ${whereIs(redis.url)}: ${msg}`, 'error', argv);
   }
 }

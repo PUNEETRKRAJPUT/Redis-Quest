@@ -39,8 +39,8 @@ function make(replies: Record<string, unknown>, run?: RunFn) {
       if (argv[0] === 'DEL') return 1;
       throw new Error(`fake redis has no reply for ${k}`);
     },
-    client: () => {
-      throw new Error('no client');
+    openSubscriber: async () => {
+      throw new Error('no subscriber');
     },
     onUp: () => undefined,
   };

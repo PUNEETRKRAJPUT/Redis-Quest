@@ -50,11 +50,17 @@ export class RequestScope {
 
   static async create(opts: {
     redis: LearnerRedis;
+    /** The long-lived client behind `deps.redisCached` (RedisTarget.cached); built on demand when absent. */
+    redisCached?: LearnerRedis;
+    /** The target string of `redis`; lets a Sentinel client (which has no duplicate()) hand out clones. */
+    redisUrl?: string;
     pool: pg.Pool;
     log: (line: string) => void;
   }): Promise<RequestScope> {
     const ctx = await createLearnerDeps({
       redisClient: opts.redis,
+      redisCached: opts.redisCached,
+      redisUrl: opts.redisUrl,
       dbPool: opts.pool,
       log: opts.log,
     });

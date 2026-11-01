@@ -1,6 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { createClient } from 'redis';
-import type { LearnerDeps } from '@quest/shared';
+import {
+  createTargetClient,
+  parseTarget,
+  type LearnerDeps,
+  type LearnerRedis,
+} from '@quest/shared';
 import { HttpError } from '../errors.js';
 
 // Baselines are deliberately the slow or naive version. Do not "fix" them: each is a lesson.
@@ -595,7 +599,16 @@ export async function oncallRecomputeBadges(deps: LearnerDeps): Promise<unknown>
   return deps.redis.eval(BADGE_LOOP, { keys: [], arguments: [String(oncallSpinMs())] });
 }
 
-type LeakClient = ReturnType<typeof createClient>;
+type LeakClient = LearnerRedis;
+
+/** destroy() is synchronous on a single node and a cluster and returns a promise on Sentinel. */
+function destroyQuietly(c: LeakClient): void {
+  try {
+    void Promise.resolve(c.destroy()).catch(() => undefined);
+  } catch {
+    /* already closed */
+  }
+}
 const leaked: LeakClient[] = [];
 let leakCapLoggedAt = 0;
 
@@ -612,13 +625,7 @@ export function oncallLeakedClients(): number {
 
 /** Shutdown and tests: close what the faulty baseline left open. */
 export function closeOncallLeaks(): void {
-  for (const c of leaked.splice(0)) {
-    try {
-      c.destroy();
-    } catch {
-      /* already closed */
-    }
-  }
+  for (const c of leaked.splice(0)) destroyQuietly(c);
 }
 
 /**
@@ -630,26 +637,20 @@ export async function oncallLookupTeam(
   _deps: LearnerDeps,
   teamId: string,
 ): Promise<{ id: string; name: string } | null> {
-  const client = createClient({ url: oncallRedisUrl(), socket: { connectTimeout: 3000 } });
+  // The helper builds the right client for the current target (single, Sentinel or cluster), unconnected.
+  const client = createTargetClient(parseTarget(oncallRedisUrl()), {
+    connectTimeoutMs: 3000,
+  }) as unknown as LeakClient;
   client.on('error', () => undefined); // a leaked client may outlive a Redis restart; never crash on it
   try {
     await client.connect();
   } catch (err) {
-    try {
-      client.destroy();
-    } catch {
-      /* never connected */
-    }
+    destroyQuietly(client); // never connected
     throw err;
   }
   leaked.push(client); // never closed: that is the fault
   if (leaked.length > leakCap()) {
-    const oldest = leaked.shift()!;
-    try {
-      oldest.destroy();
-    } catch {
-      /* already closed */
-    }
+    destroyQuietly(leaked.shift()!);
     const now = Date.now();
     if (now - leakCapLoggedAt > 60_000) {
       leakCapLoggedAt = now;

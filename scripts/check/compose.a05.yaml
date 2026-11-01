@@ -1,0 +1,27 @@
+# A-05 check override: the chapter-5 profile services publish fixed host ports (6380, 26379-26381, 7100-7105) that
+# would clash with another check running the same profiles at the same time (E-03). This check reaches every node
+# from inside the compose network, so it removes the published ports. Project quest-a05 only.
+services:
+  redis-replica:
+    ports: !reset []
+  sentinel-1:
+    ports: !reset []
+  sentinel-2:
+    ports: !reset []
+  sentinel-3:
+    ports: !reset []
+  redis-c1:
+    ports: !reset []
+  redis-c2:
+    ports: !reset []
+  redis-c3:
+    ports: !reset []
+  redis-c4:
+    ports: !reset []
+  redis-c5:
+    ports: !reset []
+  redis-c6:
+    ports: !reset []
+  # The check swaps this for a small stand-in while the real engine does not accept sentinel:// or cluster:// yet.
+  engine:
+    command: ["sh", "-c", "${A05_ENGINE_SH:-exec node engine/dist/main.js}"]

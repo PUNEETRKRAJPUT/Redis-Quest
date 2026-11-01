@@ -1,9 +1,15 @@
-import { createClient } from 'redis';
+import {
+  clientIsReady,
+  createTargetClient,
+  parseTarget,
+  reconnectStrategyFor,
+  type LearnerRedis,
+} from '@quest/shared';
 import type { Logger } from 'pino';
 import type pg from 'pg';
 import { sleep } from './common.js';
 
-type Client = ReturnType<typeof createClient>;
+type Client = LearnerRedis;
 
 export const TICKER_PREFIX = 'score:match:';
 
@@ -109,7 +115,7 @@ export class TickerSubscriber {
     const s = this.channels.get(matchId);
     if (!s) return null;
     // Connected and subscribed; node-redis restores subscriptions by itself after a reconnect.
-    const subscribed = s.subscribed && this.client?.isReady === true;
+    const subscribed = s.subscribed && this.client !== undefined && clientIsReady(this.client);
     return { ...s, subscribed, recent: [...s.recent], instance: this.o.instance };
   }
 
@@ -123,7 +129,8 @@ export class TickerSubscriber {
     if (!s) throw new TickerError(404, 'unknown_match');
     if (this.resubscribing.has(matchId)) throw new TickerError(409, 'resubscribe_in_progress');
     const c = this.client;
-    if (!c || !c.isReady || !s.subscribed) throw new TickerError(503, 'ticker_not_connected');
+    if (!c || !clientIsReady(c) || !s.subscribed)
+      throw new TickerError(503, 'ticker_not_connected');
     this.resubscribing.add(matchId);
     const started = Date.now();
     try {
@@ -131,7 +138,7 @@ export class TickerSubscriber {
       s.subscribed = false;
       await sleep(pauseMs);
       // The client may have been replaced (Redis target switch) while paused; the loop owns that case.
-      if (this.client === c && c.isReady) {
+      if (this.client === c && clientIsReady(c)) {
         await c.subscribe(TICKER_PREFIX + matchId, (m) => this.onMessage(matchId, m));
         s.subscribed = true;
       } else {
@@ -191,14 +198,13 @@ export class TickerSubscriber {
   }
 
   private makeClient(url: string): Client {
-    const c = createClient({
-      url,
+    // Any target kind: node-redis subscribes through a Sentinel client and a cluster client too (measured, A-05).
+    const target = parseTarget(url);
+    const c = createTargetClient(target, {
       disableOfflineQueue: true,
-      socket: {
-        connectTimeout: 3000,
-        reconnectStrategy: (n: number) => Math.min(100 * 2 ** n, 2000),
-      },
-    });
+      connectTimeoutMs: 3000,
+      reconnectStrategy: reconnectStrategyFor(target.kind),
+    }) as unknown as Client;
     let lastMsg = '';
     c.on('error', (err: Error) => {
       if (err.message !== lastMsg) this.o.log.warn({ err: err.message }, 'ticker redis error');
@@ -207,7 +213,7 @@ export class TickerSubscriber {
     c.on('ready', () => {
       lastMsg = '';
     });
-    c.connect().catch(() => undefined);
+    (c as unknown as { connect(): Promise<unknown> }).connect().catch(() => undefined);
     return c;
   }
 
@@ -217,7 +223,7 @@ export class TickerSubscriber {
     for (const s of this.channels.values()) s.subscribed = false;
     if (!c) return;
     try {
-      c.destroy();
+      void Promise.resolve(c.destroy()).catch(() => undefined);
     } catch {
       /* already closed */
     }
@@ -264,7 +270,7 @@ export class TickerSubscriber {
           this.clientUrl = url;
         }
         const c = this.client;
-        if (c.isReady) {
+        if (clientIsReady(c)) {
           for (const s of this.channels.values()) {
             // A channel mid-resubscribe is owned by resubscribe(), which puts it back itself.
             if (s.subscribed || this.resubscribing.has(s.matchId)) continue;
