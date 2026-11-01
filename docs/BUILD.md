@@ -24,7 +24,7 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 | P0-04 | Postgres schema, seed generator, outbox triggers, slow query | 2 | done | sonnet | specs/P0-04 | check/P0-04.sh | handoffs/P0-04 |
 | P0-05 | Level file schema, loader, validator | 2 | done | opus | specs/P0-05 | check/P0-05.sh | handoffs/P0-05 |
 | P0-06 | Engine skeleton: health, progress file + Redis mirror, WebSocket, CLI proxy | 3 | done | sonnet | specs/P0-06 | check/P0-06.sh | handoffs/P0-06 |
-| P0-07 | App skeleton: baseline routes, slot registry, target switching | 3 | in progress | opus | specs/P0-07 | check/P0-07.sh | |
+| P0-07 | App skeleton: baseline routes, slot registry, target switching | 3 | done | opus | specs/P0-07 | check/P0-07.sh | handoffs/P0-07 |
 | P0-08 | Runner: load workspace module, call with deps, metrics, crash isolation | 3 | done | sonnet | specs/P0-08 | check/P0-08.sh | handoffs/P0-08 |
 | P0-09 | Verifier engine: redis, antipattern, quiz, event; traffic + behavior wiring | 4 | in progress | opus | specs/P0-09 | check/P0-09.sh | |
 | P0-10 | UI shell: chapter map, level view (seven beats), terminal, editor, logs, show-me | 4 | in progress | sonnet | specs/P0-10 | check/P0-10.sh | |
@@ -34,13 +34,21 @@ wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 Waves run in order; tasks within a wave run in parallel because they own disjoint files. A task may
 start early if everything it depends on is `done`.
 
+## Follow-ups (small, not blocking)
+
+| id | task | status |
+|---|---|---|
+| F-01 | Caddy: use dynamic A-record upstreams for `app` so requests round-robin across scaled instances without the app closing every connection (`APP_MAX_REQUESTS_PER_SOCKET=1` is the current workaround) | todo |
+| F-02 | Engine metrics aggregate must sum `dbQueries` and `redisCommands` (P0-09 is making this change) | in progress |
+| F-03 | `.prettierignore` exists; add a `format:check` step to CI once the tree is stable | todo |
+
 ## Content (after Phase 0)
 
 | id | task | status |
 |---|---|---|
 | C0 | Chapter 0 levels (5) with reference + wrong solutions (spec: specs/C0, handoff: handoffs/C0) | done (content; live run pending P0-09) |
 | C1 | Chapter 1 levels (16) (spec: specs/C1, handoff: handoffs/C1) | done (content; solutions verified against a private Redis by the author; engine live run pending P0-09) |
-| C2a | Chapter 2 levels 2.1 to 2.4 | todo |
+| C2a | Chapter 2 levels 2.1 to 2.4 (spec: specs/C2a; starts after P0-09) | todo |
 | T1 | Five-tester playtest, findings, fixes | todo |
 
 ## Decisions log (newest first)

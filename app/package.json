@@ -9,6 +9,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@quest/shared": "workspace:*"
+    "@quest/shared": "workspace:*",
+    "chokidar": "^6.0.0",
+    "fastify": "^5.12.7",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "redis": "^5.12.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
   }
 }
