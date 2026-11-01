@@ -1,0 +1,4 @@
+# Wrong: the code is stored with no expiry, so TTL never falls inside 1 to 120.
+SET user:{{player.id}}:name "{{player.name}}"
+SET otp:{{player.id}} 483921
+GET otp:{{player.id}}

@@ -1,0 +1,108 @@
+id: ch1-08-lobby-closes-at-the-toss
+chapter: ch1
+title: "Lobby closes at the toss"
+mode: cli
+
+story: |
+  Every match has a lobby where users finalise their team, and the lobby shuts at the toss. After
+  that, nobody changes a thing. Teja wrote a cron job to delete lobbies that are past their time.
+  The cron job ran forty seconds late last night and a user changed their captain after the toss.
+
+  You would rather the lobby simply stop existing at the right moment, with no job to forget. There
+  are two lobbies to deal with tonight. The lobby for m-042 is open with no closing time at all.
+  The one for m-041 already started, but somebody gave it an expiry by mistake, and it will vanish
+  in the middle of the match unless you take that expiry off.
+
+brainstorm:
+  prompt: "A lobby must disappear by itself five minutes from now, and another key must stop disappearing. How do you do each?"
+  options:
+    - id: key-expiry
+      label: "Put an expiry on the lobby key, and remove the expiry from the key that must stay"
+      is_reasonable: true
+    - id: cron-delete
+      label: "A scheduled job that deletes lobbies that are past their time"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a closes_at column in Postgres, checked on every request"
+      is_reasonable: true
+
+teach: |
+  Any key can be given a lifetime, after which Redis deletes it for you.
+
+  - `EXPIRE key seconds` sets the lifetime in seconds. `PEXPIRE key ms` does the same in milliseconds.
+  - `SET key value EX seconds` stores a value and its expiry together.
+  - `TTL key` reads the time left in seconds and `PTTL` reads it in milliseconds.
+  - `PERSIST key` removes the expiry, so the key lives until something deletes it.
+
+  The docs say the expire time resolution is always 1 millisecond. Expiry information is replicated
+  and persisted along with the data, and time virtually passes while a Redis server is stopped: a key
+  that should have expired during a restart is still expired when the server comes back.
+
+  A worked example from the docs, not your task:
+
+      SET key 100 EX 10
+      TTL key
+      PERSIST key
+
+task: |
+  The lobbies are `lobby:m-042` and `lobby:m-041`. The game created both when this level opened.
+
+  1. Make `lobby:m-042` disappear 300 seconds from now with `EXPIRE`.
+  2. Stop `lobby:m-041` from expiring with `PERSIST`.
+  3. Run `TTL` on `lobby:m-041` and note what it prints now that the key has no expiry. Then run
+     `TTL` on `lobby:m-999`, a key that does not exist at all, and note what that prints.
+  4. Type both numbers into the boxes below.
+
+hints:
+  - "EXPIRE takes the key and then the number of seconds."
+  - "PERSIST takes only the key."
+  - "TTL has a different reply for a key with no expiry and for a key that is not there. Run it on both and compare."
+
+setup:
+  - cmd: [DEL, "lobby:m-042", "lobby:m-041", "lobby:m-999"]
+  - cmd: [SET, "lobby:m-042", open]
+  - cmd: [SET, "lobby:m-041", open, EX, 600]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TTL, "lobby:m-042"]
+        between: [1, 300]
+        message: "lobby:m-042 should be set to expire within 300 seconds. If it has already gone, 300 milliseconds is not 300 seconds."
+      - cmd: [EXISTS, "lobby:m-041"]
+        equals: 1
+        message: "lobby:m-041 has vanished. It is a live match; reopen the level and remove its expiry before it runs out."
+      - cmd: [TTL, "lobby:m-041"]
+        equals: -1
+        message: "lobby:m-041 still has an expiry. PERSIST removes it."
+  - type: answer
+    prompt: "What does TTL print for lobby:m-041, now that it has no expiry?"
+    expected:
+      cmd: [TTL, "lobby:m-041"]
+      transform: number
+    compare: equals
+    message: "That is not what TTL prints for lobby:m-041 right now. Run TTL lobby:m-041 and copy the number."
+  - type: answer
+    prompt: "What does TTL print for lobby:m-999, a key that does not exist?"
+    expected:
+      cmd: [TTL, "lobby:m-999"]
+      transform: number
+    compare: equals
+    message: "That is not what TTL prints for a missing key. Run TTL lobby:m-999 and copy the number."
+
+show_me: ttl_timer
+docs:
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+
+reward:
+  xp: 25
+
+solutions:
+  reference: solutions/08-reference.redis
+  wrong:
+    - path: solutions/08-wrong-milliseconds.redis
+      expect: wrong
+      because: "PEXPIRE counts milliseconds. 300 ms after the command the lobby is gone, so the key has no remaining life to check."
+    - path: solutions/08-wrong-forgot-persist.redis
+      expect: wrong
+      because: "lobby:m-042 is set correctly, but lobby:m-041 still carries its expiry and will vanish in the middle of the live match."

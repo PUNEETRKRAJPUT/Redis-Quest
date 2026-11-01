@@ -1,0 +1,5 @@
+# Reference: one hash per user. One HSET for the fixed facts, HINCRBY for the number that moves.
+HSET user:{{player.id}} name "{{player.name}}" college c-02 hostel h-c-02-2
+HINCRBY user:{{player.id}} matches 1
+HLEN user:{{player.id}}
+HGETALL user:{{player.id}}

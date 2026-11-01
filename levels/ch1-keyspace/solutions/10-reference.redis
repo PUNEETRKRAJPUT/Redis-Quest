@@ -1,0 +1,8 @@
+# Reference: HyperLogLog per match, merged for the "all live matches" number.
+PFCOUNT visitors:match:m-042
+SCARD ch1:seen:m-042
+MEMORY USAGE visitors:match:m-042
+MEMORY USAGE ch1:seen:m-042
+PFADD visitors:match:m-041 u-000001 u-000002 u-000003 u-000010 u-000100
+PFMERGE visitors:match:all-live visitors:match:m-041 visitors:match:m-042
+PFCOUNT visitors:match:all-live

@@ -1,0 +1,3 @@
+# Wrong: the JSON text in a plain string. JSON.GET and friends cannot read it.
+SET player:p-028 '{"name":"Ganapathi Chengappa","nickname":"Anna Express","team_id":"t-02","role":"batter","stats":{"bat_avg":50.5,"strike_rate":167.6,"matches":0},"tags":["hot"]}'
+GET player:p-028

@@ -1,0 +1,2 @@
+# Wrong: a single SCAN call, never followed up with the returned cursor.
+SCAN 0 MATCH user:c1-* COUNT 10

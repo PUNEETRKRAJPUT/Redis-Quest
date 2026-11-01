@@ -1,0 +1,3 @@
+# Wrong: the list is never capped. 60 old events + 1 = 61.
+LPUSH feed:{{player.id}} "m-041 10.1 SIX"
+LLEN feed:{{player.id}}

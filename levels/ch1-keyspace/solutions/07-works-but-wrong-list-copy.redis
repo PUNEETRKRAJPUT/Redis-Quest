@@ -1,0 +1,4 @@
+# Works, but wrong: the sorted set is right, and a list copy of the board sits beside it.
+ZADD lb:hostel:h-c-02-1 120 user:u-000002 90 user:u-000003 60 user:u-000010
+ZINCRBY lb:hostel:h-c-02-1 100 user:u-000010
+RPUSH lb:hostel:h-c-02-1:list user:u-000010 user:u-000002 user:u-000003

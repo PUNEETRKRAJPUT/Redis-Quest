@@ -1,0 +1,3 @@
+# Wrong: latitude and longitude swapped.
+GEOADD stadiums 18.5204 73.8567 "Katraj Ghat Oval" 19.0760 72.8777 "Bandra Bandstand Oval" 13.0827 80.2707 "Marina Lantern Ground"
+GEOSEARCH stadiums FROMLONLAT 73.8450 18.5150 BYRADIUS 5 km WITHDIST

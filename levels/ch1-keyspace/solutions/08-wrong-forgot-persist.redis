@@ -1,0 +1,3 @@
+# Wrong: the live match's lobby keeps its accidental expiry.
+EXPIRE lobby:m-042 300
+TTL lobby:m-041

@@ -1,0 +1,103 @@
+id: ch1-13-the-player-card
+chapter: ch1
+title: "The player card"
+mode: cli
+
+story: |
+  Teja has designed the player card: name, team, role, a block of stats, and a row of tags like
+  "hot pick". It is the most visited page in the app, and the three biggest names in the league
+  will be on it all night. Ganapathi Chengappa, Anna Express to the mess hall, is the first one
+  he wants to see working.
+
+  The card is nested: stats live inside it, and tags are a list inside it. A hash cannot hold a
+  hash, so you would have to flatten the stats into field names and keep the tags as one comma
+  string. Redis has a type that holds the document as it is, and lets you reach inside it.
+
+brainstorm:
+  prompt: "A player card has simple fields, a nested block of stats and a list of tags, and a stat changes after every match. How do you keep it?"
+  options:
+    - id: json-document
+      label: "A JSON document, with commands that read and change parts of it in place"
+      is_reasonable: true
+    - id: flatten-into-hash
+      label: "A hash, with stat names flattened like stats_bat_avg and the tags joined into one string"
+      is_reasonable: true
+    - id: json-string
+      label: "A plain string holding the JSON text, parsed and rewritten in the app on every change"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a players table in Postgres with a JSON column"
+      is_reasonable: true
+
+teach: |
+  The **JSON** type stores a whole JSON document under one key. It supports the full JSON standard and
+  addresses parts of the document with JSONPath. Its binary tree storage gives fast access to
+  sub-elements, and its commands are typed and atomic. Nesting can go 128 levels deep.
+
+  - `JSON.SET key $ '<json>'` writes a document. `$` is the root.
+  - `JSON.GET key $.field` reads one part. A path like `$.stats.bat_avg` reaches inside.
+  - `JSON.NUMINCRBY key path n` adds to a number inside the document.
+  - `JSON.ARRAPPEND key path '<json value>'` pushes a value onto an array inside it.
+
+  The docs' decision guide: nested data, or a need for the richer Redis Search features, points to
+  JSON. For simple objects with a small number of fields a hash is cheaper. JSON generally has the
+  highest memory and processing cost of the document types, then hashes, then strings.
+
+  Examples from the docs, not your task:
+
+      JSON.SET bike:1 $ '{"model":"Deimos","brand":"Ergonom","price":4972}'
+      JSON.NUMINCRBY crashes $ 1.5
+      JSON.ARRAPPEND riders $ '"Norem"'
+
+task: |
+  The key is `player:p-028`, the card for Ganapathi Chengappa.
+
+  1. Create the card with `JSON.SET player:p-028 $ '...'`, using exactly this document:
+
+         {"name":"Ganapathi Chengappa","nickname":"Anna Express","team_id":"t-02","role":"batter","stats":{"bat_avg":50.5,"strike_rate":167.6,"matches":0},"tags":["hot"]}
+
+  2. Read the role back with `JSON.GET player:p-028 $.role`.
+  3. He has just played a match. Add 1 to `$.stats.matches` with `JSON.NUMINCRBY`.
+  4. Add the tag `top-pick` to the `tags` array with `JSON.ARRAPPEND`. The value is a JSON string, so
+     it needs its own double quotes inside the single quotes.
+
+hints:
+  - "Wrap the whole document in single quotes so the terminal passes it as one argument."
+  - "The path for the match count is $.stats.matches, and for the tags it is $.tags."
+  - "JSON.ARRAPPEND player:p-028 $.tags '\"top-pick\"' has double quotes inside single quotes."
+
+setup:
+  - cmd: [DEL, "player:p-028"]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [JSON.GET, "player:p-028", "$.role"]
+        matches: "batter"
+        message: "player:p-028 should be a JSON document whose role is batter. Did you store it with JSON.SET, and with the document exactly as given?"
+      - cmd: [JSON.GET, "player:p-028", "$.stats.bat_avg"]
+        matches: "50.5"
+        message: "The nested stats.bat_avg should be 50.5."
+      - cmd: [JSON.GET, "player:p-028", "$.stats.matches"]
+        equals: "[1]"
+        message: "stats.matches should be 1 after one JSON.NUMINCRBY on $.stats.matches."
+      - cmd: [JSON.ARRLEN, "player:p-028", "$.tags"]
+        matches: "2"
+        message: "The tags array should hold two tags, hot and top-pick. Use JSON.ARRAPPEND on $.tags."
+
+show_me: json_tree
+docs:
+  - https://redis.io/docs/latest/develop/data-types/json/
+
+reward:
+  xp: 30
+
+solutions:
+  reference: solutions/13-reference.redis
+  wrong:
+    - path: solutions/13-wrong-plain-string.redis
+      expect: wrong
+      because: "SET stores the JSON as text in a plain string. The JSON commands refuse it with WRONGTYPE, so no path can reach inside it and every change would mean reading, parsing and rewriting the whole card in the app."
+    - path: solutions/13-wrong-no-updates.redis
+      expect: wrong
+      because: "The card is created but never updated in place. stats.matches is still 0 and the tags array still has one tag. The in-place commands are the point of the type."

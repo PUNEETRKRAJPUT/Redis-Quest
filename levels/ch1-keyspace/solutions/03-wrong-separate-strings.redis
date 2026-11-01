@@ -1,0 +1,4 @@
+# Wrong: loose strings. There is no user:<id> hash at all.
+SET user:{{player.id}}:college c-02
+SET user:{{player.id}}:hostel h-c-02-2
+SET user:{{player.id}}:matches 1

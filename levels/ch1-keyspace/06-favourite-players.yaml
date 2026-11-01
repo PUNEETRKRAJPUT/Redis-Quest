@@ -1,0 +1,102 @@
+id: ch1-06-favourite-players
+chapter: ch1
+title: "Favourite players"
+mode: cli
+
+story: |
+  Every user can mark favourite players, and the app has to answer two questions fast: "is this player
+  one of mine?" and "which players do my friend and I both like?" The second one is the screen Teja
+  is most excited about. Two roommates compare lists and argue.
+
+  A player can only be a favourite once, however many times someone taps the heart, and the order
+  nobody tapped them in does not matter. Teja's account for testing is user `u-000010`; the game has
+  already put three of his favourites in Redis. Add yours next to them.
+
+brainstorm:
+  prompt: "Each user has a bag of favourite players: no duplicates, no order, and you must be able to compare two bags. What fits?"
+  options:
+    - id: set
+      label: "A set of player ids per user"
+      is_reasonable: true
+    - id: list-of-ids
+      label: "A list of player ids per user, checked by scanning it"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a favourites table in Postgres joined to itself"
+      is_reasonable: true
+
+teach: |
+  A **set** is an unordered collection of unique strings. Adding, removing and testing membership are
+  all O(1), and a set can hold up to 2^32 - 1 members.
+
+  - `SADD key member [member ...]` adds members; a member already there is not added twice.
+  - `SISMEMBER key member` asks whether one member is in the set.
+  - `SCARD key` counts the members.
+  - `SINTER key1 key2` returns the members that are in both sets. `SUNION` and `SDIFF` do the union
+    and the difference.
+  - `SMEMBERS key` returns everything, but it is O(N) and sends the whole set in one reply. On a set
+    with hundreds of thousands of members use `SSCAN` instead.
+
+  The docs list tracking unique items and relations between things as the classic uses, and the
+  set operations are what make comparing two users cheap.
+
+  A worked example of the call shape, not your task:
+
+      SADD bikes:racing bike:1 bike:2
+      SINTER bikes:racing bikes:commuter
+
+task: |
+  Teja's favourites are in `fav:u-000010`. Yours go in `fav:{{player.id}}`.
+
+  1. With one `SADD`, add three players: `p-028` (Ganapathi Chengappa), `p-101` (Jithin Varghese)
+     and `p-151` (Hitesh Bhatt).
+  2. Check that `p-028` is in your set with `SISMEMBER`, and count your favourites with `SCARD`.
+  3. Find the players you and Teja both like with `SINTER fav:{{player.id}} fav:u-000010`.
+
+hints:
+  - "SADD takes the key, then every member you want to add."
+  - "SISMEMBER replies 1 for a member of the set and 0 for one that is not."
+  - "SINTER takes both keys and returns only the members that appear in both."
+
+setup:
+  - cmd: [DEL, "fav:{{player.id}}", "fav:u-000010"]
+  - cmd: [SADD, "fav:u-000010", p-101, p-151, p-001]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "fav:{{player.id}}"]
+        equals: set
+        message: "fav:{{player.id}} should be a set."
+      - cmd: [SCARD, "fav:{{player.id}}"]
+        equals: 3
+        message: "Your set should hold exactly three favourites: p-028, p-101 and p-151."
+      - cmd: [SISMEMBER, "fav:{{player.id}}", p-028]
+        equals: 1
+        message: "p-028 should be one of your favourites."
+      - cmd: [SINTER, "fav:{{player.id}}", "fav:u-000010"]
+        contains: p-101
+        message: "You and Teja both like p-101, so it should be in the intersection."
+      - cmd: [SINTER, "fav:{{player.id}}", "fav:u-000010"]
+        contains: p-151
+        message: "You and Teja both like p-151, so it should be in the intersection."
+      - cmd: [SINTERCARD, 2, "fav:{{player.id}}", "fav:u-000010"]
+        equals: 2
+        message: "Exactly two players should be shared with Teja. Check that you added only the three players named above."
+
+show_me: set_chips
+docs:
+  - https://redis.io/docs/latest/develop/data-types/sets/
+
+reward:
+  xp: 20
+
+solutions:
+  reference: solutions/06-reference.redis
+  wrong:
+    - path: solutions/06-wrong-list-of-players.redis
+      expect: wrong
+      because: "A list keeps order and duplicates and has no intersection command. SISMEMBER and SINTER refuse it with WRONGTYPE, and fav:<id> is not a set."
+    - path: solutions/06-wrong-missed-a-favourite.redis
+      expect: wrong
+      because: "Only two players were added. p-151 is missing, so the set has two members and the intersection with Teja loses one of the shared players."

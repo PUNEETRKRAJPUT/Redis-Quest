@@ -1,0 +1,7 @@
+# Wrong: day 4, the skipped day, is set too.
+SETBIT login:{{player.id}}:2026-11 1 1
+SETBIT login:{{player.id}}:2026-11 2 1
+SETBIT login:{{player.id}}:2026-11 3 1
+SETBIT login:{{player.id}}:2026-11 4 1
+SETBIT login:{{player.id}}:2026-11 5 1
+BITCOUNT login:{{player.id}}:2026-11

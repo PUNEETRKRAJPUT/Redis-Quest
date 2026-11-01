@@ -1,0 +1,6 @@
+# Reference: object-type:id keys, and the expiry set in the same command that stores the code.
+SET user:{{player.id}}:name "{{player.name}}"
+SET otp:{{player.id}} 483921 EX 120
+GET user:{{player.id}}:name
+GET otp:{{player.id}}
+TTL otp:{{player.id}}

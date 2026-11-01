@@ -1,0 +1,5 @@
+# Wrong: only three balls of the over.
+XADD match:m-041:balls * over 1 ball 1 runs 4
+XADD match:m-041:balls * over 1 ball 2 runs 0
+XADD match:m-041:balls * over 1 ball 3 runs 1
+XLEN match:m-041:balls

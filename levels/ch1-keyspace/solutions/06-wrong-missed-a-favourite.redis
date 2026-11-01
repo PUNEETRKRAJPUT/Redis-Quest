@@ -1,0 +1,3 @@
+# Wrong: a set, but p-151 was never added.
+SADD fav:{{player.id}} p-028 p-101
+SCARD fav:{{player.id}}

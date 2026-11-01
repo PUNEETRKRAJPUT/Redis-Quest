@@ -1,0 +1,4 @@
+# Wrong: the code is right, but the name is stored under user:<id> instead of user:<id>:name,
+# so nothing reads it back from the key the app uses.
+SET user:{{player.id}} "{{player.name}}"
+SET otp:{{player.id}} 483921 EX 120

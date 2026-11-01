@@ -1,0 +1,92 @@
+id: ch1-01-a-name-and-an-otp
+chapter: ch1
+title: "A name and an OTP"
+mode: cli
+
+story: |
+  Registration opens at nine tonight, and the first screen asks for two things: a display name and a
+  six-digit code that arrives by SMS. The name has to stay. The code has to stop working after two
+  minutes, or anyone who glimpses a stranger's phone can walk into their account.
+
+  Teja's React form is ready and waiting. What is not ready is the backend: you have not decided what
+  anything is called yet, and every key name you pick tonight is a name you will live with for the
+  whole season. Pick a pattern now, while there are zero users.
+
+brainstorm:
+  prompt: "A user's name must stay forever. Their login code must vanish after two minutes. How would you store the two?"
+  options:
+    - id: two-keys-one-expires
+      label: "Two separate keys, and only the code's key is told to expire"
+      is_reasonable: true
+    - id: one-key-both-values
+      label: "One key holding the name and the code together, with a cleanup job that removes old codes"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a users table in Postgres with an expires_at column on the code"
+      is_reasonable: true
+
+teach: |
+  Redis stores every value under a **key**. A key is just a name, and the docs recommend a readable
+  schema, `object-type:id`, such as `user:1000`. The colon is a habit, not a feature: Redis has no
+  namespaces, so the pattern is what keeps hundreds of thousands of keys findable.
+
+  The simplest value is a **string**: text, a number or raw bytes, up to 512 MB.
+
+  - `SET key value` stores a string and `GET key` reads it back. Both are O(1).
+  - `SET key 100 EX 10` stores a value that deletes itself after 10 seconds.
+  - `TTL key` reads how much life a key has left in seconds; `PTTL key` does the same in milliseconds.
+  - Expiry has a resolution of 1 millisecond.
+
+  A worked example that is not your task:
+
+      SET greeting hello EX 10
+      TTL greeting
+
+  Put the expiry in the same command that stores the value. Two commands leave a gap between them
+  where the key exists with no expiry at all.
+
+task: |
+  Your player id is `{{player.id}}`, so your two keys are `user:{{player.id}}:name` and
+  `otp:{{player.id}}`.
+
+  1. Store your display name, `{{player.name}}`, at `user:{{player.id}}:name`.
+  2. Store the code `483921` at `otp:{{player.id}}` so that it expires after 120 seconds, in the
+     same command that stores it.
+  3. Read both back with `GET`, then check the code's remaining life with `TTL`.
+
+  The game checks the code's remaining time, so verify within two minutes of step 2.
+
+hints:
+  - "SET takes its options after the value: SET key value EX seconds."
+  - "A name with a space in it needs quotes around it in the terminal."
+  - "If the code's key has vanished by the time you verify, the two minutes passed. Store it again and verify straight away."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [GET, "user:{{player.id}}:name"]
+        equals: "{{player.name}}"
+        message: "user:{{player.id}}:name does not hold your display name. Check the key spelling and the name."
+      - cmd: [GET, "otp:{{player.id}}"]
+        equals: 483921
+        message: "otp:{{player.id}} should hold the code 483921. If the key is missing, it may already have expired."
+      - cmd: [TTL, "otp:{{player.id}}"]
+        between: [1, 120]
+        message: "The code should be about to expire within two minutes. If it never will, you stored it without EX 120."
+
+show_me: kv_card
+docs:
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+
+reward:
+  xp: 15
+
+solutions:
+  reference: solutions/01-reference.redis
+  wrong:
+    - path: solutions/01-wrong-no-expiry.redis
+      expect: wrong
+      because: "SET without EX stores the code for ever, so its TTL can never be inside the two-minute window. A login code that does not expire is a standing password."
+    - path: solutions/01-wrong-name-under-another-key.redis
+      expect: wrong
+      because: "The name went to user:<id> instead of user:<id>:name. The app reads the key the schema names, so the lookup finds nothing."

@@ -1,0 +1,3 @@
+# Wrong: Chennai was never added.
+GEOADD stadiums 73.8567 18.5204 "Katraj Ghat Oval" 72.8777 19.0760 "Bandra Bandstand Oval"
+GEODIST stadiums "Katraj Ghat Oval" "Bandra Bandstand Oval" km

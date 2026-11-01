@@ -1,0 +1,112 @@
+id: ch1-07-hostel-scoreboard
+chapter: ch1
+title: "The hostel scoreboard"
+mode: cli
+
+story: |
+  Harry Bhaiya wants the scoreboard live by tomorrow morning: hostel against hostel, with the top
+  ten at the top, and the mess hall watching a big screen. Savitribai Bhawan registers first, so its
+  board is the one he wants to demo.
+
+  Teja's idea is to keep the scores in a list and sort it in the app every time the screen refreshes.
+  Sorting a few hundred users is fine. Sorting them every second, for every viewer, during a final,
+  is a hostel's worth of CPU spent on the same answer.
+
+  The board for Savitribai Bhawan (`h-c-02-1`) is empty. The game has not seeded anyone on it. You
+  will put three test users on it and move one of them to the top.
+
+brainstorm:
+  prompt: "A live board of points per user, read top ten first, with scores that keep changing. What do you keep it in?"
+  options:
+    - id: sorted-set
+      label: "A sorted set: each user a member, their points the score"
+      is_reasonable: true
+    - id: list-sorted-in-app
+      label: "A list of users, sorted in JavaScript every time the board is shown"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: SELECT ... ORDER BY points DESC LIMIT 10 in Postgres"
+      is_reasonable: true
+
+teach: |
+  A **sorted set** holds unique members, each with a numeric score, and keeps them in order by score.
+  Ties are broken lexicographically. The docs call it a mix between a set and a hash. The ordering
+  is kept by the data structure as members are added, not computed when you ask.
+
+  - `ZADD key score member [score member ...]` adds a member or updates its score. Score first.
+  - `ZINCRBY key amount member` adds to a member's score in one atomic step.
+  - `ZRANGE key 0 9 REV WITHSCORES` reads the top ten, highest first, with their scores.
+  - `ZREVRANK key member` is a member's position from the top, starting at 0. `ZSCORE` reads a score.
+  - `ZCARD key` counts the members.
+
+  Most sorted-set operations are O(log N). Leaderboards are the docs' first example of what the type
+  is for. Be careful with `ZRANGE` calls that return tens of thousands of results at once.
+
+  A worked example from the docs, not your task:
+
+      ZADD racer_scores 10 "Norem"
+      ZRANGE racer_scores 0 -1 REV WITHSCORES
+      ZINCRBY racer_scores 50 "Wood"
+
+task: |
+  The board is `lb:hostel:h-c-02-1`. Members are named after the user's key, so user `u-000002` is
+  member `user:u-000002`.
+
+  1. With `ZADD`, put three users on it: `user:u-000002` with 120 points, `user:u-000003` with 90,
+     and `user:u-000010` with 60.
+  2. `user:u-000010` just won a contest. Add 100 points to their score with `ZINCRBY`, so they
+     move to the top.
+  3. Read the top ten with `ZRANGE ... REV WITHSCORES`, find their position with `ZREVRANK`, and
+     count the board with `ZCARD`.
+
+  Keep only the sorted set. Do not keep a second copy of the board in a list.
+
+hints:
+  - "ZADD takes the score before the member, and several score and member pairs can go in one command."
+  - "ZINCRBY adds to the existing score. Using ZADD again would replace it."
+  - "ZREVRANK counts from the top, so the leader is at 0."
+
+setup:
+  - cmd: [DEL, "lb:hostel:h-c-02-1", "lb:hostel:h-c-02-1:list"]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "lb:hostel:h-c-02-1"]
+        equals: zset
+        message: "lb:hostel:h-c-02-1 should be a sorted set."
+      - cmd: [ZCARD, "lb:hostel:h-c-02-1"]
+        equals: 3
+        message: "The board should have exactly three members."
+      - cmd: [ZSCORE, "lb:hostel:h-c-02-1", "user:u-000010"]
+        equals: 160
+        message: "user:u-000010 should have 160 points: 60 to start, plus 100 from ZINCRBY. If it is 100, the second ZADD replaced the score."
+      - cmd: [ZREVRANK, "lb:hostel:h-c-02-1", "user:u-000010"]
+        equals: 0
+        message: "user:u-000010 should be at the top of the board, rank 0."
+  - type: antipattern
+    checks:
+      - cmd: [EXISTS, "lb:hostel:h-c-02-1:list"]
+        equals: 0
+        message: "This passes today, but a list cannot rank. You are also keeping a list copy of the board, so every score change has to be written twice and the two copies will drift. A sorted set already knows the order."
+
+show_me: leaderboard_panel
+docs:
+  - https://redis.io/docs/latest/develop/data-types/sorted-sets/
+
+reward:
+  xp: 25
+  badge: "Ranked"
+
+solutions:
+  reference: solutions/07-reference.redis
+  wrong:
+    - path: solutions/07-wrong-list-only.redis
+      expect: wrong
+      because: "A list of users is not a sorted set, so there is no ZSCORE or ZREVRANK and lb:hostel:h-c-02-1 is not a zset. Ranking would be left to the app."
+    - path: solutions/07-wrong-zadd-twice.redis
+      expect: wrong
+      because: "The second ZADD replaces user:u-000010's score with 100 instead of adding 100 to it. They end at 100, behind user:u-000002, not at 160 on top."
+    - path: solutions/07-works-but-wrong-list-copy.redis
+      expect: works_but_wrong
+      because: "The sorted set is correct, but a list copy of the board sits beside it. Every change must be written twice, a list cannot rank, and the copies drift."

@@ -1,0 +1,4 @@
+# Wrong: the entry is never taken off. 1000 + 1 = 1001.
+INCRBY wallet:{{player.id}} 1000
+INCR wallet:{{player.id}}
+GET wallet:{{player.id}}

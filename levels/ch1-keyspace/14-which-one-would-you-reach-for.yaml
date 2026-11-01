@@ -1,0 +1,193 @@
+id: ch1-14-which-one-would-you-reach-for
+chapter: ch1
+title: "Which one would you reach for"
+mode: decision
+
+story: |
+  Registration is open and the first users are already coming through. Teja walks over with his
+  laptop and a list of eight features he has not built yet. "Quick, for each one, which Redis thing?"
+
+  You have used a dozen types in a few hours, and the danger now is the opposite of the one this
+  morning. Having learned the hammers, it is tempting to treat everything as a nail. Some of these
+  want a structure you built tonight. A couple want the plainest one of all. One should not go in
+  Redis at all.
+
+  Harry Bhaiya is watching over your shoulder. Take your time; he is not in a hurry, he says, which
+  is how you know he is.
+
+brainstorm:
+  prompt: "Before you read the eight scenarios: what do you ask yourself about a piece of data to choose where and how to keep it?"
+  options:
+    - id: ask-access-pattern
+      label: "How will it be read and changed, and does it need order, uniqueness or nesting?"
+      is_reasonable: true
+    - id: always-hash
+      label: "Nothing: use a hash for everything, it is the most flexible"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: put it all in Postgres and only reach for Redis when something is slow"
+      is_reasonable: true
+
+teach: |
+  The docs' "compare data types" guide gives rules of thumb, not laws. Any type can be imitated with
+  strings, but the trade-offs differ in performance, memory and functionality.
+
+  **One value or one document.** Nested data points to JSON. A flat object with a few fields points
+  to a hash, which is lighter than JSON and faster per field. Only integer or bit values, or one
+  plain value, points to a string. Memory runs highest for JSON, then hashes, then strings.
+
+  **A collection.** Need ordering by a score: sorted set. Need extra information per key and no set
+  operations: a hash. Integer ids in a known range: a bitmap on a string. Otherwise a set. Memory
+  runs highest for sorted sets, then sets, then strings.
+
+  **A sequence.** Priority or set operations: sorted set. Ordering by time, or several consumers
+  reading the same events: a stream. Otherwise a list.
+
+  And sometimes the answer is not Redis. The FAQ's own pattern is to keep small, write-heavy data in
+  Redis and let a disk database hold the rest. A question that joins and groups years of history
+  across several tables is a database question.
+
+task: |
+  Eight scenarios follow. For each one, pick the option you would reach for. Read the scenario to the
+  end before you pick: the detail that decides it is usually in the last clause.
+
+hints:
+  - "Ask three questions of each scenario: does it need an order, must items be unique, and is it nested or flat?"
+  - "Two of the eight are just a plain value, and the decision tree's last line is 'otherwise, a string'."
+  - "One of the eight is not about hot, small data at all. It is about history, joins and a spreadsheet."
+
+verify:
+  - type: quiz
+    question: "1. The live hostel scoreboard: every user has points that change all night, and the screen shows the top ten, highest first."
+    options:
+      - id: q1-sorted-set
+        label: "A sorted set, score = points"
+      - id: q1-list
+        label: "A list of users, sorted in the app each time the screen refreshes"
+      - id: q1-hash
+        label: "A hash of user to points, read in full and sorted in the app"
+      - id: q1-set
+        label: "A set of users"
+    correct: q1-sorted-set
+    explanation: "It needs ordering by a score, and the docs' decision tree sends that to a sorted set. A list or a hash would push the sorting into the app on every refresh."
+  - type: quiz
+    question: "2. Two roommates compare which players they have both marked as favourites. No player appears twice in one person's list, and the order does not matter."
+    options:
+      - id: q2-set
+        label: "A set of player ids per user, compared with SINTER"
+      - id: q2-list
+        label: "A list of player ids per user"
+      - id: q2-string
+        label: "One string per user holding the ids joined with commas"
+      - id: q2-stream
+        label: "A stream with an entry for each favourite"
+    correct: q2-set
+    explanation: "Unique items with no ordering and an intersection between two collections are what a set is for."
+  - type: quiz
+    question: "3. A login code that is valid for two minutes and then must stop working. It is one number per user."
+    options:
+      - id: q3-string
+        label: "A string with an expiry, stored with SET ... EX 120"
+      - id: q3-hash
+        label: "A hash per user with a code field and a cleanup job"
+      - id: q3-json
+        label: "A JSON document per user holding the code"
+      - id: q3-stream
+        label: "A stream entry per code, trimmed after two minutes"
+    correct: q3-string
+    explanation: "It is a single plain value, so the answer is a string. The expiry is built into the key, and the other options bring structure it does not need."
+  - type: quiz
+    question: "4. Each user's wallet balance: one whole number that goes up and down from many requests at once."
+    options:
+      - id: q4-string
+        label: "A string, changed with INCRBY and DECRBY"
+      - id: q4-sorted-set
+        label: "A sorted set with one member per user, score = balance"
+      - id: q4-list
+        label: "A list of every credit and debit, summed when the balance is read"
+      - id: q4-json
+        label: "A JSON document per user with a balance field"
+    correct: q4-string
+    explanation: "An integer counter is the textbook string case, and the INCR family changes it atomically. A hash would earn its place only if the wallet had several related counters."
+  - type: quiz
+    question: "5. A user's profile: name, college, hostel and a matches-played counter. Four flat fields, read together, with one of them incremented often."
+    options:
+      - id: q5-hash
+        label: "A hash per user, with HINCRBY for the counter"
+      - id: q5-json-string
+        label: "A string holding the profile as JSON, rewritten on every change"
+      - id: q5-list
+        label: "A list of the four values, in a fixed order"
+      - id: q5-set
+        label: "A set of the four values"
+    correct: q5-hash
+    explanation: "A simple object with a small number of fields is the hash case, and HINCRBY changes one field without touching the others."
+  - type: quiz
+    question: "6. A player card: simple fields, a nested block of stats, and a list of tags, with single values inside it updated in place."
+    options:
+      - id: q6-json
+        label: "A JSON document, updated by path"
+      - id: q6-hash
+        label: "A hash, with the stats and tags flattened into field names"
+      - id: q6-string
+        label: "A plain string holding the card as text"
+      - id: q6-sorted-set
+        label: "A sorted set with one member per field"
+    correct: q6-json
+    explanation: "Nested data is what the decision tree sends to JSON, and JSONPath lets you change a value inside it in place."
+  - type: quiz
+    question: "7. The ball-by-ball log of a live match. The scorer's screen, the points calculator and the highlights reel each need to read every ball, in order, and none may take a ball away from the others."
+    options:
+      - id: q7-stream
+        label: "A stream: append each ball and let each reader read from where it wants"
+      - id: q7-list
+        label: "A list that each reader pops from"
+      - id: q7-pubsub
+        label: "A Pub/Sub channel that each reader subscribes to"
+      - id: q7-set
+        label: "A set of balls"
+    correct: q7-stream
+    explanation: "Time ordering and several readers of the same events point to a stream. Entries stay after they are read, and every waiting client gets every entry. A list pop removes the item for everyone, and a published message is gone once delivered."
+  - type: quiz
+    question: "8. The warden wants a monthly report: for every hostel, the total points earned in October by users who registered that month, joined against the registrations table and grouped by college, for a spreadsheet."
+    options:
+      - id: q8-not-redis
+        label: "Not Redis: this is a join and a grouped sum over history, so run it in Postgres"
+      - id: q8-sorted-set
+        label: "A sorted set per hostel and per month, summed in the app"
+      - id: q8-hash
+        label: "A hash per hostel with a total field, updated on every ball"
+      - id: q8-json
+        label: "One JSON document with every user and every hostel, queried in the app"
+    correct: q8-not-redis
+    explanation: "A question across several tables with joins and grouping over a whole month is a database question. Redis is the right place for the hot, small data that feeds it, not for the report."
+
+docs:
+  - https://redis.io/docs/latest/develop/data-types/compare-data-types/
+
+reward:
+  xp: 35
+
+solutions:
+  reference:
+    - q1-sorted-set
+    - q2-set
+    - q3-string
+    - q4-string
+    - q5-hash
+    - q6-json
+    - q7-stream
+    - q8-not-redis
+  wrong:
+    - option: q1-list
+      expect: wrong
+      because: "A list cannot rank. Sorting it in the app on every refresh does the one job a sorted set does for you as scores are written."
+    - option: q4-sorted-set
+      expect: wrong
+      because: "A sorted set costs the most memory of the collection types and brings ordering nobody asked for. One integer per user is a string with INCRBY."
+    - option: q7-pubsub
+      expect: wrong
+      because: "A published message is gone once delivered, so a reader that restarts, or a highlights reel that starts late, cannot read the balls it missed. A stream keeps them."
+    - option: q8-sorted-set
+      expect: wrong
+      because: "A report that joins tables and groups a month of history is a database query. Pre-summing it into sorted sets would mean a new structure for every question the warden asks."

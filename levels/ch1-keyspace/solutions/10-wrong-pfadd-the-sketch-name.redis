@@ -1,0 +1,4 @@
+# Wrong: PFADD treats the key names as two visitors. It does not merge anything.
+PFADD visitors:match:m-041 u-000001 u-000002 u-000003 u-000010 u-000100
+PFADD visitors:match:all-live visitors:match:m-041 visitors:match:m-042
+PFCOUNT visitors:match:all-live

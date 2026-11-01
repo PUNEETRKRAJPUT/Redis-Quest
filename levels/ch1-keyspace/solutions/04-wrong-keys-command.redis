@@ -1,0 +1,2 @@
+# Wrong: KEYS is the debugging shortcut. It blocks the server and is not for application code.
+KEYS user:c1-*

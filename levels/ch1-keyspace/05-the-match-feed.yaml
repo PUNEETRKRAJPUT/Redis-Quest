@@ -1,0 +1,92 @@
+id: ch1-05-the-match-feed
+chapter: ch1
+title: "The match feed"
+mode: cli
+
+story: |
+  The home screen shows what has just happened in the matches you follow: a wicket, a six, a change
+  of innings. The newest event goes on top and the old ones scroll away. Nobody scrolls back further
+  than a screen or two.
+
+  Teja has been saving every event for every user. His laptop already holds sixty events for a single
+  test account and the feed has not even gone live. You do the maths on a few thousand users and
+  decide the feed keeps the latest fifty and forgets the rest.
+
+brainstorm:
+  prompt: "A feed shows the newest events first and never needs more than the latest fifty per user. What would you keep it in?"
+  options:
+    - id: capped-list
+      label: "A list: push new events on the front, cut it back to fifty"
+      is_reasonable: true
+    - id: set-of-events
+      label: "A set of event strings, sorted by the app when it displays them"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: an events table in Postgres with ORDER BY time DESC LIMIT 50"
+      is_reasonable: true
+
+teach: |
+  A **list** is a linked list of strings. Pushing to or popping from either end is O(1), even with
+  millions of elements, which makes lists the natural home for "latest N" feeds.
+
+  - `LPUSH key item` puts an item at the head, so the newest is first. `RPUSH` puts it at the tail.
+  - `LRANGE key start stop` reads a slice. `LRANGE key 0 9` is the first ten, and `0 -1` is all.
+  - `LLEN key` counts the items and is O(1).
+  - `LTRIM key start stop` keeps only that range and drops everything else.
+
+  The docs' pattern for a capped list is a push followed by `LTRIM key 0 N-1`, so the list never
+  grows past N. Reading the middle of a long list is O(N), so keep lists for the ends.
+
+  A worked example of the call shape, not your task:
+
+      LPUSH bikes:repairs bike:1
+      LTRIM bikes:repairs 0 99
+
+  Lists create themselves on the first push and disappear when the last item is removed. Using a list
+  command on a key of another type fails with WRONGTYPE.
+
+task: |
+  Your feed is `feed:{{player.id}}`. When this level opened, the game filled it with sixty old events.
+
+  1. Push the new event `m-041 10.1 SIX` onto the front of the list with `LPUSH`.
+  2. Cut the list back to the latest fifty with `LTRIM`.
+  3. Read the ten newest events with `LRANGE`, and check the length with `LLEN`.
+
+hints:
+  - "LPUSH puts the new item at index 0, the head of the list."
+  - "LTRIM takes the first and last index to keep. To keep fifty items, that is 0 and 49."
+  - "A string with spaces in it needs quotes: LPUSH feed:... \"m-041 10.1 SIX\"."
+
+setup:
+  - cmd: [DEL, "feed:{{player.id}}"]
+  - cmd: [LPUSH, "feed:{{player.id}}", "m-041 1.1 dot", "m-041 1.2 single", "m-041 1.3 FOUR", "m-041 1.4 two", "m-041 1.5 dot", "m-041 1.6 single", "m-041 2.1 dot", "m-041 2.2 single", "m-041 2.3 FOUR", "m-041 2.4 two", "m-041 2.5 dot", "m-041 2.6 single", "m-041 3.1 dot", "m-041 3.2 single", "m-041 3.3 FOUR", "m-041 3.4 two", "m-041 3.5 dot", "m-041 3.6 single", "m-041 4.1 dot", "m-041 4.2 single", "m-041 4.3 FOUR", "m-041 4.4 two", "m-041 4.5 dot", "m-041 4.6 single", "m-041 5.1 dot", "m-041 5.2 single", "m-041 5.3 FOUR", "m-041 5.4 two", "m-041 5.5 dot", "m-041 5.6 single", "m-041 6.1 dot", "m-041 6.2 single", "m-041 6.3 FOUR", "m-041 6.4 two", "m-041 6.5 dot", "m-041 6.6 single", "m-041 7.1 dot", "m-041 7.2 single", "m-041 7.3 FOUR", "m-041 7.4 two", "m-041 7.5 dot", "m-041 7.6 single", "m-041 8.1 dot", "m-041 8.2 single", "m-041 8.3 FOUR", "m-041 8.4 two", "m-041 8.5 dot", "m-041 8.6 single", "m-041 9.1 dot", "m-041 9.2 single", "m-041 9.3 FOUR", "m-041 9.4 two", "m-041 9.5 dot", "m-041 9.6 single", "m-041 10.1 dot", "m-041 10.2 single", "m-041 10.3 FOUR", "m-041 10.4 two", "m-041 10.5 dot", "m-041 10.6 single"]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "feed:{{player.id}}"]
+        equals: list
+        message: "feed:{{player.id}} should be a list."
+      - cmd: [LINDEX, "feed:{{player.id}}", 0]
+        equals: "m-041 10.1 SIX"
+        message: "The newest event should be at the front of the list. Use LPUSH, not RPUSH."
+      - cmd: [LLEN, "feed:{{player.id}}"]
+        equals: 50
+        message: "The feed should hold exactly the latest fifty events: sixty old ones plus your new one, trimmed to fifty."
+
+show_me: list_feed
+docs:
+  - https://redis.io/docs/latest/develop/data-types/lists/
+
+reward:
+  xp: 20
+
+solutions:
+  reference: solutions/05-reference.redis
+  wrong:
+    - path: solutions/05-wrong-no-trim.redis
+      expect: wrong
+      because: "The new event is on the front, but nothing cut the list back, so it holds 61 events. Without LTRIM the feed grows for ever."
+    - path: solutions/05-wrong-rpush-then-trim.redis
+      expect: wrong
+      because: "RPUSH adds at the tail, and LTRIM 0 49 then keeps the head and drops the tail, which is the event you just added. The newest event is lost."

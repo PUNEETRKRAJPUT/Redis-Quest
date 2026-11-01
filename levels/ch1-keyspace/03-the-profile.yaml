@@ -1,0 +1,104 @@
+id: ch1-03-the-profile
+chapter: ch1
+title: "The profile"
+mode: cli
+
+story: |
+  The profile screen shows a user's name, their college, their hostel and how many matches they have
+  played. Four small facts that always travel together.
+
+  Teja's plan is one string per user holding a blob of JSON, rewritten from scratch every time a
+  single number changes. To bump "matches played" the app would read the whole blob, parse it, change
+  one field and write the whole thing back. You tell him a profile is a record, not a document, and
+  that Redis has a type that is exactly a record.
+
+brainstorm:
+  prompt: "One user has a name, a college, a hostel and a counter that goes up after every match. Which shape fits?"
+  options:
+    - id: one-hash
+      label: "One key per user holding named fields"
+      is_reasonable: true
+    - id: one-key-per-field
+      label: "A separate string key for every field: user:7:name, user:7:college, and so on"
+      is_reasonable: true
+    - id: json-blob-string
+      label: "One string key holding the whole profile as a JSON blob"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a users table in Postgres"
+      is_reasonable: true
+
+teach: |
+  A **hash** is a record: one key that holds field and value pairs. The docs use hashes for
+  "objects" and for groups of counters, and recommend them for simple objects with a small number
+  of fields.
+
+  - `HSET key field value [field value ...]` writes one or many fields. It replies with the number
+    of fields that were new.
+  - `HGET key field` reads one field and is O(1). `HGETALL key` reads every field and is O(N).
+  - `HLEN key` counts the fields.
+  - `HINCRBY key field n` changes one field in place, the docs' pattern for counters.
+
+  Every value in a hash comes back as a string, even one you use as a number.
+
+  A worked example from the docs, not your task:
+
+      HSET bike:2 model Deimos brand Ergonom type 'Enduro bikes' price 4972
+      HGET bike:2 model
+      HINCRBY bike:1:stats rides 1
+
+task: |
+  Build your own profile at `user:{{player.id}}`. This is a different key from the name string you
+  stored in level 1.
+
+  1. With one `HSET`, write the fields `name` (`{{player.name}}`), `college` (`c-02`) and
+     `hostel` (`h-c-02-2`).
+  2. You have played your first match: add 1 to a field called `matches` with `HINCRBY`.
+  3. Count the fields with `HLEN`, and read the whole profile with `HGETALL`.
+
+hints:
+  - "HSET takes the key once, then alternating field and value: HSET key f1 v1 f2 v2 f3 v3."
+  - "HINCRBY creates the field if it is not there yet, so you do not need to set matches to 0 first."
+  - "HGETALL prints field, value, field, value. HLEN prints just how many fields there are."
+
+setup:
+  - cmd: [DEL, "user:{{player.id}}"]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "user:{{player.id}}"]
+        equals: hash
+        message: "user:{{player.id}} should be a hash. Did you write separate string keys instead?"
+      - cmd: [HGET, "user:{{player.id}}", name]
+        equals: "{{player.name}}"
+        message: "The name field is missing or is not your display name."
+      - cmd: [HGET, "user:{{player.id}}", college]
+        equals: c-02
+        message: "The college field should be c-02."
+      - cmd: [HGET, "user:{{player.id}}", hostel]
+        equals: h-c-02-2
+        message: "The hostel field should be h-c-02-2."
+      - cmd: [HGET, "user:{{player.id}}", matches]
+        equals: 1
+        message: "The matches field should be 1 after one HINCRBY."
+      - cmd: [HLEN, "user:{{player.id}}"]
+        equals: 4
+        message: "The profile should have exactly four fields: name, college, hostel and matches."
+
+show_me: hash_card
+docs:
+  - https://redis.io/docs/latest/develop/data-types/hashes/
+
+reward:
+  xp: 20
+
+solutions:
+  reference: solutions/03-reference.redis
+  wrong:
+    - path: solutions/03-wrong-separate-strings.redis
+      expect: wrong
+      because: "Three loose string keys instead of one hash. user:<id> does not exist as a hash, so there is no single record to read, delete or count."
+    - path: solutions/03-wrong-no-counter.redis
+      expect: wrong
+      because: "The hash is there but matches was never counted. HINCRBY is what updates one field without touching the others."

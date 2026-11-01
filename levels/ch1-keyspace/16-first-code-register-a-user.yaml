@@ -1,0 +1,137 @@
+id: ch1-16-first-code-register-a-user
+chapter: ch1
+title: "First code: register a user"
+mode: code
+
+story: |
+  It is almost nine. Registration is about to open and the backend still does not have a real
+  registration function. You have typed a lot of commands by hand tonight. The app cannot do that: it
+  needs a function that does it for a new user, every time, in one go.
+
+  Registering a user means three things in Redis: a profile hash, a place in the set of registered
+  users, and a starting position of zero points on their hostel's scoreboard. Teja's draft sends the
+  three commands one after another. If the app stops after the first, a user has a profile and no
+  place on the board, and nobody notices until the mess hall asks why a hostel is a person short.
+
+  Until now you have typed commands. This time you write the function the app calls, in JavaScript,
+  with the Node client the whole backend is built on.
+
+brainstorm:
+  prompt: "Three writes must all happen for a new user: a hash, a set entry and a leaderboard entry. How do you send them from code?"
+  options:
+    - id: multi-exec
+      label: "Queue the three commands in one transaction and send it once, so they run together"
+      is_reasonable: true
+    - id: three-awaits
+      label: "Three commands, one after another, each awaited"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: insert the user into Postgres and rebuild the Redis keys from it later"
+      is_reasonable: true
+
+teach: |
+  In JavaScript you use the `redis` package, node-redis. Its command names are camelCase versions of the
+  Redis ones: `hSet`, `hGetAll`, `sAdd`, `zAdd`, `incrBy`. Hash values come back as strings.
+
+  The docs' way to connect, which the app has already done for you, looks like this:
+
+      const client = createClient();
+      client.on('error', err => console.log('Redis Client Error', err));
+      await client.connect();
+
+  The `error` handler is not optional: the docs say to always set it. Your function receives the
+  connected client as `redis` and a logger as `log`, so it never connects for itself.
+
+  To send several commands as one unit, use a transaction. `MULTI` queues commands and `EXEC` runs them;
+  the commands run one after another with no other client's command in the middle, and if the
+  connection drops before EXEC, none of them run. Redis does not roll back if one fails after EXEC.
+
+  In node-redis, `multi()` queues and `exec()` sends, and `exec()` resolves with the replies in order:
+
+      const [r1, r2] = await client.multi().incrBy('counter:1', 1).incrBy('counter:2', 1).exec();
+
+task: |
+  Fill in `registerUser(deps, user)` in `workspace/ch1/onboarding.js`. `user` is an object with `id`,
+  `name`, `college` and `hostel`, for example `{ id: "u-c1-100", name: "Test Roommate", college: "c-02",
+  hostel: "h-c-02-2" }`.
+
+  In one `multi()` that you `exec()`, write:
+
+  - a hash `user:<id>` with the fields `name`, `college` and `hostel`, using `hSet`;
+  - the id into the set `users:registered`, using `sAdd`;
+  - the member `user:<id>` with score `0` into the hostel's board `lb:hostel:<hostel>`, using `zAdd`.
+
+  Use the `hostel` from the user, not a hostel you typed in. The function does not need to return
+  anything.
+
+hints:
+  - "The default export is async function registerUser({ redis }, user)."
+  - "node-redis takes an object for hashes: redis.multi().hSet(key, { name, college, hostel })."
+  - "zAdd takes a single { score, value } object for one member: zAdd(key, { score: 0, value: member })."
+
+verify:
+  - type: behavior
+    slot: onboarding.registerUser
+    fixtures: fixtures/16-reset-users.yaml
+    assertions:
+      - call:
+          args:
+            - { id: "u-c1-100", name: "Test Roommate", college: "c-02", hostel: "h-c-02-2" }
+        message: "Registering u-c1-100 should leave a profile hash, a registered-set entry and a zero-point leaderboard entry."
+        sideEffect:
+          - cmd: [TYPE, "user:u-c1-100"]
+            equals: hash
+            message: "user:u-c1-100 should be a hash."
+          - cmd: [HGET, "user:u-c1-100", name]
+            equals: "Test Roommate"
+            message: "The hash should hold the user's name."
+          - cmd: [HGET, "user:u-c1-100", hostel]
+            equals: h-c-02-2
+            message: "The hash should hold the user's hostel."
+          - cmd: [HLEN, "user:u-c1-100"]
+            equals: 3
+            message: "The hash should have exactly three fields: name, college and hostel."
+          - cmd: [SISMEMBER, "users:registered", "u-c1-100"]
+            equals: 1
+            message: "The id u-c1-100 should be in the set users:registered."
+          - cmd: [ZSCORE, "lb:hostel:h-c-02-2", "user:u-c1-100"]
+            equals: 0
+            message: "user:u-c1-100 should be on lb:hostel:h-c-02-2 with a score of 0."
+      - call:
+          args:
+            - { id: "u-c1-101", name: "Second Roommate", college: "c-02", hostel: "h-c-02-3" }
+        message: "A second user in a different hostel should land on that hostel's board, not the first one's."
+        sideEffect:
+          - cmd: [TYPE, "user:u-c1-101"]
+            equals: hash
+            message: "user:u-c1-101 should be a hash."
+          - cmd: [SISMEMBER, "users:registered", "u-c1-101"]
+            equals: 1
+            message: "The id u-c1-101 should be in the set users:registered."
+          - cmd: [ZSCORE, "lb:hostel:h-c-02-3", "user:u-c1-101"]
+            equals: 0
+            message: "user:u-c1-101 should be on lb:hostel:h-c-02-3 with a score of 0. Take the hostel from the user."
+          - cmd: [ZSCORE, "lb:hostel:h-c-02-2", "user:u-c1-101"]
+            equals: null
+            message: "user:u-c1-101 is in another hostel and should not be on lb:hostel:h-c-02-2."
+
+show_me: leaderboard_panel
+docs:
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+
+reward:
+  xp: 40
+  badge: "First code"
+
+solutions:
+  reference: solutions/16-reference.js
+  wrong:
+    - path: solutions/16-wrong-hash-only.js
+      expect: wrong
+      because: "Only the profile hash is written. The user is not in users:registered and has no place on the hostel's board, which is exactly the half-registered user Teja's draft risks."
+    - path: solutions/16-wrong-no-leaderboard.js
+      expect: wrong
+      because: "The hash and the set entry are written, but the leaderboard step was forgotten, so the user is missing from their hostel's scoreboard."
+    - path: solutions/16-wrong-hardcoded-hostel.js
+      expect: wrong
+      because: "The board key is hard-coded to one hostel. Users from every other hostel land on the wrong scoreboard."

@@ -1,0 +1,3 @@
+# Wrong: everything is wiped, and the restore is never done.
+FLUSHALL
+DBSIZE

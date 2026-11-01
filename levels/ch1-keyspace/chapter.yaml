@@ -1,0 +1,44 @@
+id: ch1
+title: "The keyspace"
+incident:
+  - from: senior
+    time: "17:52"
+    text: "Registration opens at 9 tonight for all four hostels. I told every mess hall. Ready, na?"
+  - from: you
+    time: "17:54"
+    text: "ready is a strong word. names, OTPs, points, all of it needs a home first"
+  - from: roommate
+    time: "17:58"
+    text: "bhai what if we just put everything in one big JSON file. users, points, feeds. ONE file. so simple"
+  - from: you
+    time: "17:59"
+    text: "and when two people register in the same second?"
+  - from: roommate
+    time: "18:03"
+    text: "... we add a queue? 😅"
+  - from: senior
+    time: "18:30"
+    text: "Also a hostel scoreboard by tomorrow morning. Hostel vs hostel. The mess hall will be watching"
+  - from: warden
+    time: "19:40"
+    text: "My nephew Bunty says he will be user number one. Please make sure the first user is user number one."
+  - from: you
+    time: "19:41"
+    text: "noted, Warden Sir. one small thing at a time"
+levels:
+  - ch1-01-a-name-and-an-otp
+  - ch1-02-points-that-cannot-be-lost
+  - ch1-03-the-profile
+  - ch1-04-fifty-roommates
+  - ch1-05-the-match-feed
+  - ch1-06-favourite-players
+  - ch1-07-hostel-scoreboard
+  - ch1-08-lobby-closes-at-the-toss
+  - ch1-09-login-streak
+  - ch1-10-how-many-saw-the-match-page
+  - ch1-11-where-is-the-watch-party
+  - ch1-12-ball-by-ball
+  - ch1-13-the-player-card
+  - ch1-14-which-one-would-you-reach-for
+  - ch1-15-roommate-cleaned-up
+  - ch1-16-first-code-register-a-user

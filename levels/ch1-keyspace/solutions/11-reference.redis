@@ -1,0 +1,4 @@
+# Reference: longitude first. Three grounds, a radius search from the campus gate, one distance.
+GEOADD stadiums 73.8567 18.5204 "Katraj Ghat Oval" 72.8777 19.0760 "Bandra Bandstand Oval" 80.2707 13.0827 "Marina Lantern Ground"
+GEOSEARCH stadiums FROMLONLAT 73.8450 18.5150 BYRADIUS 5 km WITHDIST
+GEODIST stadiums "Katraj Ghat Oval" "Bandra Bandstand Oval" km

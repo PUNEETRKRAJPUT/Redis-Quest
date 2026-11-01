@@ -1,0 +1,5 @@
+# Reference: a set per user. Membership is O(1) and SINTER compares two users in one command.
+SADD fav:{{player.id}} p-028 p-101 p-151
+SISMEMBER fav:{{player.id}} p-028
+SCARD fav:{{player.id}}
+SINTER fav:{{player.id}} fav:u-000010

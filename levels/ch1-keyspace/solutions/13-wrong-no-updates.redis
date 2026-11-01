@@ -1,0 +1,3 @@
+# Wrong: created, but never changed in place.
+JSON.SET player:p-028 $ '{"name":"Ganapathi Chengappa","nickname":"Anna Express","team_id":"t-02","role":"batter","stats":{"bat_avg":50.5,"strike_rate":167.6,"matches":0},"tags":["hot"]}'
+JSON.GET player:p-028 $.role

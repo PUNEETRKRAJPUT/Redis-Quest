@@ -1,0 +1,3 @@
+# Wrong: a list, not a stream. No IDs, and reading it destructively would lose events.
+RPUSH match:m-041:balls "1.1 4" "1.2 0" "1.3 1" "1.4 6" "1.5 0" "1.6 2"
+LRANGE match:m-041:balls 0 -1

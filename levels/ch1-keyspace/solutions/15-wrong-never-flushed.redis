@@ -1,0 +1,3 @@
+# Wrong: only looks around. Nothing is wiped, so there is nothing to restore.
+DBSIZE
+KEYS game:*

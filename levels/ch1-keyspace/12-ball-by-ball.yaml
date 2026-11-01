@@ -1,0 +1,97 @@
+id: ch1-12-ball-by-ball
+chapter: ch1
+title: "Ball by ball"
+mode: cli
+
+story: |
+  The live match page is a wall of text that updates after every ball: over 1, ball 1, four runs.
+  Teja wants to scroll back through it, and the scorer's screen, the points calculator and the
+  highlights reel will each want to read the same events, in order, without taking them away from
+  one another.
+
+  Match m-041 is live right now. Its balls have to be written as they happen and read back later,
+  oldest first. A list would lose an event the moment somebody pops it, and a message pushed to
+  a channel is gone once it is delivered. You want a log: write at the end, read from anywhere, keep
+  everything.
+
+brainstorm:
+  prompt: "Balls arrive in order, several readers will want all of them, and none may disappear when read. What do you store them in?"
+  options:
+    - id: append-only-log
+      label: "An append-only log: add each ball at the end, read any range, keep everything"
+      is_reasonable: true
+    - id: list-of-strings
+      label: "A list: RPUSH each ball as a string and LRANGE to read"
+      is_reasonable: true
+    - id: pub-sub-channel
+      label: "Publish each ball to a channel that readers listen to"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: an events table in Postgres, one row per ball"
+      is_reasonable: true
+
+teach: |
+  A **stream** is an append-only log. Each entry has an ID made of a millisecond time and a sequence
+  number, `<ms>-<seq>`, and a set of field and value pairs. Adding is O(1), reading by ID is fast,
+  and entries stay until you trim them.
+
+  - `XADD key * field value [field value ...]` appends an entry. The `*` asks Redis to generate
+    the ID. An explicit ID must be greater than the last one.
+  - `XRANGE key - +` reads everything, oldest first. `-` and `+` mean the smallest and largest ID.
+    `XRANGE key (id + COUNT 2` pages on from an ID without repeating it.
+  - `XLEN key` counts the entries and is O(1).
+  - `XREAD COUNT 100 BLOCK 300 STREAMS key $` waits up to 300 ms for new entries. `$` means "only what
+    arrives from now on".
+
+  Unlike a list, reading an entry does not remove it. Unlike Pub/Sub, entries persist, and every
+  client waiting on the stream gets every entry. Consumer groups, for sharing the work, come in
+  Chapter 4.
+
+  A worked example from the docs, not your task:
+
+      XADD race:france * rider Castilla speed 30.2 position 1 location_id 1
+
+task: |
+  The key is `match:m-041:balls`. Each ball is one entry with the fields `over`, `ball` and `runs`.
+
+  1. Add the first over, six balls, with six separate `XADD` commands and the auto-generated ID `*`.
+     Over `1`, balls `1` to `6`, with runs `4`, `0`, `1`, `6`, `0` and `2`.
+  2. Count the entries with `XLEN`, and read them back oldest first with `XRANGE match:m-041:balls - +`.
+  3. Optional: open the terminal in a second window and run
+     `XREAD BLOCK 30000 STREAMS match:m-041:balls $`. Add a seventh ball from the first window and watch
+     it arrive in the second.
+
+hints:
+  - "The shape of one ball is: XADD match:m-041:balls * over 1 ball 1 runs 4."
+  - "Each XADD adds one entry, so six balls means six commands."
+  - "XRANGE with - and + reads the whole log, oldest first."
+
+setup:
+  - cmd: [DEL, "match:m-041:balls"]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "match:m-041:balls"]
+        equals: stream
+        message: "match:m-041:balls should be a stream. Did you use LPUSH or SET instead of XADD?"
+      - cmd: [XLEN, "match:m-041:balls"]
+        gte: 6
+        message: "The first over has six balls. match:m-041:balls should hold at least six entries."
+
+show_me: stream_log
+docs:
+  - https://redis.io/docs/latest/develop/data-types/streams/
+
+reward:
+  xp: 25
+
+solutions:
+  reference: solutions/12-reference.redis
+  wrong:
+    - path: solutions/12-wrong-list.redis
+      expect: wrong
+      because: "A list holds the balls but is not a stream. There is no auto-generated ID, XLEN and XRANGE answer with WRONGTYPE, and a reader that pops an item removes it for everyone else."
+    - path: solutions/12-wrong-half-an-over.redis
+      expect: wrong
+      because: "Only three balls were added, so the log holds three entries. An over has six balls."

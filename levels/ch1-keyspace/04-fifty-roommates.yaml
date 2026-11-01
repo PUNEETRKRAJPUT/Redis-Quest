@@ -1,0 +1,159 @@
+id: ch1-04-fifty-roommates
+chapter: ch1
+title: "Fifty roommates"
+mode: cli
+
+story: |
+  Teja got fifty of the hostel's most reliable people to register as a dry run, and they all did,
+  within a minute of each other. Bunty was first, loudly. The numbering you promised the warden held.
+
+  Now Harry Bhaiya wants to know how many of them have a profile. You could ask the database, but the
+  profiles are keys in Redis, so you will have to walk the keyspace. On a laptop with a hundred keys
+  any command works. On launch night, with real users, it will be a server that cannot afford to
+  stop. Learn the safe way to look before you need it.
+
+brainstorm:
+  prompt: "Fifty keys today, a few hundred thousand on launch night. How do you find every key that starts with user:?"
+  options:
+    - id: scan-in-pages
+      label: "Ask for them a page at a time, following a cursor until Redis says it is done"
+      is_reasonable: true
+    - id: keys-pattern
+      label: "One command that returns every matching key at once"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: keep a separate list of user ids in Postgres and count that"
+      is_reasonable: true
+
+teach: |
+  Two commands can list keys that match a pattern, and they behave very differently.
+
+  - `KEYS pattern` walks the entire keyspace in one go and blocks the server while it does. The docs
+    say not to use it in regular application code; it is for debugging and special operations only.
+  - `SCAN cursor [MATCH pattern] [COUNT n]` returns a small batch and a new cursor. You start at
+    cursor `0`, call again with the cursor you were given, and you are finished when the cursor
+    comes back as `0`. It is incremental and safe on a busy server.
+
+  The catch is that SCAN gives limited guarantees while keys are being added or removed, so treat
+  it as "walk the keyspace", not "take a photograph".
+
+  Patterns are globs: `h?llo` matches one character, `h*llo` any number, `h[ae]llo` a or e.
+
+  A worked example from the docs, not your task:
+
+      SCAN 0 MATCH "bike:*" COUNT 100
+
+  COUNT is a hint for how much work to do per call, not a promise of how many keys come back.
+
+task: |
+  The fifty test profiles are hashes named `user:c1-001` to `user:c1-050`. They are already in your
+  Redis; the game put them there when this level opened.
+
+  Use `SCAN 0 MATCH user:c1-* COUNT 100`, then call it again with the cursor from each reply, until
+  the cursor is `0`. Count the key names you collected, each name once, and type the number below.
+
+  Do not use `KEYS` here, even though it would work on fifty keys. The habit is the lesson.
+
+hints:
+  - "Each reply carries the cursor to use next, alongside the batch of keys it found."
+  - "If the cursor in a reply is not 0, call SCAN again with that cursor in place of the 0."
+  - "Other keys that start with user: exist too, such as your own profile. The pattern user:c1-* leaves them out."
+
+setup:
+  - cmd: [DEL, "ch1:users"]
+  - cmd: [HSET, "user:c1-001", name, "Roommate 001", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-002", name, "Roommate 002", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-003", name, "Roommate 003", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-004", name, "Roommate 004", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-005", name, "Roommate 005", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-006", name, "Roommate 006", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-007", name, "Roommate 007", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-008", name, "Roommate 008", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-009", name, "Roommate 009", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-010", name, "Roommate 010", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-011", name, "Roommate 011", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-012", name, "Roommate 012", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-013", name, "Roommate 013", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-014", name, "Roommate 014", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-015", name, "Roommate 015", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-016", name, "Roommate 016", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-017", name, "Roommate 017", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-018", name, "Roommate 018", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-019", name, "Roommate 019", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-020", name, "Roommate 020", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-021", name, "Roommate 021", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-022", name, "Roommate 022", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-023", name, "Roommate 023", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-024", name, "Roommate 024", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-025", name, "Roommate 025", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-026", name, "Roommate 026", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-027", name, "Roommate 027", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-028", name, "Roommate 028", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-029", name, "Roommate 029", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-030", name, "Roommate 030", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-031", name, "Roommate 031", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-032", name, "Roommate 032", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-033", name, "Roommate 033", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-034", name, "Roommate 034", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-035", name, "Roommate 035", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-036", name, "Roommate 036", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-037", name, "Roommate 037", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-038", name, "Roommate 038", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-039", name, "Roommate 039", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-040", name, "Roommate 040", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-041", name, "Roommate 041", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-042", name, "Roommate 042", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-043", name, "Roommate 043", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-044", name, "Roommate 044", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-045", name, "Roommate 045", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-046", name, "Roommate 046", college, c-02, hostel, h-c-02-2]
+  - cmd: [HSET, "user:c1-047", name, "Roommate 047", college, c-02, hostel, h-c-02-3]
+  - cmd: [HSET, "user:c1-048", name, "Roommate 048", college, c-02, hostel, h-c-02-4]
+  - cmd: [HSET, "user:c1-049", name, "Roommate 049", college, c-02, hostel, h-c-02-1]
+  - cmd: [HSET, "user:c1-050", name, "Roommate 050", college, c-02, hostel, h-c-02-2]
+  - cmd: [SADD, "ch1:users", "c1-001", "c1-002", "c1-003", "c1-004", "c1-005", "c1-006", "c1-007", "c1-008", "c1-009", "c1-010", "c1-011", "c1-012", "c1-013", "c1-014", "c1-015", "c1-016", "c1-017", "c1-018", "c1-019", "c1-020", "c1-021", "c1-022", "c1-023", "c1-024", "c1-025", "c1-026", "c1-027", "c1-028", "c1-029", "c1-030", "c1-031", "c1-032", "c1-033", "c1-034", "c1-035", "c1-036", "c1-037", "c1-038", "c1-039", "c1-040", "c1-041", "c1-042", "c1-043", "c1-044", "c1-045", "c1-046", "c1-047", "c1-048", "c1-049", "c1-050"]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [EXISTS, "user:c1-001", "user:c1-050"]
+        equals: 2
+        message: "The fifty test profiles are no longer all there. Reopen the level to seed them again."
+      - cmd: [SCARD, "ch1:users"]
+        equals: 50
+        message: "The reference set of test ids has changed. Reopen the level to seed it again."
+  - type: answer
+    prompt: "How many user:c1-* keys did SCAN find?"
+    expected:
+      cmd: [SCARD, "ch1:users"]
+      transform: number
+    compare: equals
+    message: "That is not the number of test profiles. Keep calling SCAN with each new cursor until it returns 0, and count each key once."
+  - type: quiz
+    question: "A live Redis holds millions of keys and you must find those starting with user:. Which command do you reach for?"
+    options:
+      - id: scan-match
+        label: "SCAN with MATCH, following the cursor until it returns 0"
+      - id: keys-pattern
+        label: "KEYS user:*, because it is one command"
+      - id: get-each
+        label: "GET each possible id, one after another, until one is missing"
+    correct: scan-match
+    explanation: "KEYS walks the whole keyspace in one go and blocks the server, so the docs keep it for debugging. SCAN does the same walk in small batches that a busy server can interleave with real traffic."
+
+show_me: kv_card
+docs:
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+
+reward:
+  xp: 25
+
+solutions:
+  reference: solutions/04-reference.redis
+  wrong:
+    - path: solutions/04-wrong-keys-command.redis
+      expect: wrong
+      because: "KEYS blocks the whole server while it walks every key. It finds the same fifty here, but nobody types an answer from it and on launch night it would freeze the app."
+    - path: solutions/04-wrong-first-page-only.redis
+      expect: wrong
+      because: "One SCAN call is one page. Stopping before the cursor returns to 0 means you counted only the keys in the first batch."

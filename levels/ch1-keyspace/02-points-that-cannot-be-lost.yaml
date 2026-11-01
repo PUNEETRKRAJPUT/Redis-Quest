@@ -1,0 +1,91 @@
+id: ch1-02-points-that-cannot-be-lost
+chapter: ch1
+title: "Points that cannot be lost"
+mode: cli
+
+story: |
+  Every new user starts with 1,000 welcome points in their wallet. Joining a contest takes some
+  points off, and opening the app each day puts one back. On launch night all of that will be
+  happening at once, from a few thousand phones.
+
+  Teja's first draft of the wallet code reads the balance, adds the change in JavaScript and writes
+  the new number back. He tested it with one phone. You ask what happens when two requests for the
+  same wallet arrive in the same millisecond, and he goes quiet for a while.
+
+brainstorm:
+  prompt: "Many requests change the same balance at the same time and no change may be lost. How would you update it?"
+  options:
+    - id: one-atomic-command
+      label: "One command that changes the number inside Redis in a single step"
+      is_reasonable: true
+    - id: get-add-set
+      label: "GET the balance, add the change in JavaScript, SET the new value back"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: UPDATE wallets SET points = points + 1000 in Postgres"
+      is_reasonable: true
+
+teach: |
+  Strings that hold whole numbers can be changed in place with the INCR family:
+
+  - `INCR key` and `DECR key` add or subtract one.
+  - `INCRBY key n` and `DECRBY key n` add or subtract `n`.
+  - `INCRBYFLOAT key x` does the same with a decimal.
+
+  All of them are O(1), and a key that does not exist yet is treated as 0. They are also atomic:
+  the read, the arithmetic and the write happen as one step on the server, so no other client's
+  command can run in the middle. That is exactly what GET, add, SET cannot promise: between your GET
+  and your SET another request can change the number, and your write then overwrites its change.
+
+  A worked example from the docs, not your task:
+
+      SET total_crashes 0
+      INCR total_crashes
+      INCRBY total_crashes 10
+
+  The value is still a string underneath. Redis just reads it as a number when you ask it to count.
+
+task: |
+  Your wallet key is `wallet:{{player.id}}`. It does not exist yet, so it starts from zero.
+
+  1. Give the welcome gift: add 1000 points with `INCRBY`.
+  2. Join a contest: take 65 points off with `DECRBY`.
+  3. Record today's login bonus: add one point with `INCR`.
+  4. Read the balance with `GET`.
+
+  Do not use `SET` to type the balance in yourself. Let the commands do the arithmetic.
+
+hints:
+  - "INCRBY and DECRBY take the key first and the amount second."
+  - "A missing key counts as 0, so the first INCRBY creates the wallet."
+  - "The balance you should see at the end is 1000 - 65 + 1."
+
+setup:
+  - cmd: [DEL, "wallet:{{player.id}}"]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "wallet:{{player.id}}"]
+        equals: string
+        message: "wallet:{{player.id}} should be a string holding a number."
+      - cmd: [GET, "wallet:{{player.id}}"]
+        equals: 936
+        message: "The balance should be 936: 1000 welcome points, minus the 65 entry, plus the 1 login bonus."
+
+show_me: kv_card
+docs:
+  - https://redis.io/docs/latest/develop/data-types/strings/
+
+reward:
+  xp: 15
+
+solutions:
+  reference: solutions/02-reference.redis
+  wrong:
+    - path: solutions/02-wrong-forgot-the-entry.redis
+      expect: wrong
+      because: "The contest entry was never taken off, so the balance is 1001. DECRBY is the command that subtracts."
+    - path: solutions/02-wrong-added-the-entry.redis
+      expect: wrong
+      because: "INCRBY with 65 adds the entry instead of taking it off, so the balance is 1066. The wallet ends up richer after joining."

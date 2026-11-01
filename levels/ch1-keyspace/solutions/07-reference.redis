@@ -1,0 +1,6 @@
+# Reference: one sorted set per hostel, score = points, member = the user's key.
+ZADD lb:hostel:h-c-02-1 120 user:u-000002 90 user:u-000003 60 user:u-000010
+ZINCRBY lb:hostel:h-c-02-1 100 user:u-000010
+ZRANGE lb:hostel:h-c-02-1 0 9 REV WITHSCORES
+ZREVRANK lb:hostel:h-c-02-1 user:u-000010
+ZCARD lb:hostel:h-c-02-1

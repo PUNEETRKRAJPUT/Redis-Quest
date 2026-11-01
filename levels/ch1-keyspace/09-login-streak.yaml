@@ -1,0 +1,95 @@
+id: ch1-09-login-streak
+chapter: ch1
+title: "Login streak"
+mode: cli
+
+story: |
+  Teja has drawn a little flame on the profile screen. It shows how many days this month you opened
+  the app, and a calendar strip underneath with a dot on every day you did. A day is either "opened"
+  or "not opened". That is one bit of information.
+
+  His draft stores a JSON array of dates per user per month. For a few thousand users that is
+  perfectly fine, and for the whole college it is thousands of small strings that all say yes or no.
+  You have a cheaper way to keep a yes or a no.
+
+brainstorm:
+  prompt: "For each user and month you need one yes or no per day. What is the smallest honest way to keep it?"
+  options:
+    - id: bitmap
+      label: "A string used as a row of bits, one bit per day"
+      is_reasonable: true
+    - id: set-of-dates
+      label: "A set of the dates the user opened the app"
+      is_reasonable: true
+    - id: json-array
+      label: "A JSON array of date strings per user per month"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: one row per user per day in Postgres"
+      is_reasonable: true
+
+teach: |
+  A **bitmap** is not a separate type. It is ordinary string bit operations: a string treated as a
+  long row of bits. A string can be up to 512 MB, so it holds up to 2^32 bits.
+
+  - `SETBIT key offset 1` sets the bit at a position to 1 (or 0). If the string is too short, it
+    grows to fit. It is O(1).
+  - `GETBIT key offset` reads one bit in O(1). A bit past the end of the string reads as 0.
+  - `BITCOUNT key` counts the bits that are set to 1.
+
+  The docs call out dense sets over integers as the use case: here the integers are the days of the
+  month. The docs' sizing example is one bit for each of 4 billion users in 512 MB, and the memory
+  optimisation page puts a yes or no flag for 100 million users at about 12 MB.
+
+  The docs' own example keeps one key per hour with one bit per sensor, using the sensor's id as the
+  offset, and `GETBIT` to ask whether it pinged. Here is that call shape, not your task:
+
+      SETBIT pings:hour-7 1000 1
+      GETBIT pings:hour-7 1000
+
+task: |
+  Your key for this month is `login:{{player.id}}:2026-11`. Use the day of the month as the bit
+  offset, so 1 November is offset 1.
+
+  1. You opened the app on the 1st, 2nd, 3rd and 5th. Set those four bits with `SETBIT`, one
+     command each.
+  2. Check the 5th with `GETBIT`, and the 4th, the day you skipped.
+  3. Count the days you logged in with `BITCOUNT`.
+
+hints:
+  - "SETBIT takes the key, the offset and the value: SETBIT key 5 1."
+  - "A day you never set reads as 0, even if it is before the last day you did set."
+  - "BITCOUNT on the key gives the whole streak for the month in one call."
+
+setup:
+  - cmd: [DEL, "login:{{player.id}}:2026-11"]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [BITCOUNT, "login:{{player.id}}:2026-11"]
+        equals: 4
+        message: "The month should have four days set: 1, 2, 3 and 5."
+      - cmd: [GETBIT, "login:{{player.id}}:2026-11", 5]
+        equals: 1
+        message: "Day 5 should be set to 1."
+      - cmd: [GETBIT, "login:{{player.id}}:2026-11", 4]
+        equals: 0
+        message: "Day 4 is the day you skipped. It should read 0."
+
+show_me: bitmap_streak
+docs:
+  - https://redis.io/docs/latest/develop/data-types/strings/bitmaps
+
+reward:
+  xp: 20
+
+solutions:
+  reference: solutions/09-reference.redis
+  wrong:
+    - path: solutions/09-wrong-missed-a-day.redis
+      expect: wrong
+      because: "Day 5 was never set, so BITCOUNT is 3 and GETBIT on day 5 reads 0. The streak undercounts a day that really happened."
+    - path: solutions/09-wrong-set-every-day.redis
+      expect: wrong
+      because: "Bit 4 was set as well, as if the skipped day counted. BITCOUNT is 5, and a streak that cannot show a gap is not a streak."

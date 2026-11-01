@@ -1,0 +1,6 @@
+# Every run starts with the two test users unregistered.
+steps:
+  - cmd: [DEL, "user:u-c1-100", "user:u-c1-101"]
+  - cmd: [SREM, "users:registered", "u-c1-100", "u-c1-101"]
+  - cmd: [ZREM, "lb:hostel:h-c-02-2", "user:u-c1-100", "user:u-c1-101"]
+  - cmd: [ZREM, "lb:hostel:h-c-02-3", "user:u-c1-100", "user:u-c1-101"]

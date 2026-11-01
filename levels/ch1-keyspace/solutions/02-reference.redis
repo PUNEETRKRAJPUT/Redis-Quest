@@ -1,0 +1,5 @@
+# Reference: every change is one atomic command. No GET, no arithmetic in the app, no SET of the total.
+INCRBY wallet:{{player.id}} 1000
+DECRBY wallet:{{player.id}} 65
+INCR wallet:{{player.id}}
+GET wallet:{{player.id}}

@@ -1,0 +1,98 @@
+id: ch1-15-roommate-cleaned-up
+chapter: ch1
+title: "Roommate 'cleaned up'"
+mode: cli
+
+story: |
+  It is late and Teja has just messaged: "I cleaned up the database. It had so many keys in it that I
+  could not find anything. All gone now 😅". He does not remember the command. He does remember that
+  the app now shows nobody at all, and that one of the screenshots has a lot of zeroes in it.
+
+  Rather than take his word for it, you will do it on purpose, here, with your eyes open. One command
+  empties the whole keyspace, and it asks for no confirmation. Everything you built tonight lives in
+  memory, and so does the game's mirror of your save file. Find out what survives.
+
+brainstorm:
+  prompt: "Something wipes the whole keyspace, including your save file's copy. What should make it possible to get the important data back?"
+  options:
+    - id: copy-on-disk
+      label: "A copy of the data on disk, written earlier, that can be loaded back in"
+      is_reasonable: true
+    - id: ask-users-again
+      label: "Nothing: ask everyone to register again"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: keep every record in Postgres and rebuild Redis from it"
+      is_reasonable: true
+
+teach: |
+  Redis keeps its data in memory, and persistence is the work of copying it to disk so a restart or
+  a wipe is not the end. The docs describe two ways, which can be used together.
+
+  - **RDB** takes point-in-time snapshots into a single compact file, `dump.rdb`. It is great for
+    backups and disaster recovery and gives faster restarts, but it can lose the last few minutes of
+    writes. A config line such as `save 60 1000` means "snapshot every 60 seconds if at least 1000
+    keys changed". `SAVE` and `BGSAVE` take one by hand.
+  - **AOF** logs every write. The default fsync setting, `everysec`, can lose about a second of data.
+
+  The docs' advice for safety comparable to a database is to use both. RDB files are safe to copy while
+  Redis is running, so backups are as simple as copying a file somewhere else.
+
+  Your game works the same way, with its own file. The truth about your progress is in
+  `./.progress/progress.json` on your Mac. Redis only holds a mirror of it under `game:*`. When
+  the mirror disappears, the game can load it back from that file. That file plays the same role a
+  snapshot would: a copy on disk, from before the wipe.
+
+  You will turn persistence on and off yourself in Chapter 5.
+
+task: |
+  A word of warning first: after this, the data you created in earlier levels is gone from Redis. Your
+  progress in the game is not, because it is saved in the file on disk.
+
+  1. In the terminal, run `FLUSHALL`. It empties every key in this Redis.
+  2. Run `DBSIZE` and `KEYS game:*` to see what is left. This is the one place the level wants you to
+     use `KEYS`: the keyspace is empty, so it is harmless.
+  3. The game notices that your save file's mirror has vanished and offers to restore it from the
+     snapshot on disk. Accept the offer.
+  4. Run `KEYS game:*` again and find your player record back.
+
+hints:
+  - "FLUSHALL takes no arguments. Run it by itself, then DBSIZE."
+  - "If you do not see the restore offer straight away, reload the game page."
+  - "Your player record is the game:player: key that ends with your player id."
+
+setup:
+  - cmd: [SET, "ch1:before-flush", "1"]
+
+verify:
+  - type: event
+    kind: custom
+    match: { name: progress_restored }
+    timeoutMs: 120000
+    message: "The game has not seen a restore yet. Run FLUSHALL, then accept the game's offer to restore your progress from the snapshot."
+  - type: redis
+    checks:
+      - cmd: [EXISTS, "game:player:{{player.id}}"]
+        equals: 1
+        message: "Your save file's mirror is still missing. Restore it from the snapshot after the FLUSHALL."
+      - cmd: [EXISTS, "ch1:before-flush"]
+        equals: 0
+        message: "Nothing was wiped: the key set before this level started is still there. Run FLUSHALL first, then restore."
+
+show_me: hash_card
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+
+reward:
+  xp: 30
+  badge: "Restored"
+
+solutions:
+  reference: solutions/15-reference.redis
+  wrong:
+    - path: solutions/15-wrong-flush-and-walk-away.redis
+      expect: wrong
+      because: "FLUSHALL emptied everything, including the mirror of your save file, and nothing was restored. The game cannot see your progress, and the app cannot see any data."
+    - path: solutions/15-wrong-never-flushed.redis
+      expect: wrong
+      because: "DBSIZE and KEYS only look. Nothing was wiped and nothing was restored, so there is nothing to recover from and no lesson learned."

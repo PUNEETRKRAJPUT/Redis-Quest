@@ -1,0 +1,3 @@
+# Wrong: only a list. It holds the users but cannot rank them.
+RPUSH lb:hostel:h-c-02-1 user:u-000002 user:u-000003 user:u-000010
+LRANGE lb:hostel:h-c-02-1 0 -1

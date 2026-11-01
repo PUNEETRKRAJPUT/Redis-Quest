@@ -1,0 +1,111 @@
+id: ch1-11-where-is-the-watch-party
+chapter: ch1
+title: "Where is the watch party"
+mode: cli
+
+story: |
+  Match nights are better in a crowd, and every home ground runs a watch party. Teja wants a screen
+  that answers "which ground is closest to me?" and, when you tap it, "how far is that?"
+
+  His first version loops over every ground in JavaScript, working out the distance to each one with
+  a formula he copied from a forum, and sorts the results. It works for eight grounds. Redis can
+  keep the coordinates and answer the question itself.
+
+  The coordinates below are approximate city-centre positions. They are good enough for the game; the
+  grounds themselves are fictional.
+
+brainstorm:
+  prompt: "Store a few dozen grounds with positions, then answer 'which are within 5 km of here?' What would you reach for?"
+  options:
+    - id: geo-index
+      label: "Redis's geospatial index: add each ground with its coordinates, then search by radius"
+      is_reasonable: true
+    - id: lat-lon-columns
+      label: "Two fields per ground in a hash, and compare every ground's distance in the app"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a spatial query in Postgres"
+      is_reasonable: true
+
+teach: |
+  The **geospatial** commands store coordinates under a key and let you ask for points within a
+  radius or a box. They are not a separate engine for nearness only: members keep their names, so you
+  add a ground by name and get its name back.
+
+  - `GEOADD key longitude latitude member` adds a point. It is O(log N) per item. **Longitude comes
+    first**, the opposite of how people say it aloud.
+  - `GEOSEARCH key FROMLONLAT lon lat BYRADIUS 5 km WITHDIST` finds members within a radius of a
+    point and, with `WITHDIST`, how far each one is. It needs Redis 6.2 or newer.
+  - `GEODIST key member1 member2 km` gives the distance between two members.
+
+  `GEORADIUS` is still in the docs for older code, but `GEOSEARCH` is the current form. Redis Search
+  has its own geospatial queries too; do not mix the two up.
+
+  A worked example from the docs, not your task:
+
+      GEOADD bikes:rentable -122.27652 37.805186 station:1
+      GEOSEARCH bikes:rentable FROMLONLAT -122.2612767 37.7936847 BYRADIUS 5 km WITHDIST
+
+task: |
+  The key is `stadiums`. Add three home grounds, using each ground's name from the league as the
+  member:
+
+  | member | longitude | latitude |
+  |---|---|---|
+  | `Katraj Ghat Oval` (Pune) | 73.8567 | 18.5204 |
+  | `Bandra Bandstand Oval` (Mumbai) | 72.8777 | 19.0760 |
+  | `Marina Lantern Ground` (Chennai) | 80.2707 | 13.0827 |
+
+  1. Add all three with `GEOADD`. Longitude first.
+  2. You are standing at the campus gate, longitude 73.8450, latitude 18.5150. Find the grounds within
+     5 km with `GEOSEARCH ... FROMLONLAT 73.8450 18.5150 BYRADIUS 5 km WITHDIST`.
+  3. Find the distance in km between the Pune and Mumbai grounds with `GEODIST`, and type it below.
+
+hints:
+  - "Members that contain a space need quotes: GEOADD stadiums 73.8567 18.5204 \"Katraj Ghat Oval\"."
+  - "If your 5 km search finds nothing, check that longitude, not latitude, came first."
+  - "GEODIST takes the key, two members and the unit: GEODIST stadiums \"Katraj Ghat Oval\" \"Bandra Bandstand Oval\" km."
+
+setup:
+  - cmd: [DEL, stadiums]
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [GEOSEARCH, stadiums, FROMLONLAT, 73.8450, 18.5150, BYRADIUS, 5, km]
+        contains: "Katraj Ghat Oval"
+        message: "The Pune ground should be within 5 km of the campus gate. Check the coordinates, and that longitude came before latitude."
+      - cmd: [GEOSEARCH, stadiums, FROMLONLAT, 73.8450, 18.5150, BYRADIUS, 200, km]
+        lengthGte: 2
+        message: "Both Pune and Mumbai grounds should be within 200 km of the campus gate."
+      - cmd: [GEODIST, stadiums, "Katraj Ghat Oval", "Bandra Bandstand Oval", km]
+        between: [118, 122]
+        message: "The Pune to Mumbai distance should be about 120 km. A value far off usually means longitude and latitude were swapped."
+      - cmd: [GEODIST, stadiums, "Katraj Ghat Oval", "Marina Lantern Ground", km]
+        between: [900, 930]
+        message: "The Chennai ground should be about 915 km from the Pune one. Is it added with the right coordinates?"
+  - type: answer
+    prompt: "How far is the Mumbai ground from the Pune ground, in km?"
+    expected:
+      cmd: [GEODIST, stadiums, "Katraj Ghat Oval", "Bandra Bandstand Oval", km]
+      transform: number
+    compare: numeric_within
+    tolerance: 1
+    message: "That is not the distance Redis computes. Run GEODIST with km as the unit and type the number it prints, to within a kilometre."
+
+show_me: geo_map
+docs:
+  - https://redis.io/docs/latest/develop/data-types/geospatial/
+
+reward:
+  xp: 25
+
+solutions:
+  reference: solutions/11-reference.redis
+  wrong:
+    - path: solutions/11-wrong-latitude-first.redis
+      expect: wrong
+      because: "GEOADD wants longitude first. With the two swapped, every ground lands in the wrong part of the world, so nothing is within 5 km of the campus gate and the distances are nonsense."
+    - path: solutions/11-wrong-missing-a-ground.redis
+      expect: wrong
+      because: "The Chennai ground was never added, so there is no distance to it. Each ground must be added with its own GEOADD coordinates."

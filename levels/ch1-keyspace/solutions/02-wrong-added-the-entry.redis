@@ -1,0 +1,5 @@
+# Wrong: INCRBY adds. 1000 + 65 + 1 = 1066.
+INCRBY wallet:{{player.id}} 1000
+INCRBY wallet:{{player.id}} 65
+INCR wallet:{{player.id}}
+GET wallet:{{player.id}}

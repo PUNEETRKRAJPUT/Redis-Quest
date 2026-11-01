@@ -1,0 +1,8 @@
+# Reference: one bit per day, offset = day of the month. Four SETBITs, then count and spot-check.
+SETBIT login:{{player.id}}:2026-11 1 1
+SETBIT login:{{player.id}}:2026-11 2 1
+SETBIT login:{{player.id}}:2026-11 3 1
+SETBIT login:{{player.id}}:2026-11 5 1
+GETBIT login:{{player.id}}:2026-11 5
+GETBIT login:{{player.id}}:2026-11 4
+BITCOUNT login:{{player.id}}:2026-11

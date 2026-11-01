@@ -1,0 +1,5 @@
+# Wrong: day 5 was never set.
+SETBIT login:{{player.id}}:2026-11 1 1
+SETBIT login:{{player.id}}:2026-11 2 1
+SETBIT login:{{player.id}}:2026-11 3 1
+BITCOUNT login:{{player.id}}:2026-11

@@ -1,0 +1,3 @@
+# Wrong: a list. No uniqueness, no membership test, no intersection.
+RPUSH fav:{{player.id}} p-028 p-101 p-151
+LRANGE fav:{{player.id}} 0 -1

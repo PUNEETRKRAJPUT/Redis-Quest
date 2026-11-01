@@ -1,0 +1,3 @@
+# Wrong: PEXPIRE takes milliseconds, so the lobby is gone almost at once.
+PEXPIRE lobby:m-042 300
+PERSIST lobby:m-041

@@ -1,0 +1,5 @@
+# Reference: wipe the keyspace, look at what is left, then accept the game's offer to restore the
+# mirror from ./.progress/progress.json (the game does that through POST /api/progress/restore).
+FLUSHALL
+DBSIZE
+KEYS game:*

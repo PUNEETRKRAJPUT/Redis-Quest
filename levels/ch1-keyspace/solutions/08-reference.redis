@@ -1,0 +1,6 @@
+# Reference: EXPIRE for the lobby that must close, PERSIST for the live match that must stay.
+# Then read TTL on a key with no expiry and on a key that does not exist, and type both numbers.
+EXPIRE lobby:m-042 300
+PERSIST lobby:m-041
+TTL lobby:m-041
+TTL lobby:m-999
