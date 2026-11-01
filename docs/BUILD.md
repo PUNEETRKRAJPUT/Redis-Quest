@@ -38,7 +38,7 @@ start early if everything it depends on is `done`.
 
 | id | task | status |
 |---|---|---|
-| F-01 (in progress, spec: specs/F-01) | Caddy: use dynamic A-record upstreams for `app` so requests round-robin across scaled instances without the app closing every connection (`APP_MAX_REQUESTS_PER_SOCKET=1` is the current workaround) | todo |
+| F-01 (done, handoffs/F-01) | Caddy: dynamic A-record upstreams for `app`, round robin; keep-alive restored (`APP_MAX_REQUESTS_PER_SOCKET=0`) | done |
 | F-02 | Engine metrics aggregate must sum `dbQueries` and `redisCommands` (P0-09 is making this change) | in progress |
 | F-03 | `.prettierignore` exists; add a `format:check` step to CI once the tree is stable | todo |
 | F-04 | UI: render the `ideal` object from the verify response and call `GET /api/levels/:id/ideal` for "reveal anyway" (P0-09 is adding the endpoint) | todo |

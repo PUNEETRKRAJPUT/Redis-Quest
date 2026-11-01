@@ -63,7 +63,8 @@ services:
   app:
     <<: *node
     command: ["node", "app/dist/main.js"]
-    environment: { <<: *node-env, PORT: "4000" }
+    # 0 = unlimited requests per socket (keep-alive on): the proxy balances per request itself (F-01).
+    environment: { <<: *node-env, PORT: "4000", APP_MAX_REQUESTS_PER_SOCKET: "${APP_MAX_REQUESTS_PER_SOCKET:-0}" }
     mem_limit: 512m
     # scaled by the learner in ch3: docker compose up -d --scale app=2
 

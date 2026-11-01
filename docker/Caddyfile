@@ -11,7 +11,20 @@
 
 	# /app/* keeps its prefix (handle, not handle_path): the app mounts its routes under /app.
 	handle /app/* {
-		reverse_proxy app:4000
+		# dynamic a: re-resolve the compose service name every second, so instances added or removed by
+		# `--scale app=N` are picked up without a Caddy reload. round_robin then picks an upstream per request,
+		# so a keep-alive browser connection no longer pins one instance.
+		reverse_proxy {
+			dynamic a {
+				name app
+				port 4000
+				refresh 1s
+				dial_timeout 1s
+			}
+			lb_policy round_robin
+			lb_try_duration 2s
+			lb_try_interval 250ms
+		}
 	}
 
 	# Everything else, WebSocket upgrades included, goes to the single engine instance.
