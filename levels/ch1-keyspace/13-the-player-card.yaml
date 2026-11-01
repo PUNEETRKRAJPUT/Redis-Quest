@@ -82,7 +82,7 @@ verify:
         equals: "[1]"
         message: "stats.matches should be 1 after one JSON.NUMINCRBY on $.stats.matches."
       - cmd: [JSON.ARRLEN, "player:p-028", "$.tags"]
-        matches: "2"
+        equals: [2]
         message: "The tags array should hold two tags, hot and top-pick. Use JSON.ARRAPPEND on $.tags."
 
 show_me: json_tree

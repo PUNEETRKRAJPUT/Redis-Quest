@@ -302,6 +302,8 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         await mirror.setGift(p);
         if (runtime.boots !== null) await redis.send(['SET', KEY_BOOTS, String(runtime.boots)]).catch(() => undefined);
         bus.emit('progress.changed', { reason: 'restored', levelId: null, progress: p });
+        // Level 1.15 (FLUSHALL, then restore) verifies on this custom event.
+        bus.emit('level.event', { kind: 'custom', name: 'progress_restored' });
         return { ok: true, restored: true, levels: Object.keys(p.levels).length };
       });
 
