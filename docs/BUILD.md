@@ -44,7 +44,7 @@ start early if everything it depends on is `done`.
 | F-04 (done, handoffs/F-04) | UI: ideal-way panel renders `ideal`, unlocks after pass or 3 attempts, "reveal anyway" via GET /api/levels/:id/ideal, line diff for code levels | done |
 | F-05 (done, handoffs/F-05) | `show_me` is `{ component, keys, title? }`; all 27 levels declare their keys; engine renders the templates; UI's hard-coded key table removed | done |
 | F-10 (done, handoffs/F-10) | UI: `stats_latency_panel` and `otp_limiter_panel` implemented; 429s are not counted by the app's metrics yet (a later app follow-up) | done |
-| F-11 | App metrics: count 429 responses separately so the limiter panel can show denied requests | todo |
+| F-11 | App metrics: count 429 responses separately (folded into A-01) | in progress |
 | F-06 (done, handoffs/F-UI) | UI: clicking away from a focused terminal makes the page jump; fix for real users | todo |
 | F-07 (done, handoffs/F-UI; engine side pending F-09) | UI: Redis Insight link should use the configured `INSIGHT_PORT`, not 5540 | todo |
 | F-08 (done, handoffs/F-UI) | Playwright e2e: set `ALLOW_DEV_COMPLETE_FALLBACK=false` now that verify works | done |
@@ -58,6 +58,9 @@ start early if everything it depends on is `done`.
 | C1 | Chapter 1 levels (16) (spec: specs/C1, handoff: handoffs/C1) | done (graded through the engine by G-01: 52/52) |
 | C2a | Chapter 2 levels 2.1 to 2.4 (spec: specs/C2a, handoff: handoffs/C2a) | done (graded by G-01: 13/13 including traffic) |
 | G-01 | Level grading harness: plays every declared solution through the engine, prints the truth table (spec: specs/G-01, handoff: handoffs/G-01) | done (all three bugs fixed; ch1 re-graded 52/52) |
+| A-01 | App: outbox drainer to `legacydb:changes`, prefetch bulkLoad/applyChange slots with a provided consumer, session destroy slots and logout routes, fail-fast learner Redis client, 429 counting (spec: specs/A-01) | in progress |
+| F-12 | Interview mode: timed blank rebuilds in schema, engine and UI (spec: specs/F-12) | in progress |
+| C2b | Chapter 2 levels 2.5 to 2.11 (after A-01 and F-12) | todo |
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)
