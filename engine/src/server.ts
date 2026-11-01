@@ -8,7 +8,7 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance, type FastifyRepl
 import type { Logger } from 'pino';
 import { renderTemplates, SLOT_NAME, TemplateError } from '@quest/shared';
 import { etagOf, matchesEtag, type AppConfig } from './appconfig.js';
-import { DANGEROUS_COMMANDS, runCli } from './cli.js';
+import { cliCommandLabel, DANGEROUS_COMMANDS, isBusyReply, isScriptKilled, runCli } from './cli.js';
 import type { Config } from './config.js';
 import type { EventBus, LevelEventData } from './events.js';
 import { renderLevel, templateContext, type LevelIndexEntry, type LevelService } from './levels.js';
@@ -30,6 +30,8 @@ import { runVerification, type Answers } from './verify.js';
 import { loadVerifyConfig } from './verify/config.js';
 import { levelSlots, Verifier, VerifyBusyError } from './verify/index.js';
 import { ScenarioError } from './load/scenario.js';
+import { LoadRequestError, OnDemandLoad } from './load/ondemand.js';
+import { runLoad as defaultRunLoad, type LoadRunner } from './load/run.js';
 import { TrafficError } from './verify/traffic.js';
 import { buildIdeal, idealAccess } from './verify/ideal.js';
 import { listTree, readWorkspaceFile, WorkspaceError, writeWorkspaceFile } from './workspace.js';
@@ -45,6 +47,8 @@ export interface Deps {
   logtail: LogTail;
   metrics: MetricsStore;
   runtime: Runtime;
+  /** Test seam: replaces autocannon for traffic runs (verifier and on-demand). */
+  runLoad?: LoadRunner;
 }
 
 /** State that lives outside progress.json until a player exists (and is copied into it afterwards). */
@@ -138,6 +142,9 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
     if (err instanceof SetupRefusedError) {
       return reply.code(500).send({ error: 'setup_refused', message: err.message });
     }
+    if (err instanceof LoadRequestError) {
+      return reply.code(400).send({ error: err.code, message: err.message });
+    }
     if (err instanceof VerifyBusyError) {
       return reply.code(409).send({ error: 'verify_in_progress', message: err.message });
     }
@@ -155,14 +162,23 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
   });
 
   // P0-09: the verifier engine (one per server); it taps app metric pushes and keeps its own event log.
+  const verifyCfg = loadVerifyConfig({ progressDir: cfg.progressDir, port: cfg.port });
   const verifier = new Verifier({
-    cfg: loadVerifyConfig({ progressDir: cfg.progressDir, port: cfg.port }),
+    cfg: verifyCfg,
     log,
     bus,
     redis,
     metrics,
+    ...(d.runLoad ? { runLoad: d.runLoad } : {}),
   });
   verifier.startCommandCheck();
+  // E-02: traffic on demand (POST /api/load/start); shares the verifier's per-player guard.
+  const onDemand = new OnDemandLoad({
+    cfg: verifyCfg,
+    bus,
+    runLoad: d.runLoad ?? defaultRunLoad,
+    log,
+  });
 
   // E-01: tell levels when the number of live app instances changes (`--scale app=2`). The timer notices an
   // instance that went quiet; pushes notice one that appeared.
@@ -669,6 +685,19 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         if (DANGEROUS_COMMANDS.has(r.command))
           bus.emit('cli.dangerous', { command: r.command, argv: r.argv });
         if (r.command === 'PING') bus.emit('level.event', { kind: 'custom', name: 'cli_ping' });
+        // E-02: a script that blocks Redis (BUSY), and the learner ending it (SCRIPT KILL / FUNCTION KILL).
+        if (isBusyReply(r))
+          bus.emit('level.event', {
+            kind: 'custom',
+            name: 'redis_busy',
+            data: { command: cliCommandLabel(r.argv) },
+          } satisfies LevelEventData);
+        if (isScriptKilled(r))
+          bus.emit('level.event', {
+            kind: 'custom',
+            name: 'script_killed',
+            data: { command: cliCommandLabel(r.argv) },
+          } satisfies LevelEventData);
         return { reply: r.reply, type: r.type, ms: r.ms };
       });
 
@@ -775,6 +804,22 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           done();
         }
       });
+      // ---- E-02: traffic on demand ---------------------------------------------------------------
+      api.post('/load/start', async (req, reply) => {
+        const body = isObject(req.body) ? req.body : {};
+        const owner = store.current?.player.id ?? 'no-player';
+        const done = verifier.begin(owner); // 409 verify_in_progress (a verification or a traffic run)
+        try {
+          const started = await onDemand.start(body, done);
+          return reply.code(202).send(started);
+        } catch (err) {
+          done();
+          throw err;
+        }
+      });
+      api.get('/load/status', async () => onDemand.status());
+      api.post('/load/stop', async () => onDemand.stop());
+
       api.get('/verify/command-check', async () => verifier.commandCheck ?? { pending: true });
 
       api.get<{ Querystring: { seconds?: string } }>('/metrics', async (req) => {

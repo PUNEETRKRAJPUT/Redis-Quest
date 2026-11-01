@@ -133,6 +133,51 @@ describe('evaluateAssertion: every assertion kind', () => {
   });
 });
 
+describe('notContains (E-02)', () => {
+  const commandstats = [
+    '# Commandstats',
+    'cmdstat_get:calls=120,usec=300,usec_per_call=2.50,rejected_calls=0,failed_calls=0',
+    'cmdstat_keys:calls=7,usec=91000,usec_per_call=13000.00,rejected_calls=0,failed_calls=0',
+    '',
+  ].join('\r\n');
+
+  test('a string reply passes when the text is absent and fails when present', () => {
+    expect(evaluateAssertion(check({ notContains: 'cmdstat_scan' }), commandstats).ok).toBe(true);
+    const hit = evaluateAssertion(check({ notContains: 'cmdstat_keys' }), commandstats);
+    expect(hit.ok).toBe(false);
+    expect(hit.expected).toBe('no "cmdstat_keys"');
+    // INFO replies are long: the observed text is the line that holds the text, not the first 120 characters.
+    expect(hit.observed).toContain('a line reading');
+    expect(hit.observed).toContain('cmdstat_keys:calls=7');
+  });
+  test('a list passes when no element equals the text (the negation of contains)', () => {
+    expect(evaluateAssertion(check({ notContains: 'user:p-1' }), ['user:a', 'user:b']).ok).toBe(
+      true,
+    );
+    expect(evaluateAssertion(check({ notContains: 'user:p-1' }), ['user:a', 'user:p-1']).ok).toBe(
+      false,
+    );
+    expect(evaluateAssertion(check({ notContains: 'ser' }), ['user:a']).ok).toBe(true);
+  });
+  test('nil holds nothing, so it passes; an integer is read by its decimal form', () => {
+    expect(evaluateAssertion(check({ notContains: 'x' }), null)).toEqual({
+      ok: true,
+      expected: 'no "x"',
+      observed: 'nil',
+    });
+    expect(evaluateAssertion(check({ notContains: '15' }), 150).ok).toBe(false);
+    expect(evaluateAssertion(check({ notContains: '9' }), 150).ok).toBe(true);
+  });
+  test('matches with a negative lookahead answers the same question on an INFO reply', () => {
+    // The spec asked whether this form works too: it does, with the pattern anchored at the start of the reply.
+    const re = { matches: '^(?![\\s\\S]*cmdstat_keys)' };
+    expect(evaluateAssertion(check(re), commandstats).ok).toBe(false);
+    expect(
+      evaluateAssertion(check(re), commandstats.replace('cmdstat_keys', 'cmdstat_scan')).ok,
+    ).toBe(true);
+  });
+});
+
 describe('formatting', () => {
   test('replies render short and readable', () => {
     expect(formatReply(null)).toBe('nil');

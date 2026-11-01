@@ -157,6 +157,45 @@ export function evaluateTraffic(
       );
     }
   }
+  // E-02: Redis commands per app request, from the app's own per-route counters (app/src/metrics.ts redisCommands).
+  const redisPer = (w: NonNullable<RunSummary['app']>) =>
+    w.requests > 0 ? w.redisCommands / w.requests : 0;
+  if (a.redis_calls_ratio_lte !== undefined) {
+    const need = `at most ${a.redis_calls_ratio_lte}`;
+    if (!app) add('redis_calls_ratio_lte', false, null, need, `Redis calls per request: ${noApp}`);
+    else if (!base?.app || redisPer(base.app) === 0)
+      add(
+        'redis_calls_ratio_lte',
+        false,
+        null,
+        need,
+        'Redis calls ratio cannot be computed (the baseline made no Redis calls to compare with)',
+      );
+    else {
+      const r = redisPer(app) / redisPer(base.app);
+      add(
+        'redis_calls_ratio_lte',
+        r <= a.redis_calls_ratio_lte,
+        r,
+        need,
+        `Redis calls per request ratio ${fmtRatio(r)} (${fmtRatio(redisPer(app))} per request now vs ${fmtRatio(redisPer(base.app))} baseline), needs ${need}`,
+      );
+    }
+  }
+  if (a.redis_per_request_lte !== undefined) {
+    const need = `at most ${a.redis_per_request_lte}`;
+    if (!app) add('redis_per_request_lte', false, null, need, `Redis calls per request: ${noApp}`);
+    else {
+      const r = redisPer(app);
+      add(
+        'redis_per_request_lte',
+        r <= a.redis_per_request_lte,
+        r,
+        need,
+        `${fmtRatio(r)} Redis calls per request (${app.redisCommands} commands over ${app.requests} requests), needs ${need}`,
+      );
+    }
+  }
   if (a.hit_ratio_gte !== undefined) {
     const need = `at least ${a.hit_ratio_gte}`;
     if (!app) add('hit_ratio_gte', false, null, need, `cache hit ratio: ${noApp}`);

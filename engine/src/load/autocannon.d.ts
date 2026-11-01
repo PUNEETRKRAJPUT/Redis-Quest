@@ -40,6 +40,10 @@ declare module 'autocannon' {
     timeout?: number;
     requests?: RequestSpec[];
   }
-  function autocannon(opts: Options): Promise<Result>;
+  /** What `autocannon(opts)` returns: awaitable, and `stop()` ends the run at its next one-second tick. */
+  export interface Instance extends PromiseLike<Result> {
+    stop(): void;
+  }
+  function autocannon(opts: Options): Instance;
   export default autocannon;
 }

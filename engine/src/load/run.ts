@@ -33,6 +33,8 @@ export interface RunLoadOptions {
   durationSec: number;
   seed?: number;
   timeoutSec?: number;
+  /** Called once the run has started, with what ends it early (E-02: POST /api/load/stop). */
+  onStart?: (handle: { stop: () => void }) => void;
 }
 
 export type LoadRunner = (o: RunLoadOptions) => Promise<LoadRunResult>;
@@ -74,7 +76,7 @@ export function summarizeAutocannon(
 export const runLoad: LoadRunner = async (o) => {
   const next = requestFactory(o.scenario, o.seed);
   const startedAt = Date.now();
-  const result = await autocannon({
+  const instance = autocannon({
     url: o.origin,
     connections: o.connections,
     duration: o.durationSec,
@@ -94,5 +96,7 @@ export const runLoad: LoadRunner = async (o) => {
       },
     ],
   });
+  o.onStart?.({ stop: () => instance.stop() });
+  const result = await instance;
   return { startedAt, finishedAt: Date.now(), ...summarizeAutocannon(result, o.connections) };
 };

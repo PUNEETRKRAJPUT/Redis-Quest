@@ -78,7 +78,7 @@ slot's default `undefined`, which the engine reports as the slot failing, so nam
 
 A level can wait for something that happens while it verifies. The harness produces that event for a solution
 declared `right` or `works_but_wrong`, and produces nothing for one declared `wrong` (the same rule `answer` and
-`quiz` follow). Levels without these event kinds are graded exactly as before. Four rules (E-01, C4):
+`quiz` follow). Levels without these event kinds are graded exactly as before. Six rules (E-01, C4, E-02):
 
 - **`key_expired`** (`match.key`). The engine subscribes to expired-key events only while the check waits, so
   when `verify_check_started` arrives for that verifier the harness runs `SET <key> harness-probe PX 800` through
@@ -104,6 +104,19 @@ declared `right` or `works_but_wrong`, and produces nothing for one declared `wr
   (not awaited), sleeps 200 ms, PUBLISHes seq 2 and 3, awaits the resubscribe answer, then PUBLISHes seq 4. If the
   route answers 404 it prints `NOTE ticker_gap: /app/ticker/resubscribe not available (A-02 not merged)` and carries
   on; the level then shows as a mismatch, which is correct.
+
+- **custom `load_finished`** (`match.scenario`, E-02). The learner "ran the traffic". Before verify the harness POSTs
+  `/api/load/start { scenario, durationSec: 5 }` (a 409 means a verification or another run is going: it waits 2 s
+  and retries, up to 15 times) and polls `GET /api/load/status` every 500 ms until `running` is false (cap 40 s). The
+  engine's own `load_finished` is what the level then sees; the harness never posts it. The note carries the run's
+  requests, req/s, p99 and errors.
+- **custom `script_killed` and `redis_busy`** (E-02; one dance covers both, and a level with both gets it once). The
+  harness POSTs A-04's `/app/oncall/badges/recompute` (a Lua loop that holds Redis) without awaiting it, waits 5.5 s
+  (past `busy-reply-threshold`, 5 s by default), runs `PING` through `/api/cli` (Redis answers `BUSY`, so the engine emits
+  `redis_busy`), then `SCRIPT KILL` through `/api/cli` (`OK`, so the engine emits `script_killed`), then waits up to
+  15 s for the blocked request to end. If the route answers 404 within the first second it prints
+  `NOTE script_killed: /app/oncall/badges/recompute not available (A-04 not merged)` and carries on; the level then
+  shows as a mismatch, which is correct.
 
 Each rule adds one line to the row's `note`.
 

@@ -113,6 +113,56 @@ describe('evaluateTraffic', () => {
   });
 });
 
+describe('Redis calls per request (E-02)', () => {
+  const withRedis = (requests: number, redisCommands: number): RunSummary['app'] => ({
+    ...app(requests, 0, requests),
+    redisCommands,
+  });
+  const run = (requests: number, redisCommands: number): RunSummary => ({
+    load: load({ p99Ms: 20, rps: 3000 }),
+    app: withRedis(requests, redisCommands),
+  });
+  const base: RunSummary = { load: load({ p99Ms: 2000, rps: 40 }), app: withRedis(400, 1200) }; // 3 per request
+
+  test('redis_per_request_lte is absolute: commands over requests in the run window', () => {
+    const once = evaluateTraffic({ redis_per_request_lte: 1 }, run(1000, 1000), null);
+    expect(once[0]).toMatchObject({ key: 'redis_per_request_lte', ok: true, value: 1 });
+    expect(once[0]?.text).toBe(
+      '1 Redis calls per request (1000 commands over 1000 requests), needs at most 1',
+    );
+    const memo = evaluateTraffic({ redis_per_request_lte: 0.5 }, run(1000, 0), null);
+    expect(memo[0]).toMatchObject({ ok: true, value: 0 });
+    const chatty = evaluateTraffic({ redis_per_request_lte: 0.5 }, run(1000, 1000), null);
+    expect(chatty[0]?.ok).toBe(false);
+    expect(trafficMessage({ message: 'Too chatty.' }, chatty).message).toBe(
+      'Too chatty. (1 Redis calls per request (1000 commands over 1000 requests), needs at most 0.5)',
+    );
+  });
+  test('redis_calls_ratio_lte divides the run per request by the baseline per request', () => {
+    const v = evaluateTraffic({ redis_calls_ratio_lte: 0.5 }, run(1000, 1000), base);
+    expect(v[0]).toMatchObject({ key: 'redis_calls_ratio_lte', ok: true });
+    expect(v[0]?.value).toBeCloseTo(1 / 3, 5);
+    expect(v[0]?.text).toBe(
+      'Redis calls per request ratio 0.333 (1 per request now vs 3 baseline), needs at most 0.5',
+    );
+    expect(evaluateTraffic({ redis_calls_ratio_lte: 0.2 }, run(1000, 1000), base)[0]?.ok).toBe(
+      false,
+    );
+  });
+  test('missing metrics or a baseline with no Redis calls never pass', () => {
+    const noApp: RunSummary = { load: good.load, app: null };
+    expect(
+      evaluateTraffic({ redis_per_request_lte: 5, redis_calls_ratio_lte: 5 }, noApp, base)
+        .filter((x) => x.key.startsWith('redis'))
+        .map((x) => x.ok),
+    ).toEqual([false, false]);
+    const zeroBase: RunSummary = { load: base.load, app: withRedis(400, 0) };
+    const v = evaluateTraffic({ redis_calls_ratio_lte: 5 }, run(1000, 1000), zeroBase);
+    expect(v[0]).toMatchObject({ ok: false, value: null });
+    expect(v[0]?.text).toContain('cannot be computed');
+  });
+});
+
 describe('MetricsTap', () => {
   test('sums additive fields over a window, ignoring health probes', () => {
     const tap = new MetricsTap();

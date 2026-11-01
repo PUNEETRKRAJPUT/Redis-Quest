@@ -310,6 +310,8 @@ async function uiActions(lv, transcript) {
     } else if (n === 'cli_ping') {
       if (!transcript.some((t) => t.line.toUpperCase() === 'PING'))
         notes.push('solution never sent PING');
+    } else if (n === 'load_finished' || n === 'script_killed' || n === 'redis_busy') {
+      // The harness produces these just before verify (verifyWithEvents), through the engine's own routes.
     } else if (n) notes.push(`event ${n} is produced by the solution itself (nothing simulated)`);
   }
   return notes;
@@ -503,6 +505,62 @@ async function tickerGapDance() {
   return `ticker_gap dance: resubscribe -> ${r.status}, published seq 1, 2, 3, 4`;
 }
 
+/**
+ * custom load_finished (E-02): the learner ran the traffic. The harness starts a 5 s on-demand run before verify and
+ * waits until it is over (the verifier's guard would 409 otherwise), so the engine's own load_finished is what the
+ * level sees. A 409 means a verification or another run is going: wait and try again.
+ */
+async function loadDance(lv, scenarioTemplate) {
+  const scenario = renderTemplate(String(scenarioTemplate), ctxOf(lv));
+  let started = null;
+  for (let attempt = 0; attempt < 15 && !started; attempt++) {
+    const r = await api('POST', '/api/load/start', { scenario, durationSec: 5 }, 15_000);
+    if (r.status === 202) started = r.body;
+    else if (r.status === 409) await sleep(2000);
+    else
+      return `NOTE load_finished: POST /api/load/start answered ${r.status} ${JSON.stringify(r.body)}`;
+  }
+  if (!started) return 'NOTE load_finished: POST /api/load/start stayed 409 for 30 s';
+  const deadline = Date.now() + 40_000;
+  let last = null;
+  while (Date.now() < deadline) {
+    await sleep(500);
+    const st = await api('GET', '/api/load/status', undefined, 5000);
+    if (st.status === 200 && !st.body?.running) {
+      last = st.body?.last ?? null;
+      break;
+    }
+  }
+  return last
+    ? `load dance: ran ${scenario} for 5 s (${last.requests} requests, ${Math.round(last.rps)} req/s, p99 ${last.p99Ms} ms, ${last.errors} errors)`
+    : `NOTE load_finished: the ${scenario} run did not report within 40 s`;
+}
+
+/**
+ * custom redis_busy / script_killed (E-02): the learner finds the script that freezes Redis and kills it. The
+ * harness starts A-04's blocking route without awaiting it, waits past busy-reply-threshold (5 s by default), runs
+ * PING through /api/cli (Redis answers BUSY, so the engine emits redis_busy), then SCRIPT KILL (OK, so the engine
+ * emits script_killed), and finally waits for the blocked request to end.
+ */
+const BUSY_ROUTE = '/app/oncall/badges/recompute';
+async function busyDance() {
+  const first = api('POST', BUSY_ROUTE, {}, 60_000).catch((e) => ({
+    status: 0,
+    body: { error: e.message },
+  }));
+  const early = await Promise.race([first, sleep(1000).then(() => null)]);
+  if (early && early.status === 404) {
+    const note = `NOTE script_killed: ${BUSY_ROUTE} not available (A-04 not merged)`;
+    log(note);
+    return note;
+  }
+  await sleep(5500);
+  const ping = await cli('PING');
+  const kill = await cli('SCRIPT KILL');
+  const ended = await Promise.race([first, sleep(15_000).then(() => null)]);
+  return `busy dance: ${BUSY_ROUTE} started, PING -> ${ping.reply}, SCRIPT KILL -> ${kill.reply}, blocked request ended with ${ended ? ended.status : 'no answer within 15 s'}`;
+}
+
 /** verify() plus whatever live events a good solution's level waits for. Returns { out, note }. */
 async function verifyWithEvents(lv, id, answers, good) {
   const evs = good ? eventVerifiers(lv) : [];
@@ -511,6 +569,16 @@ async function verifyWithEvents(lv, id, answers, good) {
   if (scaled) notes.push(await simulateScale(lv, scaled.v.match?.instances));
   if (evs.some(({ v }) => v.kind === 'custom' && v.match?.name === 'ticker_gap'))
     notes.push(await tickerGapDance());
+  const loaded = evs.find(({ v }) => v.kind === 'custom' && v.match?.name === 'load_finished');
+  if (loaded) notes.push(await loadDance(lv, loaded.v.match?.scenario ?? ''));
+  if (
+    evs.some(
+      ({ v }) =>
+        v.kind === 'custom' &&
+        (v.match?.name === 'script_killed' || v.match?.name === 'redis_busy'),
+    )
+  )
+    notes.push(await busyDance());
   const channels = evs.filter(
     ({ v }) =>
       (v.kind === 'channel_message' && v.match?.channel) ||

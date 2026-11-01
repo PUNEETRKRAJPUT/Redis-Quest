@@ -213,6 +213,11 @@ Exactly one assertion per check:
 | `oneOf: [v, ...]` | the reply equals one of them |
 | `lengthGte: n` | the reply list (or string) has at least `n` elements (characters) |
 | `contains: v` | a list reply has an element equal to `v`, or a string reply contains `v` |
+| `notContains: "text"` | the negation of `contains`: a string reply (`INFO commandstats`, `CLIENT LIST`) does not contain `text`; a list reply has no element equal to it; nil passes. `text` must not be empty. Failing feedback: `expected no "text"`, and for a multi-line reply the observed part quotes the line that holds it |
+
+Two ways to say "this must not appear in an `INFO` reply": `notContains: cmdstat_keys` (plain text), or
+`matches: "^(?![\\s\\S]*cmdstat_keys)"` (a negative lookahead; the JavaScript regex runs without flags, so write
+`[\\s\\S]` where you mean "any character including a newline"). Both work on a multi-line string reply; prefer `notContains`.
 
 Comparison rules (the verifier engine implements these): commands are sent raw and replies are
 read as RESP2 values: integers, strings, nil, and lists. `null` in a level means nil. When the
@@ -291,12 +296,17 @@ steps:
     error_rate_lte: 0         # absolute
     db_queries_lte: 2         # absolute: total Postgres queries during the run (integer)
     p99_ms_lte: 50            # absolute: p99 latency in milliseconds
+    redis_per_request_lte: 1  # absolute: Redis commands per app request (the app's own count over the run window)
+    redis_calls_ratio_lte: 0.2  # Redis commands per request, as a ratio of the baseline's
 ```
 
 `baseline: true` means the check is graded against a baseline: the engine records it itself by
 running the same scenario with the level's learner slots deactivated (levels never record one).
-The three `*_ratio_*` assertions need `baseline: true`; the absolute ones (`hit_ratio_gte`,
-`error_rate_lte`, `db_queries_lte`, `p99_ms_lte`) do not.
+The four `*_ratio_*` assertions (`p99_ratio_lte`, `rps_ratio_gte`, `db_calls_ratio_lte`, `redis_calls_ratio_lte`) need
+`baseline: true`; the absolute ones (`hit_ratio_gte`, `error_rate_lte`, `db_queries_lte`, `p99_ms_lte`,
+`redis_per_request_lte`) do not. Both Redis assertions use the app's `redisCommands` counter divided by its request
+count over the run window (health probes excluded); `redis_calls_ratio_lte` fails, rather than passes, when the baseline
+made no Redis calls (nothing to divide by).
 
 ### `event`
 
@@ -308,7 +318,12 @@ The three `*_ratio_*` assertions need `baseline: true`; the absolute ones (`hit_
 ```
 
 `channel_message` needs `match.channel`, `key_expired` needs `match.key`, `service_scaled` needs
-`match.service`, `custom` needs `match.name`. Other `match` fields are passed to the engine as is.
+`match.service`, `custom` needs `match.name`. Other `match` fields are passed to the engine as is (looked up in the
+event's `data`). Custom events the engine produces itself (E-02): `load_started { scenario, durationSec }` and
+`load_finished { scenario, requests, rps, p99Ms, errors }` (the learner ran traffic, with the UI's "Run traffic" button
+or `POST /api/load/start`; `match: { name: load_finished, scenario: toss-time-100 }`), `redis_busy { command }` (a
+terminal command got a `BUSY` error because a script blocks Redis) and `script_killed { command }` (`SCRIPT KILL` or
+`FUNCTION KILL` answered `OK` in the terminal).
 
 ### `quiz`
 

@@ -89,6 +89,32 @@ export interface InterviewInfo {
   elapsedMs: number | null;
 }
 
+/** E-02: POST /api/load/start (202). */
+export interface LoadStartResponse {
+  scenario: string;
+  durationSec: number;
+  connections: number;
+  startedAt: string;
+  endsAt: string;
+}
+
+/** E-02: GET /api/load/status. `now` is the engine's clock, so a countdown does not trust the browser's. */
+export interface LoadStatus {
+  running: boolean;
+  scenario: string | null;
+  startedAt: string | null;
+  endsAt: string | null;
+  now?: string;
+  last: {
+    scenario?: string;
+    requests: number;
+    rps: number;
+    p99Ms: number;
+    errors: number;
+    status5xx: number;
+  } | null;
+}
+
 /** The app slots a level's code lives in, and whether all of them are active in the app right now. */
 export interface LevelSlots {
   own: string[];

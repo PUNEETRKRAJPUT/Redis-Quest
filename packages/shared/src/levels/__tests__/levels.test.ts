@@ -190,6 +190,20 @@ describe('schema rules', () => {
     expect(schemaErrors(l)[0]).toContain('exactly one assertion required (none found');
   });
 
+  test('notContains is a redis assertion of its own (E-02)', () => {
+    const check = (c: Record<string, unknown>) => {
+      const l = plainLevel();
+      l.verify = [{ type: 'redis', checks: [{ cmd: ['INFO', 'commandstats'], ...c }] }];
+      return schemaErrors(l);
+    };
+    expect(check({ notContains: 'cmdstat_keys' })).toEqual([]);
+    expect(check({ notContains: 'cmdstat_keys', contains: 'cmdstat_get' })[0]).toContain(
+      'exactly one assertion required (found: contains, notContains)',
+    );
+    expect(check({ notContains: '' })[0]).toContain('verify.0.checks.0.notContains');
+    expect(check({ notContains: 5 })[0]).toContain('verify.0.checks.0.notContains');
+  });
+
   test('brainstorm must offer not-redis and one reasonable option', () => {
     const l = baseLevel();
     l.brainstorm = { prompt: 'p', options: [{ id: 'a', label: 'A', is_reasonable: false }, { id: 'b', label: 'B', is_reasonable: false }] };
@@ -456,6 +470,16 @@ describe('follow-up 1: behavior-shaped antipatterns, absolute traffic, answer', 
       withAnti({ type: 'traffic', scenario: 'toss-time-100', baseline: false, assertions }).filter((e) => !e.includes('works_but_wrong'));
     expect(traffic({ db_queries_lte: 2, p99_ms_lte: 50 })).toEqual([]);
     expect(traffic({ db_queries_lte: 2.5 })[0]).toContain('verify.1.assertions.db_queries_lte');
+  });
+
+  test('redis_per_request_lte is absolute, redis_calls_ratio_lte needs a baseline (E-02)', () => {
+    const traffic = (baseline: boolean, assertions: Record<string, unknown>) =>
+      withAnti({ type: 'traffic', scenario: 'toss-time-100', baseline, assertions }).filter((e) => !e.includes('works_but_wrong'));
+    expect(traffic(false, { redis_per_request_lte: 0.5 })).toEqual([]);
+    expect(traffic(true, { redis_per_request_lte: 3, redis_calls_ratio_lte: 0.2 })).toEqual([]);
+    expect(traffic(false, { redis_calls_ratio_lte: 0.2 })[0]).toContain('redis_calls_ratio_lte is relative to the baseline run');
+    expect(traffic(false, { redis_per_request_lte: -1 })[0]).toContain('verify.1.assertions.redis_per_request_lte');
+    expect(traffic(true, { redis_calls_ratio_lte: 'low' })[0]).toContain('verify.1.assertions.redis_calls_ratio_lte');
   });
 
   const answer = (extra: Record<string, unknown> = {}) => ({

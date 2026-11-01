@@ -104,6 +104,32 @@ export function evaluateAssertion(check: RedisCheck, reply: Reply): AssertionOut
       };
     return { ok: String(reply).includes(String(want)), expected, observed: formatReply(reply) };
   }
+  if (check.notContains !== undefined) {
+    // E-02: the negation of `contains`. A string (INFO commandstats, CLIENT LIST) must not hold the text; a list must
+    // have no element equal to it; nil holds nothing, so it passes.
+    const text = check.notContains;
+    const expected = `no ${JSON.stringify(text)}`;
+    if (reply === null) return { ok: true, expected, observed: 'nil' };
+    if (Array.isArray(reply)) {
+      const hit = reply.find((e) => replyEquals(e, text));
+      return {
+        ok: hit === undefined,
+        expected,
+        observed: formatReply(reply),
+      };
+    }
+    const whole = String(reply);
+    if (!whole.includes(text)) return { ok: true, expected, observed: formatReply(reply) };
+    // A long INFO reply is cut when shown, so show the line that holds the text instead of its first 120 characters.
+    const line = whole.split(/\r?\n/).find((l) => l.includes(text)) ?? whole;
+    return {
+      ok: false,
+      expected,
+      observed: whole.includes('\n')
+        ? `a line reading ${formatReply(line.trim())}`
+        : formatReply(reply),
+    };
+  }
   // The schema guarantees exactly one assertion; a check without one must never pass.
   return {
     ok: false,

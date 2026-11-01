@@ -163,16 +163,42 @@ export interface CliResult {
   /** Not part of the HTTP body: the engine uses these to emit events. */
   command: string;
   argv: string[];
+  /** The server's own error text (no `(error) ` prefix) when Redis answered with an error reply. */
+  errorText?: string;
+}
+
+/** `PING`, but `SCRIPT KILL` and `FUNCTION KILL` keep their subcommand: that is what an event names. */
+export function cliCommandLabel(argv: readonly string[]): string {
+  const name = (argv[0] ?? '').toUpperCase();
+  return name === 'SCRIPT' || name === 'FUNCTION'
+    ? `${name} ${(argv[1] ?? '').toUpperCase()}`.trim()
+    : name;
+}
+
+/** E-02: Redis refused the command because a script has been running longer than busy-reply-threshold. */
+export function isBusyReply(r: CliResult): boolean {
+  return r.type === 'error' && r.errorText !== undefined && r.errorText.startsWith('BUSY');
+}
+
+/** E-02: `SCRIPT KILL` / `FUNCTION KILL` answered with the status `OK`. */
+export function isScriptKilled(r: CliResult): boolean {
+  const label = cliCommandLabel(r.argv);
+  return (
+    (label === 'SCRIPT KILL' || label === 'FUNCTION KILL') &&
+    r.type === 'status' &&
+    r.reply === 'OK'
+  );
 }
 
 export async function runCli(redis: RedisManager, line: string): Promise<CliResult> {
   const started = performance.now();
-  const done = (reply: string, type: ReplyType, argv: string[]): CliResult => ({
+  const done = (reply: string, type: ReplyType, argv: string[], errorText?: string): CliResult => ({
     reply,
     type,
     ms: Math.round((performance.now() - started) * 100) / 100,
     command: (argv[0] ?? '').toUpperCase(),
     argv,
+    ...(errorText !== undefined ? { errorText } : {}),
   });
   const argv = splitArgs(line);
   if (argv === null) return done('Invalid argument(s)', 'error', []);
@@ -184,7 +210,7 @@ export async function runCli(redis: RedisManager, line: string): Promise<CliResu
     const f = formatReply(raw);
     return done(f.text, f.type, argv);
   } catch (err) {
-    if (isRedisErrorReply(err)) return done(`(error) ${err.message}`, 'error', argv);
+    if (isRedisErrorReply(err)) return done(`(error) ${err.message}`, 'error', argv, err.message);
     const msg = err instanceof Error ? err.message : String(err);
     if (/no reply after/.test(msg))
       return done(`(error) ${msg}; the terminal connection was reset`, 'error', argv);

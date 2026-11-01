@@ -4,6 +4,8 @@ import type {
   Health,
   IdealResponse,
   LevelData,
+  LoadStartResponse,
+  LoadStatus,
   LogService,
   MetricsSeries,
   MirrorStatus,
@@ -96,6 +98,9 @@ export const api = {
     call<VerifyResponse>('POST', `/api/levels/${enc(id)}/verify`, { answers }),
   setSlots: (id: string, active: boolean) =>
     call<{ active: string[]; own: string[] }>('POST', `/api/levels/${enc(id)}/slots`, { active }),
+  loadStart: (scenario: string, durationSec: number) =>
+    call<LoadStartResponse>('POST', '/api/load/start', { scenario, durationSec }),
+  loadStatus: () => call<LoadStatus>('GET', '/api/load/status'),
   ideal: (id: string) => call<IdealResponse>('GET', `/api/levels/${enc(id)}/ideal`),
   cli: (command: string) => call<CliReply>('POST', '/api/cli', { command }),
   target: () => call<{ redisUrl: string; state: 'up' | 'down' }>('GET', '/api/target'),

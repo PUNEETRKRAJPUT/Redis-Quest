@@ -4,6 +4,7 @@ import { IdealWay } from '../level/IdealWay';
 import { Stage } from '../level/Stage';
 import { Thread } from '../level/Thread';
 import { ChecksList, VerdictBanner } from '../level/VerifyPanel';
+import { RunTraffic } from '../level/RunTraffic';
 import { SlotToggle } from '../level/SlotToggle';
 import { Workbench } from '../level/Workbench';
 import { Countdown, hintButtonLabel, hintCostCopy, rebuiltIn } from '../level/interview';
@@ -340,6 +341,7 @@ export function LevelScreen({ id }: { id: string }) {
           </li>
         </ul>
         <h3 className="mini">Live pain</h3>
+        {level.scenario ? <RunTraffic scenario={level.scenario} /> : null}
         <PainPanel />
         <button type="button" className="btn" onClick={() => openStage(3)}>
           Next: brainstorm

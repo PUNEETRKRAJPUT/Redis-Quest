@@ -85,6 +85,7 @@ export const ASSERTION_KEYS = [
   'oneOf',
   'lengthGte',
   'contains',
+  'notContains',
 ] as const;
 export type AssertionKey = (typeof ASSERTION_KEYS)[number];
 
@@ -101,6 +102,8 @@ export const redisCheckSchema = z
     oneOf: z.array(replyValue).min(1, 'must list at least one value').optional(),
     lengthGte: z.number().int().min(0).optional(),
     contains: z.union([z.string(), z.number()]).optional(),
+    // E-02: the negation of `contains`: a string reply must not hold this text (a list: no element equals it).
+    notContains: z.string().min(1, 'must not be empty (every reply contains the empty string)').optional(),
     message: text.optional(),
     allowWrite: z.literal(true, { error: 'allowWrite can only be true (omit it otherwise)' }).optional(),
     reason: text.optional(),
@@ -339,12 +342,14 @@ export const TRAFFIC_ASSERTION_KEYS = [
   'p99_ratio_lte',
   'rps_ratio_gte',
   'db_calls_ratio_lte',
+  'redis_calls_ratio_lte',
   'hit_ratio_gte',
   'error_rate_lte',
   'db_queries_lte',
   'p99_ms_lte',
+  'redis_per_request_lte',
 ] as const;
-const BASELINE_RATIO_KEYS = ['p99_ratio_lte', 'rps_ratio_gte', 'db_calls_ratio_lte'] as const;
+const BASELINE_RATIO_KEYS = ['p99_ratio_lte', 'rps_ratio_gte', 'db_calls_ratio_lte', 'redis_calls_ratio_lte'] as const;
 
 const trafficVerifier = z
   .strictObject({
@@ -355,11 +360,15 @@ const trafficVerifier = z
       p99_ratio_lte: z.number().positive().optional(),
       rps_ratio_gte: z.number().positive().optional(),
       db_calls_ratio_lte: z.number().min(0).optional(),
+      // E-02: Redis commands per app request, relative to the baseline's.
+      redis_calls_ratio_lte: z.number().min(0).optional(),
       hit_ratio_gte: z.number().min(0).max(1).optional(),
       error_rate_lte: z.number().min(0).max(1).optional(),
       // Absolute: total Postgres queries during the run, and p99 latency in milliseconds.
       db_queries_lte: z.number().int().min(0).optional(),
       p99_ms_lte: z.number().positive().optional(),
+      // E-02: absolute Redis commands per app request (the app's own count, summed over the run window).
+      redis_per_request_lte: z.number().min(0).optional(),
     }),
     message: text.optional(),
   })

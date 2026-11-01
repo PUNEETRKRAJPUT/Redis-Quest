@@ -154,7 +154,7 @@ export class Verifier {
   /** One verification at a time per player (the route answers 409 otherwise). */
   begin(playerId: string): () => void {
     if (this.running.has(playerId))
-      throw new VerifyBusyError('a verification is already running for this player');
+      throw new VerifyBusyError('a verification or a traffic run is already running');
     this.running.add(playerId);
     return () => this.running.delete(playerId);
   }
