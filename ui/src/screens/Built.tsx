@@ -4,15 +4,28 @@ import { IconExternal } from '../icons';
 import { ShowMe } from '../showme';
 import { useQuest } from '../store';
 
-function insightUrl(): string {
+const DEFAULT_INSIGHT_PORT = '5540';
+
+/**
+ * F-07. Nothing the engine serves exposes INSIGHT_PORT (checked: GET /health, /api/progress, /api/target, /api/chapters),
+ * so the link follows the page's own hostname and a port in this order: `insightUrl` from GET /health if the engine ever
+ * adds it (requested in docs/handoffs/F-UI.md), localStorage `quest.insightPort`, then the .env.example default 5540.
+ */
+export function insightLink(health: { insightUrl?: unknown } | null | undefined, hostname: string, stored: string | null): string {
+  if (health && typeof health.insightUrl === 'string' && /^https?:\/\//.test(health.insightUrl)) return health.insightUrl;
+  const port = stored && /^\d{2,5}$/.test(stored) ? stored : DEFAULT_INSIGHT_PORT;
+  const host = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname || 'localhost';
+  return `http://${host}:${port}/`;
+}
+
+function insightUrl(health: { insightUrl?: unknown } | null | undefined): string {
+  let stored: string | null = null;
   try {
-    const p = localStorage.getItem('quest.insightPort');
-    if (p && /^\d{2,5}$/.test(p)) return `http://localhost:${p}/`;
+    stored = localStorage.getItem('quest.insightPort');
   } catch {
     /* storage can be blocked */
   }
-  // The engine does not expose the Insight port; 5540 is the default in .env.example.
-  return 'http://localhost:5540/';
+  return insightLink(health, window.location.hostname, stored);
 }
 
 function BuiltCard({ levelId, title, chapter, playerId }: { levelId: string; title: string; chapter: string; playerId: string }) {
@@ -33,6 +46,7 @@ function BuiltCard({ levelId, title, chapter, playerId }: { levelId: string; tit
 export function Built() {
   const chapters = useQuest((s) => s.chapters);
   const progress = useQuest((s) => s.progress);
+  const health = useQuest((s) => s.health);
   if (!chapters || !progress) return <main className="page"><p className="muted">Loading...</p></main>;
   const passed = chapters.chapters.flatMap((c) => c.levels.filter((l) => l.status === 'passed').map((l) => ({ ...l, chapter: c.title })));
   return (
@@ -40,7 +54,7 @@ export function Built() {
       <h1>What you built</h1>
       <p className="muted">
         Every level you passed, running live on your own keys.{' '}
-        <a href={insightUrl()} target="_blank" rel="noopener noreferrer">
+        <a href={insightUrl(health)} data-testid="insight-link" target="_blank" rel="noopener noreferrer">
           Open Redis Insight <IconExternal size={14} />
           <span className="sr-only"> (opens in a new tab)</span>
         </a>{' '}

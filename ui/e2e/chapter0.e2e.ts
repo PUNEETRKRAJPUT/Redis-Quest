@@ -14,7 +14,7 @@ mkdirSync(SHOTS, { recursive: true });
  * and prints a loud NOTE. To remove the fallback once P0-09 is in, set this to false: any verdict other than
  * 'right' then fails the test.
  */
-const ALLOW_DEV_COMPLETE_FALLBACK = true;
+const ALLOW_DEV_COMPLETE_FALLBACK = false;
 
 const LEVELS = [
   'ch0-01-bhai-it-works-on-my-laptop',
@@ -39,7 +39,7 @@ async function expectNoHorizontalScroll(page: Page, where: string): Promise<void
 async function openStage(page: Page, n: number): Promise<Locator> {
   const stage = page.getByTestId(`stage-${n}`);
   const head = stage.getByRole('button').first();
-  if ((await head.getAttribute('aria-expanded')) !== 'true') await head.dispatchEvent('click'); // no scroll: a focused xterm snaps the page back and the real click lands elsewhere
+  if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click();
   await expect(head).toHaveAttribute('aria-expanded', 'true');
   return stage;
 }
@@ -159,7 +159,16 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await expect(termText(page)).toContainText('redis_version');
   await terminalRun(page, 'DBSIZE');
   await expect(termText(page)).toContainText('(integer)');
+  // F-06: with the terminal focused (and a full-page screenshot taken, which is what used to arm the jump), a real
+  // click on a header further down must not move the page.
   await snap(page, 'level2-terminal');
+  const stage6 = page.getByTestId('stage-6').getByRole('button').first();
+  await stage6.scrollIntoViewIfNeeded();
+  const before = await page.evaluate(() => window.scrollY);
+  await stage6.click();
+  await page.waitForTimeout(300);
+  const after = await page.evaluate(() => window.scrollY);
+  expect(Math.abs(after - before), `page scrollY moved from ${before} to ${after} when focus left the terminal`).toBeLessThanOrEqual(1);
   await passLevel(page, request, LEVELS[1]);
   await page.getByTestId('next-level').click();
 
@@ -213,6 +222,8 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await expect(page.getByTestId('built')).toBeVisible();
   for (const id of LEVELS) await expect(page.getByTestId(`built-${id}`).locator('[data-showme]')).toBeVisible();
   await expect(page.getByTestId(`built-${LEVELS[2]}`)).toContainText(PLAYER_NAME);
+  // F-07: the Insight link follows the page hostname (no engine field yet, so the port is the 5540 default).
+  await expect(page.getByTestId('insight-link')).toHaveAttribute('href', `http://${new URL(page.url()).hostname}:5540/`);
   await expectNoHorizontalScroll(page, 'built');
   await snap(page, 'built');
 

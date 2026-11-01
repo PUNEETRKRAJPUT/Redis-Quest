@@ -42,6 +42,32 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
     const ro = new ResizeObserver(doFit);
     ro.observe(el);
 
+    // F-06: with the terminal focused, a press somewhere else makes Chrome scroll the page back to xterm's helper
+    // textarea (a pending "reveal the focused editable" that fires on the next pointer press, for example after the
+    // window or viewport was resized). The scroll lands before mouseup, so the click hits the wrong element and the
+    // stage header or button never fires. Not the scroll anchor and not xterm itself (checked: overflow-anchor and
+    // textarea positioning make no difference), so the page scroll is pinned for the length of the press.
+    const pinScrollOnOutsidePress = (e: PointerEvent) => {
+      const ta = el.querySelector('textarea');
+      if (!ta || document.activeElement !== ta || (e.target instanceof Node && el.contains(e.target))) return;
+      const x = window.scrollX;
+      const y = window.scrollY;
+      const pin = () => {
+        if (window.scrollX !== x || window.scrollY !== y) window.scrollTo(x, y);
+      };
+      const events = ['scroll', 'focusout', 'focusin', 'mouseup', 'pointerup', 'click'] as const;
+      const stop = () => {
+        for (const n of events) window.removeEventListener(n, pin, true);
+        window.removeEventListener('pointerup', stop);
+        window.removeEventListener('pointercancel', stop);
+      };
+      for (const n of events) window.addEventListener(n, pin, true);
+      window.addEventListener('pointerup', stop);
+      window.addEventListener('pointercancel', stop);
+      window.setTimeout(stop, 1500);
+    };
+    window.addEventListener('pointerdown', pinScrollOnOutsidePress, true);
+
     let prompt = 'redis> ';
     let buf = '';
     let cur = 0;
@@ -201,6 +227,7 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
     });
 
     return () => {
+      window.removeEventListener('pointerdown', pinScrollOnOutsidePress, true);
       sub.dispose();
       ro.disconnect();
       term.dispose();

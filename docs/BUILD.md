@@ -43,9 +43,10 @@ start early if everything it depends on is `done`.
 | F-03 | `.prettierignore` exists; add a `format:check` step to CI once the tree is stable | todo |
 | F-04 | UI: render the `ideal` object from the verify response and call `GET /api/levels/:id/ideal` for "reveal anyway" (P0-09 is adding the endpoint) | todo |
 | F-05 | Schema: `show_me` should carry the key(s) to display (`{ component, keys }`), additive; UI stops hard-coding keys per level | todo |
-| F-06 (in progress, bundled as specs/F-UI) | UI: clicking away from a focused terminal makes the page jump; fix for real users | todo |
-| F-07 (in progress, specs/F-UI) | UI: Redis Insight link should use the configured `INSIGHT_PORT`, not 5540 | todo |
-| F-08 (in progress, specs/F-UI) | Playwright e2e: set `ALLOW_DEV_COMPLETE_FALLBACK=false` now that verify works | todo |
+| F-06 (done, handoffs/F-UI) | UI: clicking away from a focused terminal makes the page jump; fix for real users | todo |
+| F-07 (done, handoffs/F-UI; engine side pending F-09) | UI: Redis Insight link should use the configured `INSIGHT_PORT`, not 5540 | todo |
+| F-08 (done, handoffs/F-UI) | Playwright e2e: set `ALLOW_DEV_COMPLETE_FALLBACK=false` now that verify works | done |
+| F-09 | Engine: expose `insightUrl` (from `INSIGHT_PORT`) in `GET /health` so the UI link follows the configured port | todo |
 
 ## Content (after Phase 0)
 

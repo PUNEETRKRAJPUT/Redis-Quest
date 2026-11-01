@@ -134,6 +134,8 @@ export interface Health {
   postgres: 'up' | 'down';
   boots: number | null;
   levels: 'ok' | 'error';
+  /** Not served today (F-07 requests it); when present the Insight link uses it as is. */
+  insightUrl?: string;
 }
 
 export interface MirrorStatus {
