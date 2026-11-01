@@ -82,7 +82,7 @@ services:
     platform: linux/arm64
     # Persistence is ON by default so a learner who runs `docker compose down` keeps their save file
     # (Chapter 0.5). Chapter 5 switches to the `crash` profile (redis-nopersist) to show the loss.
-    command: ["redis-server", "--maxmemory", "512mb", "--save", "60", "1000", "--appendonly", "yes", "--appendfsync", "everysec"]
+    command: ["redis-server", "--maxmemory", "512mb", "--save", "60", "1000", "--appendonly", "yes", "--appendfsync", "everysec", "--replica-announce-ip", "redis"]
     ports: ["127.0.0.1:${REDIS_PORT:-6379}:6379"]
     volumes: ["redis-data:/data"]
     healthcheck: { test: ["CMD", "redis-cli", "PING"], interval: 2s, timeout: 2s, retries: 15 }
