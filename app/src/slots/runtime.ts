@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { stat } from 'node:fs/promises';
 import { watch, type FSWatcher } from 'chokidar';
 import type { Logger } from 'pino';
 import {
@@ -72,6 +73,8 @@ export interface SlotRuntimeOptions {
   filePollMs: number;
   log: Logger;
   marker?: LoopMarker;
+  /** Minimum ms between request-path stats of a slot file (default 500). */
+  statThrottleMs?: number;
 }
 
 export class SlotRuntime {
@@ -80,6 +83,9 @@ export class SlotRuntime {
   private activeSet = new Set<string>();
   private readonly cache = new Map<string, Promise<LoadResult>>();
   private readonly last = new Map<string, LoadResult>();
+  /** mtime+size of the file each loaded module came from, and when it was last stat'ed on the request path. */
+  private readonly stamp = new Map<string, string>();
+  private readonly statAt = new Map<string, number>();
   private watcher?: FSWatcher;
   private readonly unknownWarned = new Set<string>();
 
@@ -139,13 +145,45 @@ export class SlotRuntime {
     for (const n of added) void this.load(this.defs.get(n)!);
   }
 
+  private async fileStamp(def: SlotDef): Promise<string> {
+    try {
+      const st = await stat(path.resolve(this.opts.workspaceDir, def.file));
+      return `${st.mtimeMs}-${st.size}`;
+    } catch {
+      return 'missing';
+    }
+  }
+
+  /**
+   * The chokidar poller on a Docker Desktop bind mount can lag a file change by many seconds or report it
+   * as unlink+add. A throttled stat on the request path makes reloads deterministic regardless.
+   */
+  private async maybeReload(def: SlotDef): Promise<void> {
+    const now = Date.now();
+    if (now - (this.statAt.get(def.name) ?? 0) < (this.opts.statThrottleMs ?? 500)) return;
+    this.statAt.set(def.name, now);
+    const s = await this.fileStamp(def);
+    const prev = this.stamp.get(def.name);
+    if (prev !== undefined && prev !== s) {
+      this.cache.delete(def.name);
+      this.last.delete(def.name);
+      this.opts.log.info({ slot: def.name, file: def.file, event: 'stat' }, 'learner file changed');
+    }
+  }
+
   private load(def: SlotDef): Promise<LoadResult> {
     const cached = this.cache.get(def.name);
     if (cached) return cached;
-    const p: Promise<LoadResult> = loadLearnerModule(this.opts.workspaceDir, def.file, def.exportName ?? 'default').then(
-      (m) => ({ ok: true as const, fn: m.fn, at: new Date().toISOString() }),
-      (err: unknown) => ({ ok: false as const, error: toLearnerError(err), at: new Date().toISOString() }),
-    );
+    // Record the stamp before importing so a change that lands mid-import is not mistaken for the loaded version.
+    const p: Promise<LoadResult> = this.fileStamp(def)
+      .then((s) => {
+        this.stamp.set(def.name, s);
+        return loadLearnerModule(this.opts.workspaceDir, def.file, def.exportName ?? 'default');
+      })
+      .then(
+        (m) => ({ ok: true as const, fn: m.fn, at: new Date().toISOString() }),
+        (err: unknown) => ({ ok: false as const, error: toLearnerError(err), at: new Date().toISOString() }),
+      );
     this.cache.set(def.name, p);
     void p.then((r) => {
       if (this.cache.get(def.name) !== p) return; // superseded by a newer file version
@@ -172,6 +210,7 @@ export class SlotRuntime {
       scope.served.push(`${name}=baseline`);
       return def.baseline(scope.deps, ...args);
     }
+    await this.maybeReload(def);
     const loaded = await this.load(def);
     if (!loaded.ok) {
       scope.served.push(`${name}=baseline-load-error`);
