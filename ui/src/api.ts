@@ -2,6 +2,7 @@ import type {
   ChaptersResponse,
   CliReply,
   Health,
+  IdealResponse,
   LevelData,
   LogService,
   MetricsSeries,
@@ -63,6 +64,7 @@ export const api = {
   hint: (id: string) => call<{ index: number; hint: string; revealed: number; hintsTotal: number }>('POST', `/api/levels/${enc(id)}/hint`, {}),
   verify: (id: string, answers: Record<string, string | string[]>) =>
     call<VerifyResponse>('POST', `/api/levels/${enc(id)}/verify`, { answers }),
+  ideal: (id: string) => call<IdealResponse>('GET', `/api/levels/${enc(id)}/ideal`),
   cli: (command: string) => call<CliReply>('POST', '/api/cli', { command }),
   target: () => call<{ redisUrl: string; state: 'up' | 'down' }>('GET', '/api/target'),
   event: (name: string, data?: unknown) => call<{ ok: boolean }>('POST', '/api/events', { kind: 'custom', name, data }),

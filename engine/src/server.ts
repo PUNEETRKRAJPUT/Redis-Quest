@@ -202,7 +202,7 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
   const send = (reply: FastifyReply, code: number, body: unknown) => reply.code(code).send(body);
 
   // ---- non-/api routes ------------------------------------------------------------------------
-  app.get('/health', async () => {
+  app.get('/health', async (req) => {
     const [pg, boots] = await Promise.all([
       postgresUp(cfg.databaseUrl),
       redis.isUp ? redis.send<string | null>(['GET', KEY_BOOTS]).then((v) => (v === null ? null : Number(v)), () => null) : Promise.resolve(null),
@@ -214,6 +214,7 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
       postgres: pg ? 'up' : 'down',
       boots,
       levels: levels.errors.length === 0 ? 'ok' : 'error',
+      insightUrl: insightUrlFor(req.headers.host, process.env.INSIGHT_PORT),
     };
   });
 
@@ -586,3 +587,13 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
   return app;
 }
 
+
+/** Insight is published on its own host port, so the link keeps the host the learner reached the engine on. */
+export function insightUrlFor(hostHeader: string | undefined, port: string | undefined): string {
+  const p = port && /^\d{2,5}$/.test(port) ? port : '5540';
+  let host = (hostHeader ?? '').trim();
+  if (host.startsWith('[')) host = host.slice(0, host.indexOf(']') + 1);
+  else host = host.replace(/:\d*$/, '');
+  if (!host || !/^[A-Za-z0-9.\-[\]:]+$/.test(host)) host = 'localhost';
+  return `http://${host}:${p}`;
+}

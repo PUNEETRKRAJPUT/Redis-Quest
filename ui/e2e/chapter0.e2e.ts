@@ -70,6 +70,20 @@ async function verify(page: Page): Promise<string> {
   return (await verdict.getAttribute('data-verdict')) ?? 'missing';
 }
 
+/** Verify once with whatever is typed and wait until the engine has counted attempt number `n`. */
+async function verifyAttempt(page: Page, request: APIRequestContext, id: string, n: number): Promise<string> {
+  await openStage(page, 6);
+  await page.getByTestId('verify-button').click();
+  await expect
+    .poll(async () => {
+      const p = (await (await request.get('/api/progress')).json()) as { levels: Record<string, { attempts: number }> };
+      return p.levels[id]?.attempts ?? 0;
+    }, { timeout: 60_000 })
+    .toBe(n);
+  await expect(page.getByTestId('verify-button')).toBeEnabled();
+  return (await page.getByTestId('verdict').getAttribute('data-verdict')) ?? 'missing';
+}
+
 async function passLevel(page: Page, request: APIRequestContext, id: string): Promise<void> {
   let verdict = await verify(page);
   await snap(page, `${id}-verify-${verdict}`);
@@ -144,7 +158,12 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await openStage(page, 7);
   await expect(page.getByTestId('ideal-request')).toBeVisible();
   await passLevel(page, request, LEVELS[0]);
-  await expect(page.getByTestId('stage-7').getByTestId('ideal')).toBeVisible();
+  // F-04: passed -> the panel is open with the reference solution, its reasoning and the wrong solutions.
+  const ideal1 = page.getByTestId('stage-7').getByTestId('ideal');
+  await expect(ideal1).toBeVisible();
+  await expect(ideal1.getByTestId('ideal-reference')).toContainText('./scripts/start');
+  await expect(ideal1.getByTestId('ideal-wrong').first()).toBeVisible();
+  await expect(ideal1.getByTestId('ideal-reasoning')).toContainText('Why the others fall short');
   await snap(page, 'level1-passed');
   await expectNoHorizontalScroll(page, 'level');
   await page.getByTestId('next-level').click();
@@ -183,6 +202,23 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await expect(termText(page)).toContainText('hash');
   await terminalRun(page, `HGET game:player:${playerId} name`);
   await expect(termText(page)).toContainText(`"${PLAYER_NAME}"`);
+  // F-04: three failed attempts with a wrong answer unlock the ideal way, with the reference and the wrong solutions.
+  await openStage(page, 7);
+  await expect(page.getByTestId('ideal-reason')).toContainText('0 of 3 attempts used');
+  await snap(page, 'level3-ideal-locked');
+  await page.getByTestId('answer-1').fill('definitely not the name');
+  for (const n of [1, 2, 3]) {
+    expect(await verifyAttempt(page, request, LEVELS[2], n), `wrong answer, attempt ${n}`).toBe('wrong');
+  }
+  const ideal3 = page.getByTestId('stage-7').getByTestId('ideal');
+  await openStage(page, 7);
+  await expect(ideal3).toBeVisible();
+  await expect(page.getByTestId('stage-7')).toContainText('unlocked');
+  await expect(ideal3.getByTestId('ideal-reference')).toContainText(`HGET game:player:${playerId} name`);
+  await expect(ideal3.getByTestId('ideal-wrong').first()).toContainText('03-wrong-get-on-a-hash.redis');
+  await ideal3.getByTestId('ideal-wrong').first().locator('summary').click();
+  await expect(ideal3.getByTestId('ideal-wrong').first()).toContainText('WRONGTYPE');
+  await snap(page, 'level3-ideal-after-three-fails');
   await page.getByTestId('answer-1').fill(PLAYER_NAME);
   await snap(page, 'level3-terminal');
   await passLevel(page, request, LEVELS[2]);
@@ -199,6 +235,17 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   const ttlText = (await termText(page).innerText()).match(/\(integer\) (\d{3,})/g)?.pop() ?? '';
   const ttl = ttlText.replace(/\D/g, '');
   expect(Number(ttl)).toBeGreaterThan(0);
+  // F-04: "Reveal anyway" on a locked level fetches the ideal way.
+  await openStage(page, 7);
+  await expect(page.getByTestId('ideal-reason')).toContainText('0 of 3 attempts used');
+  await page.getByTestId('ideal-request').click();
+  const ideal4 = page.getByTestId('stage-7').getByTestId('ideal');
+  await expect(ideal4).toBeVisible();
+  await expect(ideal4.getByTestId('ideal-revealed-note')).toBeVisible();
+  await expect(ideal4.getByTestId('ideal-reference')).toBeVisible();
+  const lv4 = (await (await request.get(`/api/progress`)).json()) as { levels: Record<string, { status: string }> };
+  expect(lv4.levels[LEVELS[3]]?.status).not.toBe('passed');
+  await snap(page, 'level4-ideal-revealed-anyway');
   await page.getByTestId('answer-0').fill(ttl);
   await passLevel(page, request, LEVELS[3]);
   await expect(page.getByTestId('passed-panel').getByTestId('ttl-left')).toBeVisible();
@@ -222,8 +269,8 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await expect(page.getByTestId('built')).toBeVisible();
   for (const id of LEVELS) await expect(page.getByTestId(`built-${id}`).locator('[data-showme]')).toBeVisible();
   await expect(page.getByTestId(`built-${LEVELS[2]}`)).toContainText(PLAYER_NAME);
-  // F-07: the Insight link follows the page hostname (no engine field yet, so the port is the 5540 default).
-  await expect(page.getByTestId('insight-link')).toHaveAttribute('href', `http://${new URL(page.url()).hostname}:5540/`);
+  // F-09: the Insight link follows insightUrl from GET /health: the page hostname and the stack's INSIGHT_PORT.
+  await expect(page.getByTestId('insight-link')).toHaveAttribute('href', `http://${new URL(page.url()).hostname}:5543`);
   await expectNoHorizontalScroll(page, 'built');
   await snap(page, 'built');
 

@@ -91,17 +91,32 @@ export interface VerifyResponse {
   durationMs?: number;
   feedback?: string;
   metrics?: Record<string, unknown>;
-  /** Optional, not documented by the engine yet: the ideal-way panel renders these when present. */
-  ideal?: IdealWayPayload;
+  /** Present when the engine allows the ideal way (passed, or 3 attempts). Shape: docs/handoffs/P0-09.md. */
+  ideal?: Ideal;
   [extra: string]: unknown;
 }
 
-export interface IdealWayPayload {
-  reference?: string;
-  language?: string;
-  annotations?: string;
-  tradeoffs?: string[];
+export interface IdealFile {
+  path: string;
+  content: string;
 }
+
+export type Ideal =
+  | {
+      mode: 'cli' | 'code' | 'ops';
+      reference: IdealFile;
+      wrong: Array<IdealFile & { expect: 'wrong' | 'works_but_wrong'; because: string }>;
+      reasoning: string;
+    }
+  | {
+      mode: 'decision';
+      reference: { options: string[] };
+      quizzes: Array<{ index: number; question: string; correct: string[]; explanation: string }>;
+      wrong: Array<{ option: string; expect: 'wrong'; because: string }>;
+      reasoning: string;
+    };
+
+export type IdealResponse = Ideal & { allowed: boolean; reason: string };
 
 export interface CliReply {
   reply: string;
@@ -134,7 +149,7 @@ export interface Health {
   postgres: 'up' | 'down';
   boots: number | null;
   levels: 'ok' | 'error';
-  /** Not served today (F-07 requests it); when present the Insight link uses it as is. */
+  /** Served by the engine (F-09): http://<request host>:<INSIGHT_PORT>. The Insight link uses it as is. */
   insightUrl?: string;
 }
 

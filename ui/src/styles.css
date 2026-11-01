@@ -297,3 +297,19 @@ a.level-link:hover { border-color: var(--accent); background: var(--accent-soft)
   .chapter { grid-template-columns: 1fr; }
   .chapter-rail { display: none; }
 }
+
+/* ---- ideal way (F-04) ---- */
+.ideal h3 { margin: 16px 0 6px; font-size: 1rem; }
+.ideal-monaco { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; margin: 10px 0; }
+.ideal-monaco .codeblock-bar { background: var(--term-bg); }
+.ideal-wrong { border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 12px; margin: 8px 0; background: var(--surface); }
+.ideal-wrong summary { cursor: pointer; font-weight: 600; }
+.ideal-reasoning { white-space: pre-wrap; font-family: var(--sans); background: var(--accent-soft); border-radius: var(--radius); padding: 10px 14px; margin: 0; }
+.ideal-quiz { margin: 8px 0; }
+.diff-body { margin: 6px 0 10px; padding: 8px 0; background: var(--term-bg); color: var(--term-fg); border-radius: var(--radius); overflow-x: auto; font-family: var(--mono); font-size: .85rem; }
+.diff-row { padding: 0 12px; white-space: pre; }
+.diff-row > span { display: inline-block; width: 1.4em; opacity: .7; }
+.diff-row.add { background: rgba(46, 160, 90, .28); }
+.diff-row.del { background: rgba(220, 70, 60, .28); }
+.diff-key.add { color: var(--ok); font-weight: 600; }
+.diff-key.del { color: var(--bad); font-weight: 600; }

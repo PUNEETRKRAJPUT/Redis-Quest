@@ -16,11 +16,11 @@ import EditorWorker from 'monaco-editor/editor/editor.worker.js?worker';
 (self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = { getWorker: () => new EditorWorker() };
 loader.config({ monaco });
 
-export default function MonacoEditor({ value, language, onChange, onSave }: { value: string; language: string; onChange: (v: string) => void; onSave: () => void }) {
+export default function MonacoEditor({ value, language, onChange, onSave, readOnly = false, height = '100%' }: { value: string; language: string; onChange: (v: string) => void; onSave: () => void; readOnly?: boolean; height?: string }) {
   const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
   return (
     <Editor
-      height="100%"
+      height={height}
       language={language}
       value={value}
       theme={dark ? 'vs-dark' : 'vs'}
@@ -28,7 +28,7 @@ export default function MonacoEditor({ value, language, onChange, onSave }: { va
       onMount={(ed) => {
         ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, onSave);
       }}
-      options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2, ariaLabel: 'Code editor' }}
+      options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2, readOnly, ariaLabel: readOnly ? 'Reference solution (read only)' : 'Code editor' }}
       loading={<p className="muted pad">Loading the editor...</p>}
     />
   );

@@ -40,7 +40,8 @@ export function LevelScreen({ id }: { id: string }) {
   const status = lp?.status;
   const failed = (lp?.verdicts ?? []).filter((v) => v.verdict === 'wrong' || v.verdict === 'works_but_wrong').length;
   const passed = status === 'passed';
-  const idealUnlocked = passed || failed >= 3 || wantIdeal;
+  const idealAllowed = passed || (lp?.attempts ?? 0) >= 3 || failed >= 3;
+  const idealUnlocked = idealAllowed || wantIdeal;
 
   const load = useCallback(async () => {
     try {
@@ -348,14 +349,7 @@ export function LevelScreen({ id }: { id: string }) {
         open={!!open[7]}
         onToggle={() => toggle(7)}
       >
-        {idealUnlocked ? (
-          <IdealWay level={level} result={result} />
-        ) : (
-          <>
-            <p>It opens when you pass, after three failed attempts, or when you ask. Try first: the guess you made in beat 3 is waiting for you.</p>
-            <button type="button" className="btn ghost" onClick={() => setWantIdeal(true)} data-testid="ideal-request">Show me the ideal way now</button>
-          </>
-        )}
+        <IdealWay level={level} allowed={idealAllowed} attempts={lp?.attempts ?? failed} fromVerify={result?.ideal} onRevealed={() => setWantIdeal(true)} />
       </Stage>
     </main>
   );

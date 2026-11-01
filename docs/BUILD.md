@@ -41,12 +41,12 @@ start early if everything it depends on is `done`.
 | F-01 (done, handoffs/F-01) | Caddy: dynamic A-record upstreams for `app`, round robin; keep-alive restored (`APP_MAX_REQUESTS_PER_SOCKET=0`) | done |
 | F-02 | Engine metrics aggregate sums `dbQueries` and `redisCommands` | done |
 | F-03 | `.prettierignore` exists; add a `format:check` step to CI once the tree is stable | todo |
-| F-04 (in progress, spec: specs/F-04) | UI: render the `ideal` object from the verify response and call `GET /api/levels/:id/ideal` for "reveal anyway" (P0-09 is adding the endpoint) | todo |
+| F-04 (done, handoffs/F-04) | UI: ideal-way panel renders `ideal`, unlocks after pass or 3 attempts, "reveal anyway" via GET /api/levels/:id/ideal, line diff for code levels | done |
 | F-05 | Schema: `show_me` should carry the key(s) to display (`{ component, keys }`), additive; UI stops hard-coding keys per level | todo |
 | F-06 (done, handoffs/F-UI) | UI: clicking away from a focused terminal makes the page jump; fix for real users | todo |
 | F-07 (done, handoffs/F-UI; engine side pending F-09) | UI: Redis Insight link should use the configured `INSIGHT_PORT`, not 5540 | todo |
 | F-08 (done, handoffs/F-UI) | Playwright e2e: set `ALLOW_DEV_COMPLETE_FALLBACK=false` now that verify works | done |
-| F-09 (in progress, bundled in specs/F-04) | Engine: expose `insightUrl` (from `INSIGHT_PORT`) in `GET /health` so the UI link follows the configured port | todo |
+| F-09 (done, handoffs/F-04) | Engine: `GET /health` exposes `insightUrl` | done |
 
 ## Content (after Phase 0)
 
