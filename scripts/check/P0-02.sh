@@ -107,11 +107,11 @@ while [ "$i" -lt 45 ]; do
 done
 if [ -n "$H" ]; then ok "GET /api/health/ answered: $H"; else bad "insight /api/health/ did not answer in 90 s"; fi
 
-section "proxy answers 502 (no engine yet) or 200"
+section "proxy answers 502 or 503 (no engine or app yet) or 200"
 CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PROXY_PORT}/")"
-if [ "$CODE" = "502" ] || [ "$CODE" = "200" ]; then ok "http://localhost:${PROXY_PORT}/ returned $CODE"; else bad "proxy returned '$CODE'"; fi
+if [ "$CODE" = "502" ] || [ "$CODE" = "503" ] || [ "$CODE" = "200" ]; then ok "http://localhost:${PROXY_PORT}/ returned $CODE"; else bad "proxy returned '$CODE'"; fi
 CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PROXY_PORT}/app/ping")"
-if [ "$CODE" = "502" ] || [ "$CODE" = "200" ] || [ "$CODE" = "404" ]; then ok "http://localhost:${PROXY_PORT}/app/ping returned $CODE"; else bad "proxy /app returned '$CODE'"; fi
+if [ "$CODE" = "502" ] || [ "$CODE" = "503" ] || [ "$CODE" = "200" ] || [ "$CODE" = "404" ]; then ok "http://localhost:${PROXY_PORT}/app/ping returned $CODE"; else bad "proxy /app returned '$CODE'"; fi
 sleep 1
 if [ -s logs/proxy/access.log ] && head -n 1 logs/proxy/access.log | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{JSON.parse(s)})'; then ok "logs/proxy/access.log has JSON lines"; else bad "logs/proxy/access.log missing or not JSON"; fi
 if [ -d logs/postgres ] && [ -n "$(ls logs/postgres 2>/dev/null)" ]; then ok "postgres writes logs to logs/postgres ($(ls logs/postgres | head -n 1))"; else bad "logs/postgres is empty"; fi
