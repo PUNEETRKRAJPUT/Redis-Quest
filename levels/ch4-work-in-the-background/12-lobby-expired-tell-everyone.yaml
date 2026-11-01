@@ -57,6 +57,7 @@ task: |
   Answer the two questions before you press Verify, or after: the answers do not depend on the event.
 
 hints:
+  - "Taking long? Redis finds expired keys by sampling, so the event can lag. Reading the key (GET lobby:m-043) after the ten seconds makes Redis delete it right away and fire the event."
   - "CONFIG SET notify-keyspace-events Ex with a capital E and a lowercase x. Then CONFIG GET notify-keyspace-events should show xE."
   - "If the event is not seen, check CONFIG GET first: with no config the key still expires, silently."
   - "The game's check waits for the event, so press Verify within a few seconds of the SET and do not type anything else while it waits."

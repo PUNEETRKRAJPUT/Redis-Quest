@@ -414,10 +414,13 @@ async function verifyWithChannelPublisher(lv, id, answers, channels) {
       // The engine sees an expired-key event only while it waits, so the key is set during the wait with a
       // one second life, once (a second SET would make a new key after the first one expired).
       const key = renderTemplate(String(v.match.key), ctx);
+      // Redis deletes an expired key when its background sampling finds it or when something reads it; with
+      // hundreds of volatile keys the sampling can lag seconds, so the follow-up ticks read the key, which
+      // deletes it at once and publishes the event (keyspace-notifications page: "on access or background scan").
       jobs.set(index, {
         channel: key,
-        command: `SET ${quoteArg(key)} harness-probe EX 1`,
-        once: true,
+        command: `SET ${quoteArg(key)} harness-probe PX 800`,
+        followUp: `EXISTS ${quoteArg(key)}`,
         timer: null,
         delay: null,
         started: false,
@@ -434,7 +437,7 @@ async function verifyWithChannelPublisher(lv, id, answers, channels) {
     jobs.set(index, {
       channel,
       command: `PUBLISH ${quoteArg(channel)} ${quoteArg(message)}`,
-      once: false,
+      followUp: `PUBLISH ${quoteArg(channel)} ${quoteArg(message)}`,
       timer: null,
       delay: null,
       started: false,
@@ -454,9 +457,10 @@ async function verifyWithChannelPublisher(lv, id, answers, channels) {
     if (name === 'verify_check_started' && !job.started) {
       job.started = true;
       const publish = () => {
-        if (job.sent >= 10 || (job.once && job.sent >= 1)) return stop(job);
+        if (job.sent >= 10) return stop(job);
+        const command = job.sent === 0 ? job.command : job.followUp;
         job.sent += 1;
-        cli(job.command).catch(() => undefined);
+        cli(command).catch(() => undefined);
       };
       // SUBSCRIBE needs a moment to land after the check starts, so the first PUBLISH is not immediate.
       job.delay = setTimeout(() => {

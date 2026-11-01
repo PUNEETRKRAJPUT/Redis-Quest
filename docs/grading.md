@@ -81,8 +81,9 @@ declared `right` or `works_but_wrong`, and produces nothing for one declared `wr
 `quiz` follow). Levels without these event kinds are graded exactly as before. Four rules (E-01, C4):
 
 - **`key_expired`** (`match.key`). The engine subscribes to expired-key events only while the check waits, so
-  when `verify_check_started` arrives for that verifier the harness runs `SET <key> harness-probe EX 1` once through
-  `/api/cli`; the key expires inside the wait. The level's own reference may set the key too; that is for the
+  when `verify_check_started` arrives for that verifier the harness runs `SET <key> harness-probe PX 800` through
+  `/api/cli`, then `EXISTS <key>` once a second: Redis deletes an expired key when its sampling finds it or when it
+  is read, and reading it makes the event fire at once. The level's own reference may set the key too; that is for the
   learner, not for the harness. Also: after a `.redis` solution that ran `FT.CREATE` the harness waits 1.5 s before
   verifying, because the index fills from existing documents in the background.
 - **`service_scaled`** (`match.instances: N`, N is 2 in Chapter 3). Before calling verify the harness POSTs
