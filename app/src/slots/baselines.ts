@@ -32,7 +32,7 @@ export async function getFixtures(deps: LearnerDeps): Promise<unknown> {
 }
 
 /**
- * Chapter 2 prefetch (2.7): the baseline cache does not exist, so there is nothing to load (it takes `(deps, rows)` in the learner's version). The learner's
+ * Chapter 2 prefetch (2.7): the baseline cache does not exist, so there is nothing to load . The learner's
  * version fills `cache:match:*` from `rows` (the whole matches table joined with team names).
  */
 export async function bulkLoadMatches(): Promise<unknown> {
@@ -144,6 +144,133 @@ export async function leaderboardTop(
     userId: r.user_id,
     points: Number(r.points),
   }));
+}
+
+/** Postgres bigint ids arrive as strings from `pg`; only digit strings can name a contest entry. */
+const BIGINT_ID = /^[0-9]{1,18}$/;
+
+/**
+ * Chapter 3.2: the write path is an UPDATE on an unindexed table. A team id that is not a number cannot
+ * exist (fantasy_team_id is a bigint), so it is "not found" rather than a Postgres cast error.
+ */
+export async function leaderboardAddPoints(
+  deps: LearnerDeps,
+  contestId: number,
+  teamId: string,
+  delta: number,
+): Promise<number | null> {
+  if (!BIGINT_ID.test(teamId)) return null;
+  const { rows } = await deps.db.query(
+    `UPDATE contest_entries SET points = points + $3
+      WHERE contest_id = $1 AND fantasy_team_id = $2 RETURNING points`,
+    [contestId, teamId, delta],
+  );
+  const row = rows[0] as { points: string } | undefined;
+  return row ? Number(row.points) : null;
+}
+
+export interface RankEntry {
+  teamId: string;
+  score: number;
+}
+
+/**
+ * Chapter 3.2: "where am I" costs a window function over every entry of the contest (a sequential scan
+ * of the whole table, then a sort), on every read. Rank 1 is the best score; ties break by entry id.
+ */
+export async function leaderboardRank(
+  deps: LearnerDeps,
+  contestId: number,
+  teamId: string,
+): Promise<{ rank: number; score: number; around: RankEntry[] } | null> {
+  if (!BIGINT_ID.test(teamId)) return null;
+  const { rows } = await deps.db.query(
+    `WITH ranked AS (
+       SELECT fantasy_team_id::text AS team_id, points,
+              row_number() OVER (ORDER BY points DESC, id) AS rn
+         FROM contest_entries WHERE contest_id = $1
+     ), me AS (SELECT rn FROM ranked WHERE team_id = $2)
+     SELECT r.team_id, r.points, r.rn, (r.rn = me.rn) AS is_me
+       FROM ranked r, me WHERE r.rn BETWEEN me.rn - 2 AND me.rn + 2 ORDER BY r.rn`,
+    [contestId, teamId],
+  );
+  const list = rows as Array<{ team_id: string; points: string; rn: string; is_me: boolean }>;
+  const mine = list.find((r) => r.is_me);
+  if (!mine) return null;
+  return {
+    rank: Number(mine.rn),
+    score: Number(mine.points),
+    around: list.map((r) => ({ teamId: r.team_id, score: Number(r.points) })),
+  };
+}
+
+/** One contest entry as `leaderboard.recompute` receives it. */
+export interface RecomputeRow {
+  contestId: number;
+  teamId: string;
+  points: number;
+}
+
+/**
+ * Chapter 3.3: the baseline does nothing, because Postgres already holds the truth. The level measures the
+ * learner's write path: how fast their code can rebuild the sorted sets from `rows` (one round trip per
+ * thousands of commands, not one per row).
+ */
+export async function leaderboardRecompute(): Promise<unknown> {
+  return null;
+}
+
+/** The rows the recompute route loads once and hands to `leaderboard.recompute`. */
+export async function loadRecomputeRows(
+  deps: LearnerDeps,
+  matchIds: string[],
+): Promise<RecomputeRow[]> {
+  const { rows } = await deps.db.query(
+    `SELECT ce.contest_id, ce.fantasy_team_id, ce.points
+       FROM contest_entries ce JOIN contests c ON c.id = ce.contest_id
+      WHERE c.match_id = ANY($1)`,
+    [matchIds],
+  );
+  return (rows as Array<{ contest_id: string; fantasy_team_id: string; points: string }>).map(
+    (r) => ({
+      contestId: Number(r.contest_id),
+      teamId: r.fantasy_team_id,
+      points: Number(r.points),
+    }),
+  );
+}
+
+/**
+ * Chapter 3.4: the wallet debit, correct and slow. One statement is one transaction in Postgres: the
+ * guarded UPDATE takes the row lock (concurrent debits queue on it and re-check the balance after the
+ * lock), and the ledger row is inserted from the rows the UPDATE actually changed, so a refused debit
+ * leaves no trace. The learner's version does the same job in Redis, where the race is theirs to solve.
+ */
+export async function contestJoin(
+  deps: LearnerDeps,
+  userId: string,
+  contestId: number,
+  fee: number,
+): Promise<boolean> {
+  const { rows } = await deps.db.query(
+    `WITH debit AS (
+       UPDATE wallets SET balance = balance - $2
+        WHERE user_id = $1 AND balance >= $2 RETURNING user_id
+     )
+     INSERT INTO wallet_transactions (user_id, delta, reason, ref, created_at)
+     SELECT user_id, -$2::integer, 'contest_entry', $3::text, now() FROM debit
+     RETURNING id`,
+    [userId, fee, String(contestId)],
+  );
+  return rows.length === 1;
+}
+
+/**
+ * Chapter 3.5: the ticker baseline publishes nothing, so a level that grades "a message reached the
+ * channel" only passes with the learner's code. The natural learner return is PUBLISH's receiver count.
+ */
+export async function tickerPublish(): Promise<number> {
+  return 0;
 }
 
 /** Chapter 3 rate limit: fixed window in process memory, per instance (so scaling doubles the limit). */

@@ -14,6 +14,10 @@ describe('slot registry', () => {
     expect(SLOTS.map((s) => s.name).sort()).toEqual([
       'cache.getPlayerStats',
       'cache.invalidatePlayerStats',
+      'contest.join',
+      'leaderboard.addPoints',
+      'leaderboard.rank',
+      'leaderboard.recompute',
       'leaderboard.top',
       'onboarding.registerUser',
       'prefetch.applyChange',
@@ -24,6 +28,7 @@ describe('slot registry', () => {
       'session.destroy',
       'session.destroyAll',
       'session.get',
+      'ticker.publish',
     ]);
     expect(SLOTS.find((s) => s.name === 'cache.getPlayerStats')).toMatchObject({
       file: 'ch2/cache.js',

@@ -59,6 +59,8 @@ export interface StubEngine {
   /** Every GET /internal/app-config: the If-None-Match it carried and the status served. */
   configRequests: Array<{ ifNoneMatch?: string; status: number }>;
   pushes: Array<Record<string, unknown>>;
+  /** Every POST /api/events body (the public custom-event endpoint the ticker worker reports gaps to). */
+  events: Array<Record<string, unknown>>;
   etag(): string;
   close(): Promise<void>;
 }
@@ -69,6 +71,7 @@ export async function startStubEngine(initial: StubConfig): Promise<StubEngine> 
     config: initial,
     configRequests: [] as StubEngine['configRequests'],
     pushes: [] as StubEngine['pushes'],
+    events: [] as StubEngine['events'],
     etag(): string {
       const c = stub.config;
       return createHash('sha1')
@@ -96,6 +99,16 @@ export async function startStubEngine(initial: StubConfig): Promise<StubEngine> 
       req.on('data', (c: Buffer) => (body += c.toString()));
       req.on('end', () => {
         stub.pushes.push(JSON.parse(body) as Record<string, unknown>);
+        res.setHeader('content-type', 'application/json');
+        res.end('{"ok":true}');
+      });
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/api/events') {
+      let body = '';
+      req.on('data', (c: Buffer) => (body += c.toString()));
+      req.on('end', () => {
+        stub.events.push(JSON.parse(body) as Record<string, unknown>);
         res.setHeader('content-type', 'application/json');
         res.end('{"ok":true}');
       });

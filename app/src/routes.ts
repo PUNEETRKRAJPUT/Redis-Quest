@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { HttpError } from './errors.js';
-import { loadMatchRows, type SessionUser } from './slots/baselines.js';
+import { loadMatchRows, loadRecomputeRows, type SessionUser } from './slots/baselines.js';
 import type { RequestScope, SlotRuntime } from './slots/runtime.js';
+import { TickerError, type TickerSubscriber } from './workers/ticker.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -31,7 +32,11 @@ function readCookie(header: string | undefined, name: string): string | undefine
 }
 
 /** The Milestone 1 baseline routes. Every path is under /app (Caddy forwards it unchanged). */
-export function registerRoutes(app: FastifyInstance, slots: SlotRuntime): void {
+export function registerRoutes(
+  app: FastifyInstance,
+  slots: SlotRuntime,
+  ticker: TickerSubscriber,
+): void {
   app.get<{ Params: { id: string } }>('/app/players/:id', async (req) => {
     const { rows } = await scopeOf(req).deps.db.query('SELECT * FROM players WHERE id = $1', [
       req.params.id,
@@ -153,6 +158,160 @@ export function registerRoutes(app: FastifyInstance, slots: SlotRuntime): void {
       };
     },
   );
+
+  // ---- Chapter 3: leaderboard writes, rank, recompute ------------------------------------------
+
+  const contestIdOf = (raw: string): number => {
+    const id = Number(raw);
+    if (!Number.isInteger(id) || id < 1) throw new HttpError(400, 'invalid_contest_id');
+    return id;
+  };
+
+  app.post<{ Params: { contestId: string } }>('/app/contests/:contestId/points', async (req) => {
+    const contestId = contestIdOf(req.params.contestId);
+    const b = isObj(req.body) ? req.body : {};
+    if (!str(b.teamId, 64)) throw new HttpError(400, 'invalid_team_id', 'teamId must be a string');
+    if (typeof b.delta !== 'number' || !Number.isFinite(b.delta))
+      throw new HttpError(400, 'invalid_delta', 'delta must be a finite number');
+    const score = await slots.call(
+      scopeOf(req),
+      'leaderboard.addPoints',
+      contestId,
+      b.teamId,
+      b.delta,
+    );
+    if (score === null || score === undefined) throw new HttpError(404, 'entry_not_found');
+    if (typeof score !== 'number' || !Number.isFinite(score)) {
+      throw slots.contractError(
+        'leaderboard.addPoints',
+        'must return the new score as a number, or null when the entry does not exist',
+      );
+    }
+    return { contestId, teamId: b.teamId, score };
+  });
+
+  app.get<{ Params: { contestId: string; teamId: string } }>(
+    '/app/leaderboard/:contestId/teams/:teamId',
+    async (req) => {
+      const contestId = contestIdOf(req.params.contestId);
+      if (!str(req.params.teamId, 64)) throw new HttpError(400, 'invalid_team_id');
+      const out = await slots.call(scopeOf(req), 'leaderboard.rank', contestId, req.params.teamId);
+      if (out === null || out === undefined) throw new HttpError(404, 'entry_not_found');
+      const around = isObj(out) ? out.around : undefined;
+      if (
+        !isObj(out) ||
+        typeof out.rank !== 'number' ||
+        !Number.isInteger(out.rank) ||
+        out.rank < 1 ||
+        typeof out.score !== 'number' ||
+        !Array.isArray(around) ||
+        !around.every(
+          (e) => isObj(e) && typeof e.teamId === 'string' && typeof e.score === 'number',
+        )
+      ) {
+        throw slots.contractError(
+          'leaderboard.rank',
+          'must return { rank (integer, 1 = best), score (number), around: [{ teamId (string), score (number) }] }, or null',
+        );
+      }
+      return { rank: out.rank, score: out.score, around };
+    },
+  );
+
+  // Level 3.3: rebuild the leaderboards of up to ten matches from Postgres. The route loads the rows once
+  // and times only the slot, so the number is the learner's write path and not the SELECT.
+  app.post('/app/leaderboards/recompute', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    const ids = b.matchIds;
+    if (!Array.isArray(ids) || ids.length < 1 || ids.length > 10 || !ids.every((m) => str(m, 64)))
+      throw new HttpError(400, 'invalid_match_ids', 'matchIds must be 1 to 10 match id strings');
+    const scope = scopeOf(req);
+    const rows = await loadRecomputeRows(scope.deps, ids as string[]);
+    const t0 = performance.now();
+    const result = await slots.call(scope, 'leaderboard.recompute', rows);
+    const ms = Math.round((performance.now() - t0) * 10) / 10;
+    return { ok: true, rows: rows.length, ms, result: result ?? null };
+  });
+
+  // ---- Chapter 3.4: the wallet debit -----------------------------------------------------------
+
+  app.post<{ Params: { contestId: string } }>(
+    '/app/contests/:contestId/join',
+    async (req, reply) => {
+      const contestId = contestIdOf(req.params.contestId);
+      const b = isObj(req.body) ? req.body : {};
+      if (!str(b.userId, 64))
+        throw new HttpError(400, 'invalid_user_id', 'userId must be a string');
+      const fee = b.fee === undefined ? 10 : b.fee;
+      if (typeof fee !== 'number' || !Number.isInteger(fee) || fee < 1 || fee > 100_000)
+        throw new HttpError(400, 'invalid_fee', 'fee must be an integer from 1 to 100000');
+      const joined = await slots.call(scopeOf(req), 'contest.join', b.userId, contestId, fee);
+      if (typeof joined !== 'boolean') {
+        throw slots.contractError(
+          'contest.join',
+          'must return true (fee taken) or false (balance too low)',
+        );
+      }
+      if (!joined) return reply.code(402).send({ error: 'insufficient_balance' });
+      return { joined: true };
+    },
+  );
+
+  // ---- Chapter 3.5 and 3.6: the ticker --------------------------------------------------------
+
+  app.post<{ Params: { matchId: string } }>('/app/matches/:matchId/balls', async (req) => {
+    const matchId = req.params.matchId;
+    if (!str(matchId, 64)) throw new HttpError(400, 'invalid_match_id');
+    const b = isObj(req.body) ? req.body : {};
+    if (typeof b.seq !== 'number' || !Number.isInteger(b.seq) || b.seq < 1)
+      throw new HttpError(400, 'invalid_seq', 'seq must be an integer of 1 or more');
+    for (const k of ['over', 'ball', 'runs'] as const) {
+      if (b[k] !== undefined && (typeof b[k] !== 'number' || !Number.isFinite(b[k])))
+        throw new HttpError(400, `invalid_${k}`, `${k} must be a number`);
+    }
+    for (const k of ['batter', 'commentary'] as const) {
+      if (b[k] !== undefined && !(typeof b[k] === 'string' && (b[k] as string).length <= 200))
+        throw new HttpError(400, `invalid_${k}`, `${k} must be a string of at most 200 characters`);
+    }
+    if (
+      b.wicket !== undefined &&
+      typeof b.wicket !== 'boolean' &&
+      !(typeof b.wicket === 'string' && b.wicket.length <= 200)
+    )
+      throw new HttpError(400, 'invalid_wicket', 'wicket must be a boolean or a short string');
+    const ball: Record<string, unknown> = {};
+    for (const k of ['seq', 'over', 'ball', 'batter', 'runs', 'wicket', 'commentary'])
+      if (b[k] !== undefined) ball[k] = b[k];
+    const result = await slots.call(scopeOf(req), 'ticker.publish', matchId, ball);
+    return { ok: true, matchId, result: result ?? null };
+  });
+
+  // The provided subscriber's view and its one lever. These are game routes: they are counted in metrics.
+  app.get<{ Params: { matchId: string } }>('/app/ticker/:matchId', async (req) => {
+    const view = ticker.view(req.params.matchId);
+    if (!view) throw new HttpError(404, 'unknown_match');
+    return view;
+  });
+
+  app.post('/app/ticker/resubscribe', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    if (!str(b.matchId, 64)) throw new HttpError(400, 'invalid_match_id');
+    const pauseMs = b.pauseMs === undefined ? 1000 : b.pauseMs;
+    if (
+      typeof pauseMs !== 'number' ||
+      !Number.isInteger(pauseMs) ||
+      pauseMs < 0 ||
+      pauseMs > 10_000
+    )
+      throw new HttpError(400, 'invalid_pause', 'pauseMs must be an integer from 0 to 10000');
+    try {
+      const pausedMs = await ticker.resubscribe(b.matchId, pauseMs);
+      return { ok: true, instance: ticker.view(b.matchId)?.instance ?? null, pausedMs };
+    } catch (err) {
+      if (err instanceof TickerError) throw new HttpError(err.status, err.code);
+      throw err;
+    }
+  });
 
   app.get('/app/limits/ping', async (req, reply) => {
     const userId = req.headers['x-user-id'];

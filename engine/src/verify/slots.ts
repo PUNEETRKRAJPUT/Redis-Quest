@@ -18,6 +18,11 @@ export const SLOT_FILES: Readonly<Record<string, string>> = {
   'session.destroyAll': 'ch3/session-destroy-all.js',
   'leaderboard.top': 'ch3/leaderboard.js',
   'ratelimit.allow': 'ch3/ratelimit.js',
+  'leaderboard.addPoints': 'ch3/leaderboard-add.js',
+  'leaderboard.rank': 'ch3/leaderboard-rank.js',
+  'leaderboard.recompute': 'ch3/leaderboard-recompute.js',
+  'contest.join': 'ch3/contest-join.js',
+  'ticker.publish': 'ch3/ticker-publish.js',
 };
 
 export function slotFile(slot: string): string | undefined {

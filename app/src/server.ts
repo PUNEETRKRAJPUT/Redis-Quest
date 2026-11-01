@@ -6,6 +6,7 @@ import type { MetricsRecorder } from './metrics.js';
 import type { RedisTarget } from './redis.js';
 import { registerRoutes } from './routes.js';
 import { RequestScope, type SlotRuntime } from './slots/runtime.js';
+import type { TickerSubscriber } from './workers/ticker.js';
 
 export interface AppContext {
   instance: string;
@@ -15,6 +16,8 @@ export interface AppContext {
   /** The pool learner deps see (with the engine's extra DB latency applied). */
   pool: pg.Pool;
   slots: SlotRuntime;
+  /** The provided Pub/Sub subscriber behind /app/ticker/*. */
+  ticker: TickerSubscriber;
   recorder: MetricsRecorder;
   /** The window most recently pushed to the engine (or computed, when no engine is configured). */
   lastWindow: () => unknown;
@@ -48,6 +51,8 @@ export function buildServer(ctx: AppContext): FastifyInstance {
   });
 
   app.addHook('onSend', async (req, reply, payload) => {
+    // Which instance answered: the proof that --scale app=2 really spreads requests (level 3.1).
+    reply.header('x-quest-instance', ctx.instance);
     if (req.scope && req.scope.served.length > 0)
       reply.header('x-quest-slots', req.scope.served.join(', '));
     return payload;
@@ -139,6 +144,6 @@ export function buildServer(ctx: AppContext): FastifyInstance {
     lastWindow: ctx.lastWindow() ?? null,
   }));
 
-  registerRoutes(app, ctx.slots);
+  registerRoutes(app, ctx.slots, ctx.ticker);
   return app;
 }

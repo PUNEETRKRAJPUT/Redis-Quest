@@ -12,6 +12,7 @@ import { LoopWatchdog } from './watchdog.js';
 import { callSlotInBackground, sleep, type BackgroundDeps } from './workers/common.js';
 import { ChangeConsumer } from './workers/changes.js';
 import { OutboxDrainer } from './workers/outbox.js';
+import { TickerSubscriber } from './workers/ticker.js';
 import { loadMatchRows } from './slots/baselines.js';
 import { RequestScope } from './slots/runtime.js';
 
@@ -97,6 +98,14 @@ const poller = env.engineUrl
   ? new ConfigPoller(env.engineUrl, env.configPollMs, applyConfig, log)
   : undefined;
 
+const ticker = new TickerSubscriber({
+  instance: env.instance,
+  pool: rawPool,
+  redisUrl: () => redis.url,
+  log,
+  engineUrl: env.engineUrl,
+});
+
 const app = buildServer({
   instance: env.instance,
   maxRequestsPerSocket: env.maxRequestsPerSocket,
@@ -104,6 +113,7 @@ const app = buildServer({
   redis,
   pool,
   slots,
+  ticker,
   recorder,
   lastWindow: () => pusher.lastBody,
   status: () => ({
@@ -133,6 +143,7 @@ async function shutdown(): Promise<void> {
   pusher.stop();
   outbox.stop();
   await changes.stop();
+  await ticker.stop();
   await app.close().catch(() => undefined);
   await Promise.all([
     slots.close(),
@@ -160,3 +171,4 @@ poller?.start();
 pusher.start();
 outbox.start();
 changes.start();
+ticker.start();

@@ -89,6 +89,46 @@ export const SLOTS: readonly SlotDef[] = [
     baseline: b.leaderboardTop,
   },
   {
+    name: 'leaderboard.addPoints',
+    file: 'ch3/leaderboard-add.js',
+    signature: '(deps, contestId, teamId, delta)',
+    returns:
+      "the entry's new score as a number, or null when the entry does not exist (404 entry_not_found)",
+    baseline: b.leaderboardAddPoints,
+  },
+  {
+    name: 'leaderboard.rank',
+    file: 'ch3/leaderboard-rank.js',
+    signature: '(deps, contestId, teamId)',
+    returns:
+      '{ rank (1-based, best first), score, around: [{ teamId, score }] (up to two above and two below, the team included, best first) }, or null when the team is not in the contest (404)',
+    baseline: b.leaderboardRank,
+  },
+  {
+    name: 'leaderboard.recompute',
+    file: 'ch3/leaderboard-recompute.js',
+    signature: '(deps, rows)',
+    returns:
+      'anything (echoed as result); rows = [{ contestId, teamId, points }] for every entry of the given matches; the route times the call',
+    baseline: b.leaderboardRecompute,
+  },
+  {
+    name: 'contest.join',
+    file: 'ch3/contest-join.js',
+    signature: '(deps, userId, contestId, fee)',
+    returns:
+      'true when the entry fee was taken, false when the balance is too low (402); never takes the fee twice',
+    baseline: b.contestJoin,
+  },
+  {
+    name: 'ticker.publish',
+    file: 'ch3/ticker-publish.js',
+    signature: '(deps, matchId, ball)',
+    returns:
+      'anything (echoed as result; the natural value is the PUBLISH receiver count); the ball must reach channel score:match:<matchId>',
+    baseline: b.tickerPublish,
+  },
+  {
     name: 'ratelimit.allow',
     file: 'ch3/ratelimit.js',
     signature: '(deps, userId)',

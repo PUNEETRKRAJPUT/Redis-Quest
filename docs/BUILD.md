@@ -60,7 +60,10 @@ start early if everything it depends on is `done`.
 | G-01 | Level grading harness: plays every declared solution through the engine, prints the truth table (spec: specs/G-01, handoff: handoffs/G-01) | done (all three bugs fixed; ch1 re-graded 52/52) |
 | A-01 (done, handoffs/A-01) | App: outbox drainer to `legacydb:changes`, prefetch bulkLoad/applyChange slots with a provided consumer, session destroy slots and logout routes, fail-fast learner Redis client (2 s), 429 counting | done |
 | F-12 (done, handoffs/F-12) | Interview mode: `interview` block in the schema, countdown and hint cost in engine and UI, example level | done |
-| C2b | Chapter 2 levels 2.5 to 2.11 (spec: specs/C2b) | in progress |
+| C2b | Chapter 2 levels 2.5 to 2.11 (spec: specs/C2b, handoff: handoffs/C2b) | done (every solution graded through the engine; level 10 by hand with a real outage; tag v0.2.0) |
+| E-01 | Engine, UI and harness plumbing for Chapter 3: `service_scaled` emitter, "Run my code in the app" switch, harness rules for channel, scale and ticker_gap events (spec: specs/E-01, handoff: handoffs/E-01) | done (check 38 PASS; scratch chapter 6/6; examples 9/9) |
+| A-02 | App plumbing for Chapter 3: leaderboard addPoints/rank/recompute, contest.join, ticker publish slot and provided subscriber with gap detection, `x-quest-instance`, `scripts/hit.sh` (spec: specs/A-02, handoff: handoffs/A-02) | done (check 101 PASS; scale=2 lets 20 through; ticker_gap missed 2; 40,098 recompute rows in 124 ms) |
+| C3 | Chapter 3 levels (15) (spec: specs/C3) | in progress |
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)
