@@ -105,31 +105,34 @@ describe('deps.redisCached', () => {
   });
 
   test('it is lazy (no connection until used), supports multi, and the learner cannot close it', async () => {
-    // Connections are identified by client id, not counted: the server is shared with the other suites, whose
-    // clients open and close on their own clock, so a global count can move by one between two reads (seen on
-    // CI and in the full local run). Only the ids this test created are judged.
-    const clientIds = async (): Promise<Set<string>> => {
-      const list = (await observer().sendCommand(['CLIENT', 'LIST'])) as string;
-      return new Set([...list.matchAll(/(?:^|\n)id=(\d+)/g)].map((m) => m[1] as string));
+    // Only this test's own connections are judged, by the ids they report themselves. The server is shared with
+    // the other suites and, under `pnpm -r test`, with the other packages' suites, whose clients come and go on
+    // their own clock: a diff of CLIENT LIST between two reads is not stable (seen on CI).
+    const isOpen = async (id: number): Promise<boolean> => {
+      const list = (await observer().sendCommand(['CLIENT', 'LIST', 'ID', String(id)])) as string;
+      return list.includes(`id=${id} `);
     };
-    const newSince = (base: Set<string>, now: Set<string>) =>
-      [...now].filter((id) => !base.has(id));
-    const before = await clientIds();
-    const ctx = await createLearnerDeps({ redisUrl, databaseUrl });
-    let mine: string[] = [];
+    const created = () => logs.filter((l) => l.startsWith('redisCached:'));
+    const logs: string[] = [];
+    const ctx = await createLearnerDeps({ redisUrl, databaseUrl, log: (l) => logs.push(l) });
+    let mainId = 0;
+    let cachedId = 0;
     try {
-      const afterCreate = newSince(before, await clientIds());
-      expect(afterCreate).toHaveLength(1); // only deps.redis; redisCached has not connected
+      mainId = await ctx.deps.redis.clientId();
+      expect(await isOpen(mainId)).toBe(true);
+      expect(created()).toEqual([]); // the cached client does not exist yet, so nothing of it is connected
       await ctx.deps.redisCached.close(); // swallowed
       const out = await ctx.deps.redisCached.multi().set(key, 'x').get(key).exec();
       expect(out).toEqual(['OK', 'x']);
-      mine = newSince(before, await clientIds());
-      expect(mine).toHaveLength(2); // deps.redis plus the cached client, connected on first use
+      expect(created()).toHaveLength(1); // created on first use
+      cachedId = await ctx.deps.redisCached.clientId();
+      expect(cachedId).not.toBe(mainId); // a connection of its own, next to deps.redis
+      expect(await isOpen(cachedId)).toBe(true);
     } finally {
       await ctx.close();
     }
     await new Promise((r) => setTimeout(r, 100));
-    const stillOpen = await clientIds();
-    expect(mine.filter((id) => stillOpen.has(id))).toEqual([]); // both of this test's connections are gone
+    expect(await isOpen(mainId)).toBe(false); // both of this test's connections are gone
+    expect(await isOpen(cachedId)).toBe(false);
   });
 });
