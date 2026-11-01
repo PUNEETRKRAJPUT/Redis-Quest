@@ -42,7 +42,11 @@ export function isShowMeId(id: string): id is ShowMeId {
  * small table of which key each Chapter 0 and Chapter 1 level lights up. Anything missing falls back to a
  * "which key?" box. Chapter 1 entries are read from the authored task text and are not verified.
  */
-export function defaultKey(id: string, levelId: string | undefined, playerId: string): string | null {
+export function defaultKey(
+  id: string,
+  levelId: string | undefined,
+  playerId: string,
+): string | null {
   const t: Record<string, string> = {
     'ch0-01-bhai-it-works-on-my-laptop': 'game:engine:boots',
     'ch0-02-say-hello': 'game:engine:boots',
@@ -62,7 +66,13 @@ export function defaultKey(id: string, levelId: string | undefined, playerId: st
 }
 
 function Loading({ error }: { error: string | null }) {
-  return error ? <p className="callout warn" role="alert">{error}</p> : <p className="muted">Reading Redis...</p>;
+  return error ? (
+    <p className="callout warn" role="alert">
+      {error}
+    </p>
+  ) : (
+    <p className="muted">Reading Redis...</p>
+  );
 }
 
 // ---- wrappers: one per component id, each reads its own key through /api/cli ---------------------------
@@ -72,7 +82,14 @@ function KvCard({ k }: { k: string }) {
   const ttl = useRedis(['TTL', k]);
   if (!type.reply) return <Loading error={type.error} />;
   const t = asString(type.reply) ?? 'none';
-  return <KvCardView name={k} type={t} value={t === 'string' ? asString(val.reply) : null} ttl={asNumber(ttl.reply)} />;
+  return (
+    <KvCardView
+      name={k}
+      type={t}
+      value={t === 'string' ? asString(val.reply) : null}
+      ttl={asNumber(ttl.reply)}
+    />
+  );
 }
 function HashCard({ k }: { k: string }) {
   const h = useRedis(['HGETALL', k]);
@@ -94,7 +111,13 @@ function SetChips({ k, highlight }: { k: string; highlight?: string }) {
 function Leaderboard({ k, highlight }: { k: string; highlight?: string }) {
   const z = useRedis(['ZRANGE', k, '0', '9', 'REV', 'WITHSCORES']);
   if (!z.reply) return <Loading error={z.error} />;
-  return <LeaderboardPanelView name={k} rows={asPairs(z.reply).map(([member, s]) => ({ member, score: Number(s) }))} highlight={highlight} />;
+  return (
+    <LeaderboardPanelView
+      name={k}
+      rows={asPairs(z.reply).map(([member, s]) => ({ member, score: Number(s) }))}
+      highlight={highlight}
+    />
+  );
 }
 function TtlTimer({ k }: { k: string }) {
   const t = useRedis(['TTL', k], 4000);
@@ -166,7 +189,14 @@ function CacheStats() {
   const d = useRedis(['DBSIZE']);
   if (!i.reply) return <Loading error={i.error} />;
   const text = asString(i.reply) ?? '';
-  return <CacheStatsView hits={infoField(text, 'keyspace_hits')} misses={infoField(text, 'keyspace_misses')} commands={infoField(text, 'total_commands_processed')} keys={asNumber(d.reply) ?? 0} />;
+  return (
+    <CacheStatsView
+      hits={infoField(text, 'keyspace_hits')}
+      misses={infoField(text, 'keyspace_misses')}
+      commands={infoField(text, 'total_commands_processed')}
+      keys={asNumber(d.reply) ?? 0}
+    />
+  );
 }
 
 function KeyPicker({ id, onPick }: { id: string; onPick: (k: string) => void }) {
@@ -181,31 +211,59 @@ function KeyPicker({ id, onPick }: { id: string; onPick: (k: string) => void }) 
     >
       <label>
         Which key should the {id} panel read?
-        <input value={v} onChange={(e) => setV(e.target.value)} placeholder="for example otp:p-1a2b3c4d" spellCheck={false} />
+        <input
+          value={v}
+          onChange={(e) => setV(e.target.value)}
+          placeholder="for example otp:p-1a2b3c4d"
+          spellCheck={false}
+        />
       </label>
-      <button type="submit" className="btn">Show it</button>
+      <button type="submit" className="btn">
+        Show it
+      </button>
     </form>
   );
 }
 
 /** Renders one show-me component by id. `keyName` overrides the default key from `defaultKey`. */
-export function ShowMe({ id, levelId, playerId, keyName }: { id: string; levelId?: string; playerId: string; keyName?: string }): ReactNode {
+export function ShowMe({
+  id,
+  levelId,
+  playerId,
+  keyName,
+}: {
+  id: string;
+  levelId?: string;
+  playerId: string;
+  keyName?: string;
+}): ReactNode {
   const [picked, setPicked] = useState<string | null>(null);
   if (!isShowMeId(id)) return <p className="muted">Unknown show-me component: {id}</p>;
   const k = picked ?? keyName ?? defaultKey(id, levelId, playerId);
   if (id === 'cache_stats') return <CacheStats />;
   if (!k) return <KeyPicker id={id} onPick={setPicked} />;
   switch (id) {
-    case 'kv_card': return <KvCard k={k} />;
-    case 'hash_card': return <HashCard k={k} />;
-    case 'list_feed': return <ListFeed k={k} />;
-    case 'set_chips': return <SetChips k={k} highlight={`user:${playerId}`} />;
-    case 'leaderboard_panel': return <Leaderboard k={k} highlight={`user:${playerId}`} />;
-    case 'ttl_timer': return <TtlTimer k={k} />;
-    case 'bitmap_streak': return <BitmapStreak k={k} />;
-    case 'hll_counter': return <HllCounter k={k} />;
-    case 'geo_map': return <GeoMap k={k} />;
-    case 'stream_log': return <StreamLog k={k} />;
-    case 'json_tree': return <JsonTree k={k} />;
+    case 'kv_card':
+      return <KvCard k={k} />;
+    case 'hash_card':
+      return <HashCard k={k} />;
+    case 'list_feed':
+      return <ListFeed k={k} />;
+    case 'set_chips':
+      return <SetChips k={k} highlight={`user:${playerId}`} />;
+    case 'leaderboard_panel':
+      return <Leaderboard k={k} highlight={`user:${playerId}`} />;
+    case 'ttl_timer':
+      return <TtlTimer k={k} />;
+    case 'bitmap_streak':
+      return <BitmapStreak k={k} />;
+    case 'hll_counter':
+      return <HllCounter k={k} />;
+    case 'geo_map':
+      return <GeoMap k={k} />;
+    case 'stream_log':
+      return <StreamLog k={k} />;
+    case 'json_tree':
+      return <JsonTree k={k} />;
   }
 }

@@ -13,10 +13,26 @@ import 'monaco-editor/editor/contrib/wordOperations/browser/wordOperations';
 import EditorWorker from 'monaco-editor/editor/editor.worker.js?worker';
 
 // Bundle Monaco instead of letting the loader fetch it from a CDN: the game must work offline.
-(self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = { getWorker: () => new EditorWorker() };
+(self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
+  getWorker: () => new EditorWorker(),
+};
 loader.config({ monaco });
 
-export default function MonacoEditor({ value, language, onChange, onSave, readOnly = false, height = '100%' }: { value: string; language: string; onChange: (v: string) => void; onSave: () => void; readOnly?: boolean; height?: string }) {
+export default function MonacoEditor({
+  value,
+  language,
+  onChange,
+  onSave,
+  readOnly = false,
+  height = '100%',
+}: {
+  value: string;
+  language: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  readOnly?: boolean;
+  height?: string;
+}) {
   const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
   return (
     <Editor
@@ -28,7 +44,15 @@ export default function MonacoEditor({ value, language, onChange, onSave, readOn
       onMount={(ed) => {
         ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, onSave);
       }}
-      options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 2, readOnly, ariaLabel: readOnly ? 'Reference solution (read only)' : 'Code editor' }}
+      options={{
+        minimap: { enabled: false },
+        fontSize: 13,
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        tabSize: 2,
+        readOnly,
+        ariaLabel: readOnly ? 'Reference solution (read only)' : 'Code editor',
+      }}
       loading={<p className="muted pad">Loading the editor...</p>}
     />
   );

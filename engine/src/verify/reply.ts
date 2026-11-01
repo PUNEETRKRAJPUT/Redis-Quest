@@ -17,8 +17,13 @@ export function normalizeReply(v: unknown): Reply {
   if (v instanceof Error) return `(error) ${v.message}`;
   if (Array.isArray(v)) return v.map(normalizeReply);
   if (v instanceof Set) return [...v].map(normalizeReply);
-  if (v instanceof Map) return [...v.entries()].flatMap(([k, val]) => [normalizeReply(k), normalizeReply(val)]);
-  if (typeof v === 'object') return Object.entries(v as Record<string, unknown>).flatMap(([k, val]) => [k, normalizeReply(val)]);
+  if (v instanceof Map)
+    return [...v.entries()].flatMap(([k, val]) => [normalizeReply(k), normalizeReply(val)]);
+  if (typeof v === 'object')
+    return Object.entries(v as Record<string, unknown>).flatMap(([k, val]) => [
+      k,
+      normalizeReply(val),
+    ]);
   return String(v);
 }
 

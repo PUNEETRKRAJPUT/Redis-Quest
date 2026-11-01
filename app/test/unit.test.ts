@@ -21,7 +21,10 @@ describe('slot registry', () => {
       'session.create',
       'session.get',
     ]);
-    expect(SLOTS.find((s) => s.name === 'cache.getPlayerStats')).toMatchObject({ file: 'ch2/cache.js', signature: '(deps, playerId)' });
+    expect(SLOTS.find((s) => s.name === 'cache.getPlayerStats')).toMatchObject({
+      file: 'ch2/cache.js',
+      signature: '(deps, playerId)',
+    });
     expect(SLOTS.find((s) => s.name === 'onboarding.registerUser')?.signature).toBe('(deps, user)');
   });
 
@@ -44,8 +47,21 @@ describe('slot registry', () => {
 describe('metrics recorder', () => {
   test('drains one window per route with the pushed shape', () => {
     const r = new MetricsRecorder();
-    for (let i = 1; i <= 100; i++) r.record('GET /app/x', { ms: i, status: 200, dbQueries: i % 2, redisCommands: 2, slotError: false });
-    r.record('GET /app/x', { ms: 500, status: 500, dbQueries: 0, redisCommands: 1, slotError: true });
+    for (let i = 1; i <= 100; i++)
+      r.record('GET /app/x', {
+        ms: i,
+        status: 200,
+        dbQueries: i % 2,
+        redisCommands: 2,
+        slotError: false,
+      });
+    r.record('GET /app/x', {
+      ms: 500,
+      status: 500,
+      dbQueries: 0,
+      redisCommands: 1,
+      slotError: true,
+    });
     const w = r.drain();
     expect(w['GET /app/x']).toEqual({
       count: 101,
@@ -63,13 +79,24 @@ describe('metrics recorder', () => {
 
 describe('app config parsing', () => {
   test('accepts the engine shape and rejects junk', () => {
-    expect(parseAppConfig({ target: { redisUrl: 'redis://redis:6379' }, activeSlots: ['a.b'], dbExtraLatencyMs: 0, etag: 'x' })).toEqual({
+    expect(
+      parseAppConfig({
+        target: { redisUrl: 'redis://redis:6379' },
+        activeSlots: ['a.b'],
+        dbExtraLatencyMs: 0,
+        etag: 'x',
+      }),
+    ).toEqual({
       target: { redisUrl: 'redis://redis:6379' },
       activeSlots: ['a.b'],
       dbExtraLatencyMs: 0,
     });
-    expect(() => parseAppConfig({ target: { redisUrl: 'http://x' }, activeSlots: [] })).toThrow(/redisUrl/);
-    expect(() => parseAppConfig({ target: { redisUrl: 'redis://x' }, activeSlots: 'a' })).toThrow(/activeSlots/);
+    expect(() => parseAppConfig({ target: { redisUrl: 'http://x' }, activeSlots: [] })).toThrow(
+      /redisUrl/,
+    );
+    expect(() => parseAppConfig({ target: { redisUrl: 'redis://x' }, activeSlots: 'a' })).toThrow(
+      /activeSlots/,
+    );
   });
 });
 

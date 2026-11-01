@@ -19,7 +19,12 @@ export interface AppContext {
   /** The window most recently pushed to the engine (or computed, when no engine is configured). */
   lastWindow: () => unknown;
   /** Live view of the engine link, for /app/health. */
-  status: () => { configEtag: string | null; engine: 'up' | 'down' | 'unconfigured'; dbExtraLatencyMs: number; slotTimeoutMs: number };
+  status: () => {
+    configEtag: string | null;
+    engine: 'up' | 'down' | 'unconfigured';
+    dbExtraLatencyMs: number;
+    slotTimeoutMs: number;
+  };
 }
 
 // Operational routes are not traffic: they get no request scope and no metrics.
@@ -43,7 +48,8 @@ export function buildServer(ctx: AppContext): FastifyInstance {
   });
 
   app.addHook('onSend', async (req, reply, payload) => {
-    if (req.scope && req.scope.served.length > 0) reply.header('x-quest-slots', req.scope.served.join(', '));
+    if (req.scope && req.scope.served.length > 0)
+      reply.header('x-quest-slots', req.scope.served.join(', '));
     return payload;
   });
 
@@ -77,10 +83,17 @@ export function buildServer(ctx: AppContext): FastifyInstance {
       return reply
         .code(500)
         .header('x-quest-slot-error', headerSafe(err.learnerError.message))
-        .send({ error: 'slot_error', slot: err.slot, name: err.learnerError.name, message: err.learnerError.message });
+        .send({
+          error: 'slot_error',
+          slot: err.slot,
+          name: err.learnerError.name,
+          message: err.learnerError.message,
+        });
     }
     if (err instanceof HttpError) {
-      return reply.code(err.status).send({ error: err.code, ...(err.message !== err.code ? { message: err.message } : {}) });
+      return reply
+        .code(err.status)
+        .send({ error: err.code, ...(err.message !== err.code ? { message: err.message } : {}) });
     }
     const status = (err as { statusCode?: number }).statusCode;
     if (status && status >= 400 && status < 500) {

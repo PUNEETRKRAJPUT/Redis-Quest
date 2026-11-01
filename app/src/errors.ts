@@ -28,6 +28,9 @@ export class SlotError extends Error {
 
 /** Header values must be visible ASCII on one line; learner messages can contain anything. */
 export function headerSafe(text: string, max = 300): string {
-  const flat = text.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7e]/g, '?').trim();
+  const flat = text
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[^\x20-\x7e]/g, '?')
+    .trim();
   return flat.length > max ? `${flat.slice(0, max - 3)}...` : flat || 'error';
 }

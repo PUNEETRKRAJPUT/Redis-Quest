@@ -21,10 +21,21 @@ if (problems.length > 0) {
 
 // Learner code may leave promises rejecting or throw from a timer. That must never take the app down.
 process.on('unhandledRejection', (reason) => {
-  log.error({ err: reason instanceof Error ? { name: reason.name, message: reason.message, stack: reason.stack } : String(reason) }, 'unhandled rejection (kept running)');
+  log.error(
+    {
+      err:
+        reason instanceof Error
+          ? { name: reason.name, message: reason.message, stack: reason.stack }
+          : String(reason),
+    },
+    'unhandled rejection (kept running)',
+  );
 });
 process.on('uncaughtException', (err) => {
-  log.error({ err: { name: err.name, message: err.message, stack: err.stack } }, 'uncaught exception (kept running)');
+  log.error(
+    { err: { name: err.name, message: err.message, stack: err.stack } },
+    'uncaught exception (kept running)',
+  );
 });
 
 let dbExtraLatencyMs = 0;
@@ -53,7 +64,9 @@ const applyConfig = async (cfg: AppConfig): Promise<void> => {
   slots.setActive(cfg.activeSlots);
   await redis.switchTo(cfg.target.redisUrl);
 };
-const poller = env.engineUrl ? new ConfigPoller(env.engineUrl, env.configPollMs, applyConfig, log) : undefined;
+const poller = env.engineUrl
+  ? new ConfigPoller(env.engineUrl, env.configPollMs, applyConfig, log)
+  : undefined;
 
 const app = buildServer({
   instance: env.instance,
@@ -83,7 +96,12 @@ async function shutdown(): Promise<void> {
   poller?.stop();
   pusher.stop();
   await app.close().catch(() => undefined);
-  await Promise.all([slots.close(), redis.close(), rawPool.end().catch(() => undefined), watchdog.close()]);
+  await Promise.all([
+    slots.close(),
+    redis.close(),
+    rawPool.end().catch(() => undefined),
+    watchdog.close(),
+  ]);
   process.exit(0);
 }
 for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, () => void shutdown());
@@ -91,7 +109,13 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, () => void s
 await slots.startWatching();
 await app.listen({ port: env.port, host: '0.0.0.0' });
 log.info(
-  { port: env.port, engine: env.engineUrl ?? null, workspace: env.workspaceDir, slots: SLOTS.length, slotTimeoutMs: env.slotTimeoutMs },
+  {
+    port: env.port,
+    engine: env.engineUrl ?? null,
+    workspace: env.workspaceDir,
+    slots: SLOTS.length,
+    slotTimeoutMs: env.slotTimeoutMs,
+  },
   'app listening',
 );
 poller?.start();

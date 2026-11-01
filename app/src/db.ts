@@ -2,7 +2,11 @@ import pg from 'pg';
 import type { Logger } from 'pino';
 
 export function createPool(databaseUrl: string, log: Logger): pg.Pool {
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 20, connectionTimeoutMillis: 5000 });
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: 20,
+    connectionTimeoutMillis: 5000,
+  });
   pool.on('error', (err) => log.warn({ err: err.message }, 'postgres pool error'));
   return pool;
 }

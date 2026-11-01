@@ -11,10 +11,16 @@ const DEFAULT_INSIGHT_PORT = '5540';
  * so the link follows the page's own hostname and a port in this order: `insightUrl` from GET /health if the engine ever
  * adds it (requested in docs/handoffs/F-UI.md), localStorage `quest.insightPort`, then the .env.example default 5540.
  */
-export function insightLink(health: { insightUrl?: unknown } | null | undefined, hostname: string, stored: string | null): string {
-  if (health && typeof health.insightUrl === 'string' && /^https?:\/\//.test(health.insightUrl)) return health.insightUrl;
+export function insightLink(
+  health: { insightUrl?: unknown } | null | undefined,
+  hostname: string,
+  stored: string | null,
+): string {
+  if (health && typeof health.insightUrl === 'string' && /^https?:\/\//.test(health.insightUrl))
+    return health.insightUrl;
   const port = stored && /^\d{2,5}$/.test(stored) ? stored : DEFAULT_INSIGHT_PORT;
-  const host = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname || 'localhost';
+  const host =
+    hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname || 'localhost';
   return `http://${host}:${port}/`;
 }
 
@@ -28,16 +34,35 @@ function insightUrl(health: { insightUrl?: unknown } | null | undefined): string
   return insightLink(health, window.location.hostname, stored);
 }
 
-function BuiltCard({ levelId, title, chapter, playerId }: { levelId: string; title: string; chapter: string; playerId: string }) {
+function BuiltCard({
+  levelId,
+  title,
+  chapter,
+  playerId,
+}: {
+  levelId: string;
+  title: string;
+  chapter: string;
+  playerId: string;
+}) {
   const [showMe, setShowMe] = useState<string | null | undefined>(undefined);
   useEffect(() => {
-    api.level(levelId).then((l) => setShowMe(l.showMe)).catch(() => setShowMe(null));
+    api
+      .level(levelId)
+      .then((l) => setShowMe(l.showMe))
+      .catch(() => setShowMe(null));
   }, [levelId]);
   return (
     <section className="built-card" data-testid={`built-${levelId}`}>
       <h2>{title}</h2>
       <p className="muted">{chapter}</p>
-      {showMe === undefined ? <p className="muted">Loading...</p> : showMe ? <ShowMe id={showMe} levelId={levelId} playerId={playerId} /> : <p className="muted">This level has no live panel.</p>}
+      {showMe === undefined ? (
+        <p className="muted">Loading...</p>
+      ) : showMe ? (
+        <ShowMe id={showMe} levelId={levelId} playerId={playerId} />
+      ) : (
+        <p className="muted">This level has no live panel.</p>
+      )}
     </section>
   );
 }
@@ -47,23 +72,43 @@ export function Built() {
   const chapters = useQuest((s) => s.chapters);
   const progress = useQuest((s) => s.progress);
   const health = useQuest((s) => s.health);
-  if (!chapters || !progress) return <main className="page"><p className="muted">Loading...</p></main>;
-  const passed = chapters.chapters.flatMap((c) => c.levels.filter((l) => l.status === 'passed').map((l) => ({ ...l, chapter: c.title })));
+  if (!chapters || !progress)
+    return (
+      <main className="page">
+        <p className="muted">Loading...</p>
+      </main>
+    );
+  const passed = chapters.chapters.flatMap((c) =>
+    c.levels.filter((l) => l.status === 'passed').map((l) => ({ ...l, chapter: c.title })),
+  );
   return (
     <main className="page" data-testid="built">
       <h1>What you built</h1>
       <p className="muted">
         Every level you passed, running live on your own keys.{' '}
-        <a href={insightUrl(health)} data-testid="insight-link" target="_blank" rel="noopener noreferrer">
+        <a
+          href={insightUrl(health)}
+          data-testid="insight-link"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           Open Redis Insight <IconExternal size={14} />
           <span className="sr-only"> (opens in a new tab)</span>
         </a>{' '}
         to see the same keys with a mouse.
       </p>
-      {passed.length === 0 ? <p className="callout">Nothing yet. Pass your first level and it shows up here.</p> : null}
+      {passed.length === 0 ? (
+        <p className="callout">Nothing yet. Pass your first level and it shows up here.</p>
+      ) : null}
       <div className="built-grid">
         {passed.map((l) => (
-          <BuiltCard key={l.id} levelId={l.id} title={l.title} chapter={l.chapter} playerId={progress.player.id} />
+          <BuiltCard
+            key={l.id}
+            levelId={l.id}
+            title={l.title}
+            chapter={l.chapter}
+            playerId={progress.player.id}
+          />
         ))}
       </div>
     </main>

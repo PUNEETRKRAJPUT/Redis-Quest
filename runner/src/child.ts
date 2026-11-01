@@ -14,12 +14,15 @@ const MAX_LOG_LINES = 1000;
 const MAX_LINE = 2000;
 const logs: string[] = [];
 const pushLog = (line: string): void => {
-  if (logs.length < MAX_LOG_LINES) logs.push(line.length > MAX_LINE ? `${line.slice(0, MAX_LINE)}...` : line);
+  if (logs.length < MAX_LOG_LINES)
+    logs.push(line.length > MAX_LINE ? `${line.slice(0, MAX_LINE)}...` : line);
   else if (logs.length === MAX_LOG_LINES) logs.push('[log truncated]');
 };
 
 // Stray async failures in learner code must not kill the child before it reports.
-process.on('unhandledRejection', (reason) => pushLog(`[unhandledRejection] ${toLearnerError(reason).message}`));
+process.on('unhandledRejection', (reason) =>
+  pushLog(`[unhandledRejection] ${toLearnerError(reason).message}`),
+);
 process.on('uncaughtException', (err) => pushLog(`[uncaughtException] ${err.message}`));
 
 function send(reply: ChildReply): void {
@@ -43,14 +46,22 @@ async function runJob(job: ChildJob): Promise<ChildReply> {
     return {
       mode: 'run',
       results,
-      metrics: aggregateMetrics(results, counters ?? { redisCommands: 0, dbQueries: 0 }, performance.now() - started),
+      metrics: aggregateMetrics(
+        results,
+        counters ?? { redisCommands: 0, dbQueries: 0 },
+        performance.now() - started,
+      ),
       logs,
     };
   };
 
   let ctx;
   try {
-    ctx = await createLearnerDeps({ redisUrl: job.redisUrl, databaseUrl: job.databaseUrl, log: pushLog });
+    ctx = await createLearnerDeps({
+      redisUrl: job.redisUrl,
+      databaseUrl: job.databaseUrl,
+      log: pushLog,
+    });
   } catch (err) {
     return failAll(err);
   }

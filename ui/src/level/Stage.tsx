@@ -26,10 +26,16 @@ export function Stage({
           <span className="stage-n">{n}</span>
           <span className="stage-title">{title}</span>
           {chip ? <span className={`chip-state ${tone}`}>{chip}</span> : null}
-          <span className={`chev ${open ? 'down' : ''}`}><IconChevron size={18} /></span>
+          <span className={`chev ${open ? 'down' : ''}`}>
+            <IconChevron size={18} />
+          </span>
         </button>
       </h2>
-      {open ? <div id={bodyId} className="stage-body">{children}</div> : null}
+      {open ? (
+        <div id={bodyId} className="stage-body">
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }

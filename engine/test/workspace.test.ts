@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { listTree, readWorkspaceFile, WorkspaceError, writeWorkspaceFile } from '../src/workspace.js';
+import {
+  listTree,
+  readWorkspaceFile,
+  WorkspaceError,
+  writeWorkspaceFile,
+} from '../src/workspace.js';
 
 let base: string;
 let root: string;
@@ -44,7 +49,9 @@ describe('containment', () => {
     await symlink(outside, join(root, 'dir'));
     expect(await code(readWorkspaceFile(root, 'link.json'))).toBe('path_escapes_workspace');
     expect(await code(readWorkspaceFile(root, 'dir/secret.json'))).toBe('path_escapes_workspace');
-    expect(await code(writeWorkspaceFile(root, 'dir/new.json', '{}'))).toBe('path_escapes_workspace');
+    expect(await code(writeWorkspaceFile(root, 'dir/new.json', '{}'))).toBe(
+      'path_escapes_workspace',
+    );
     expect(await readdir(outside)).toEqual(['secret.json']);
   });
 
@@ -61,7 +68,9 @@ describe('read, write, tree', () => {
   test('write creates directories and replaces atomically', async () => {
     await writeWorkspaceFile(root, 'ch1/cache/getStats.js', 'export default 1;\n');
     await writeWorkspaceFile(root, 'ch1/cache/getStats.js', 'export default 2;\n');
-    expect((await readWorkspaceFile(root, 'ch1/cache/getStats.js')).content).toBe('export default 2;\n');
+    expect((await readWorkspaceFile(root, 'ch1/cache/getStats.js')).content).toBe(
+      'export default 2;\n',
+    );
     expect(await readdir(join(root, 'ch1/cache'))).toEqual(['getStats.js']);
     expect(await readFile(join(root, 'ch1/cache/getStats.js'), 'utf8')).toContain('2');
   });

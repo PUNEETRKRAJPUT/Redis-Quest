@@ -3,14 +3,39 @@ import { expect, test } from 'vitest';
 import { bitfieldArgs, defaultKey, infoField, isShowMeId, SHOW_ME_IDS } from '../src/showme';
 import { SAMPLE } from '../src/showme/sample';
 import {
-  BitmapStreakView, CacheStatsView, currentStreak, fmtDuration, GeoMapView, HashCardView, HllCounterView, JsonTreeView,
-  KvCardView, LeaderboardPanelView, ListFeedView, SetChipsView, StreamLogView, TtlTimerView,
+  BitmapStreakView,
+  CacheStatsView,
+  currentStreak,
+  fmtDuration,
+  GeoMapView,
+  HashCardView,
+  HllCounterView,
+  JsonTreeView,
+  KvCardView,
+  LeaderboardPanelView,
+  ListFeedView,
+  SetChipsView,
+  StreamLogView,
+  TtlTimerView,
 } from '../src/showme/views';
 
 const s = SAMPLE;
 
 test('twelve ids, matching the spec', () => {
-  expect([...SHOW_ME_IDS]).toEqual(['kv_card', 'hash_card', 'list_feed', 'set_chips', 'leaderboard_panel', 'ttl_timer', 'bitmap_streak', 'hll_counter', 'geo_map', 'stream_log', 'json_tree', 'cache_stats']);
+  expect([...SHOW_ME_IDS]).toEqual([
+    'kv_card',
+    'hash_card',
+    'list_feed',
+    'set_chips',
+    'leaderboard_panel',
+    'ttl_timer',
+    'bitmap_streak',
+    'hll_counter',
+    'geo_map',
+    'stream_log',
+    'json_tree',
+    'cache_stats',
+  ]);
   expect(isShowMeId('geo_map')).toBe(true);
   expect(isShowMeId('nope')).toBe(false);
 });
@@ -37,12 +62,20 @@ test('every view renders with its sample and carries its id', () => {
 });
 
 test('empty and edge states do not throw', () => {
-  expect(renderToStaticMarkup(<KvCardView name="k" type="none" value={null} ttl={-2} />)).toContain('does not exist');
+  expect(renderToStaticMarkup(<KvCardView name="k" type="none" value={null} ttl={-2} />)).toContain(
+    'does not exist',
+  );
   expect(renderToStaticMarkup(<TtlTimerView name="k" ttl={-2} readAt={0} />)).toContain('gone');
-  expect(renderToStaticMarkup(<TtlTimerView name="k" ttl={-1} readAt={0} />)).toContain('never expires');
+  expect(renderToStaticMarkup(<TtlTimerView name="k" ttl={-1} readAt={0} />)).toContain(
+    'never expires',
+  );
   expect(renderToStaticMarkup(<GeoMapView name="k" points={[]} />)).toContain('No coordinates');
-  expect(renderToStaticMarkup(<GeoMapView name="k" points={[{ member: 'a', lon: 1, lat: 1 }]} />)).toContain('circle');
-  expect(renderToStaticMarkup(<CacheStatsView hits={0} misses={0} keys={0} />)).toContain('no reads yet');
+  expect(
+    renderToStaticMarkup(<GeoMapView name="k" points={[{ member: 'a', lon: 1, lat: 1 }]} />),
+  ).toContain('circle');
+  expect(renderToStaticMarkup(<CacheStatsView hits={0} misses={0} keys={0} />)).toContain(
+    'no reads yet',
+  );
 });
 
 test('helpers', () => {

@@ -11,16 +11,28 @@
 // 0 every graded solution matches its declaration, 1 at least one MISMATCH, 2 the tool could not run.
 /* global fetch, setTimeout, setInterval, clearInterval, WebSocket, AbortSignal, process, console */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..', '..');
-const shared = await import(pathToFileURL(join(ROOT, 'packages/shared/dist/index.js')).href).catch((e) => {
-  console.error(`cannot load packages/shared/dist (run: pnpm --filter @quest/shared build): ${e.message}`);
-  process.exit(2);
-});
+const shared = await import(pathToFileURL(join(ROOT, 'packages/shared/dist/index.js')).href).catch(
+  (e) => {
+    console.error(
+      `cannot load packages/shared/dist (run: pnpm --filter @quest/shared build): ${e.message}`,
+    );
+    process.exit(2);
+  },
+);
 const { loadChapter, renderTemplate, resolveLevelPath } = shared;
 
 // ---- arguments ------------------------------------------------------------------------------------
@@ -33,7 +45,14 @@ const USAGE = `usage: scripts/grade/grade.sh [options] <chapter-dir | level-id>.
   --json FILE       also write the table as JSON
   -h, --help        this text`;
 
-const opts = { engine: process.env.GRADE_ENGINE ?? 'http://127.0.0.1:3500', workspace: null, levels: join(ROOT, 'levels'), runOps: false, json: null, targets: [] };
+const opts = {
+  engine: process.env.GRADE_ENGINE ?? 'http://127.0.0.1:3500',
+  workspace: null,
+  levels: join(ROOT, 'levels'),
+  runOps: false,
+  json: null,
+  targets: [],
+};
 {
   const a = process.argv.slice(2);
   for (let i = 0; i < a.length; i++) {
@@ -121,9 +140,16 @@ async function resolveTargets() {
   let known = null;
   for (const t of opts.targets) {
     const asDir = resolve(t);
-    if (existsSync(asDir) && statSync(asDir).isDirectory() && existsSync(join(asDir, 'chapter.yaml'))) {
+    if (
+      existsSync(asDir) &&
+      statSync(asDir).isDirectory() &&
+      existsSync(join(asDir, 'chapter.yaml'))
+    ) {
       const r = await loadChapter(asDir);
-      if (r.errors.length) throw new Error(`${t} has level errors (run pnpm --filter @quest/shared levels:validate):\n${r.errors.map((e) => `  ${e.message ?? JSON.stringify(e)}`).join('\n')}`);
+      if (r.errors.length)
+        throw new Error(
+          `${t} has level errors (run pnpm --filter @quest/shared levels:validate):\n${r.errors.map((e) => `  ${e.message ?? JSON.stringify(e)}`).join('\n')}`,
+        );
       chapters.push({ lc: r.chapter, only: null });
       continue;
     }
@@ -133,7 +159,10 @@ async function resolveTargets() {
       const lv = r.chapter.levels.find((l) => l.level.id === t);
       if (lv) found = { lc: r.chapter, only: new Set([t]) };
     }
-    if (!found) throw new Error(`${t}: not a chapter directory and no level with that id under ${opts.levels}`);
+    if (!found)
+      throw new Error(
+        `${t}: not a chapter directory and no level with that id under ${opts.levels}`,
+      );
     const prev = chapters.find((c) => c.lc.dir === found.lc.dir && c.only);
     if (prev) prev.only.add(t);
     else chapters.push(found);
@@ -162,7 +191,8 @@ async function loadSlotFiles() {
   slotFiles = { ...SLOT_FILE_TABLE };
   const r = await api('GET', '/app/slots', undefined, 5000).catch(() => null);
   if (r && r.status === 200 && Array.isArray(r.body?.slots)) {
-    for (const s of r.body.slots) if (s.name && s.file && !s.exportName?.startsWith?.('x:')) slotFiles[s.name] = s.file;
+    for (const s of r.body.slots)
+      if (s.name && s.file && !s.exportName?.startsWith?.('x:')) slotFiles[s.name] = s.file;
   }
 }
 
@@ -173,37 +203,53 @@ async function ensurePlayer() {
     log(`reusing player ${player.id} (${player.name})`);
     return;
   }
-  if (g.status === 503) throw new Error(`the engine reports levels_invalid: ${JSON.stringify(g.body).slice(0, 600)}`);
+  if (g.status === 503)
+    throw new Error(`the engine reports levels_invalid: ${JSON.stringify(g.body).slice(0, 600)}`);
   const c = await api('POST', '/api/player', { name: 'Grader' });
-  if (c.status !== 201) throw new Error(`POST /api/player -> ${c.status} ${JSON.stringify(c.body)}`);
+  if (c.status !== 201)
+    throw new Error(`POST /api/player -> ${c.status} ${JSON.stringify(c.body)}`);
   player = c.body.player;
   log(`created player ${player.id}`);
 }
 
 const envForTemplates = () => {
   const e = {};
-  for (const k of ['REDIS_PORT', 'PROXY_PORT', 'INSIGHT_PORT', 'PG_PORT']) if (process.env[k]) e[k] = process.env[k];
+  for (const k of ['REDIS_PORT', 'PROXY_PORT', 'INSIGHT_PORT', 'PG_PORT'])
+    if (process.env[k]) e[k] = process.env[k];
   return e;
 };
-const ctxOf = (lv) => ({ player: { id: player.id, name: player.name }, level: { id: lv.level.id }, chapter: { id: lv.chapterId }, env: envForTemplates() });
+const ctxOf = (lv) => ({
+  player: { id: player.id, name: player.name },
+  level: { id: lv.level.id },
+  chapter: { id: lv.chapterId },
+  env: envForTemplates(),
+});
 
 /** Completes every level before `id` in the engine's play order (ENGINE_DEV=1), so `id` can be started. */
 async function ensureUnlocked(id) {
   const c = await api('GET', '/api/chapters');
-  if (c.status !== 200) throw new Error(`GET /api/chapters -> ${c.status} ${JSON.stringify(c.body).slice(0, 300)}`);
+  if (c.status !== 200)
+    throw new Error(`GET /api/chapters -> ${c.status} ${JSON.stringify(c.body).slice(0, 300)}`);
   const flat = c.body.chapters.flatMap((ch) => ch.levels);
   const idx = flat.findIndex((l) => l.id === id);
-  if (idx < 0) throw new Error(`the engine does not know level ${id}; it must mount the same level files this tool reads`);
+  if (idx < 0)
+    throw new Error(
+      `the engine does not know level ${id}; it must mount the same level files this tool reads`,
+    );
   for (let j = 0; j < idx; j++) {
     if (flat[j].status === 'passed') continue;
     const r = await api('POST', `/api/levels/${flat[j].id}/complete`);
-    if (r.status !== 200) throw new Error(`cannot unlock ${id}: POST /api/levels/${flat[j].id}/complete -> ${r.status} (the engine needs ENGINE_DEV=1)`);
+    if (r.status !== 200)
+      throw new Error(
+        `cannot unlock ${id}: POST /api/levels/${flat[j].id}/complete -> ${r.status} (the engine needs ENGINE_DEV=1)`,
+      );
   }
 }
 
 async function start(id) {
   const r = await api('POST', `/api/levels/${id}/start`);
-  if (r.status !== 200) throw new Error(`start ${id} -> ${r.status} ${JSON.stringify(r.body).slice(0, 400)}`);
+  if (r.status !== 200)
+    throw new Error(`start ${id} -> ${r.status} ${JSON.stringify(r.body).slice(0, 400)}`);
 }
 
 async function verify(id, answers) {
@@ -221,7 +267,8 @@ async function verify(id, answers) {
 
 async function cli(command) {
   const r = await api('POST', '/api/cli', { command });
-  if (r.status !== 200) throw new Error(`/api/cli ${command} -> ${r.status} ${JSON.stringify(r.body)}`);
+  if (r.status !== 200)
+    throw new Error(`/api/cli ${command} -> ${r.status} ${JSON.stringify(r.body)}`);
   return r.body;
 }
 
@@ -243,7 +290,9 @@ async function runRedisFile(file, ctx) {
 
 /** What the UI does for the learner after they act in the terminal (the harness stands in for the UI). */
 async function uiActions(lv, transcript) {
-  const names = lv.level.verify.filter((v) => v.type === 'event' && v.kind === 'custom').map((v) => v.match?.name);
+  const names = lv.level.verify
+    .filter((v) => v.type === 'event' && v.kind === 'custom')
+    .map((v) => v.match?.name);
   const notes = [];
   for (const n of names) {
     if (n === 'progress_restored') {
@@ -255,7 +304,8 @@ async function uiActions(lv, transcript) {
       await api('POST', '/api/events', { kind: 'custom', name: 'ui_connected' });
       notes.push('UI posted ui_connected');
     } else if (n === 'cli_ping') {
-      if (!transcript.some((t) => t.line.toUpperCase() === 'PING')) notes.push('solution never sent PING');
+      if (!transcript.some((t) => t.line.toUpperCase() === 'PING'))
+        notes.push('solution never sent PING');
     } else if (n) notes.push(`event ${n} is produced by the solution itself (nothing simulated)`);
   }
   return notes;
@@ -293,7 +343,9 @@ async function buildAnswers(lv, good) {
 const touched = new Map(); // rel -> original content (string) or null when it did not exist
 
 function slotOf(lv) {
-  const slots = new Set(lv.level.verify.filter((v) => typeof v.slot === 'string').map((v) => v.slot));
+  const slots = new Set(
+    lv.level.verify.filter((v) => typeof v.slot === 'string').map((v) => v.slot),
+  );
   if (slots.size === 0) return { err: 'no slot' };
   if (slots.size > 1) return { err: `several slots (${[...slots].join(', ')})` };
   const slot = [...slots][0];
@@ -318,7 +370,8 @@ async function writeWorkspace(rel, content) {
     writeFileSync(f, content);
   } else {
     const r = await api('PUT', `/api/workspace/file?path=${encodeURIComponent(rel)}`, { content });
-    if (r.status !== 200) throw new Error(`PUT /api/workspace/file ${rel} -> ${r.status} ${JSON.stringify(r.body)}`);
+    if (r.status !== 200)
+      throw new Error(`PUT /api/workspace/file ${rel} -> ${r.status} ${JSON.stringify(r.body)}`);
   }
   // The app polls workspace files once a second; let it see this version before the engine activates the slot.
   await sleep(2000);
@@ -331,7 +384,9 @@ async function restoreWorkspace() {
       else writeFileSync(join(opts.workspace, rel), original);
     } else {
       // The API cannot delete: an empty file has no default export, so the app falls back to its baseline.
-      await api('PUT', `/api/workspace/file?path=${encodeURIComponent(rel)}`, { content: original ?? '' });
+      await api('PUT', `/api/workspace/file?path=${encodeURIComponent(rel)}`, {
+        content: original ?? '',
+      });
     }
   }
   touched.clear();
@@ -344,10 +399,24 @@ const rows = [];
 function feedbackOf(out) {
   const fb = [];
   for (const c of out.checks ?? []) {
-    const tag = c.skipped ? 'skip' : c.type === 'antipattern' ? (c.ok ? 'ok' : 'HIT') : c.ok ? 'ok' : 'fail';
+    const tag = c.skipped
+      ? 'skip'
+      : c.type === 'antipattern'
+        ? c.ok
+          ? 'ok'
+          : 'HIT'
+        : c.ok
+          ? 'ok'
+          : 'fail';
     fb.push({ index: c.index, type: c.type, tag, message: String(c.message ?? '') });
   }
-  if (out.httpBody) fb.push({ index: -1, type: 'http', tag: 'fail', message: JSON.stringify(out.httpBody).slice(0, 600) });
+  if (out.httpBody)
+    fb.push({
+      index: -1,
+      type: 'http',
+      tag: 'fail',
+      message: JSON.stringify(out.httpBody).slice(0, 600),
+    });
   return fb;
 }
 
@@ -369,12 +438,26 @@ function record(lv, solution, declared, out, extra = {}) {
   rows.push(row);
   const line = `${row.result === 'PASS' ? 'PASS    ' : 'MISMATCH'} ${row.level}  ${solution}: declared ${declared}, engine ${got}${row.note ? `  [${row.note}]` : ''}`;
   log(line);
-  if (row.result === 'MISMATCH') for (const f of row.feedback) log(`          [${f.tag}] #${f.index} ${f.type}: ${f.message.split('\n').join(' | ')}`);
+  if (row.result === 'MISMATCH')
+    for (const f of row.feedback)
+      log(`          [${f.tag}] #${f.index} ${f.type}: ${f.message.split('\n').join(' | ')}`);
   return row;
 }
 
 function skipped(lv, solution, declared, why, because = '') {
-  rows.push({ level: lv.level.id, chapter: lv.chapterId, mode: lv.level.mode, solution, declared, engine: '-', result: 'SKIPPED', because, note: why, ms: null, feedback: [] });
+  rows.push({
+    level: lv.level.id,
+    chapter: lv.chapterId,
+    mode: lv.level.mode,
+    solution,
+    declared,
+    engine: '-',
+    result: 'SKIPPED',
+    because,
+    note: why,
+    ms: null,
+    feedback: [],
+  });
   log(`SKIPPED  ${lv.level.id}  ${solution}: ${why}`);
 }
 
@@ -394,7 +477,8 @@ async function gradeLevel(lv) {
     record(lv, `reference [${x.solutions.reference.join(', ')}]`, 'right', await verify(id, ref));
     for (const w of x.solutions.wrong) {
       const answers = { ...ref };
-      for (const [v, i] of quizzes) if (v.options.some((o) => o.id === w.option)) answers[String(i)] = w.option;
+      for (const [v, i] of quizzes)
+        if (v.options.some((o) => o.id === w.option)) answers[String(i)] = w.option;
       await start(id);
       record(lv, `option ${w.option}`, w.expect, await verify(id, answers), { because: w.because });
     }
@@ -402,7 +486,10 @@ async function gradeLevel(lv) {
     return;
   }
 
-  const sols = [{ path: x.solutions.reference, expect: 'right', because: '' }, ...x.solutions.wrong.map((w) => ({ ...w }))];
+  const sols = [
+    { path: x.solutions.reference, expect: 'right', because: '' },
+    ...x.solutions.wrong.map((w) => ({ ...w })),
+  ];
   let unlocked = false;
   for (const s of sols) {
     const ext = extname(s.path);
@@ -475,10 +562,13 @@ function watchProgress() {
           busySince = Date.now();
           break;
         case 'verify_check_started':
-          if (d.type === 'traffic' || d.type === 'behavior') log(`      ... ${d.levelId} check #${d.index} ${d.type} running`);
+          if (d.type === 'traffic' || d.type === 'behavior')
+            log(`      ... ${d.levelId} check #${d.index} ${d.type} running`);
           break;
         case 'verify_traffic_phase':
-          log(`      ... load ${d.phase} for ${d.scenario} (slots on: ${(d.activeSlots ?? []).join(', ') || 'none'})`);
+          log(
+            `      ... load ${d.phase} for ${d.scenario} (slots on: ${(d.activeSlots ?? []).join(', ') || 'none'})`,
+          );
           break;
         case 'verify_finished':
           busySince = 0;
@@ -491,14 +581,16 @@ function watchProgress() {
     // progress lines are a convenience
   }
   ticker = setInterval(() => {
-    if (busySince && Date.now() - busySince > 15_000) log(`      ... still verifying (${Math.round((Date.now() - busySince) / 1000)} s)`);
+    if (busySince && Date.now() - busySince > 15_000)
+      log(`      ... still verifying (${Math.round((Date.now() - busySince) / 1000)} s)`);
   }, 15_000);
 }
 
 // ---- table ----------------------------------------------------------------------------------------
 
 function printTable() {
-  const shortLevel = (l) => l.replace(/^(ch\d+[a-z]?-\d+|example-[a-z]+-\d+)-.*/, '$1').replace(/^example-/, 'ex-');
+  const shortLevel = (l) =>
+    l.replace(/^(ch\d+[a-z]?-\d+|example-[a-z]+-\d+)-.*/, '$1').replace(/^example-/, 'ex-');
   const cols = [
     ['LEVEL', (r) => shortLevel(r.level)],
     ['SOLUTION', (r) => r.solution.replace(/^solutions\//, '')],
@@ -510,7 +602,8 @@ function printTable() {
   const fmt = (cells) => cells.map((c, i) => c.slice(0, w[i]).padEnd(w[i])).join('  ');
   console.log(`\n${fmt(cols.map(([h]) => h))}`);
   console.log(fmt(w.map((n) => '-'.repeat(n))));
-  for (const r of rows) console.log(fmt(cols.map(([, f]) => f(r))) + (r.result === 'SKIPPED' ? `  ${r.note}` : ''));
+  for (const r of rows)
+    console.log(fmt(cols.map(([, f]) => f(r))) + (r.result === 'SKIPPED' ? `  ${r.note}` : ''));
 
   const per = new Map();
   for (const r of rows) {
@@ -519,7 +612,8 @@ function printTable() {
     per.set(r.chapter, c);
   }
   console.log('');
-  for (const [ch, c] of per) console.log(`${ch.padEnd(24)} PASS ${c.PASS}  MISMATCH ${c.MISMATCH}  SKIPPED ${c.SKIPPED}`);
+  for (const [ch, c] of per)
+    console.log(`${ch.padEnd(24)} PASS ${c.PASS}  MISMATCH ${c.MISMATCH}  SKIPPED ${c.SKIPPED}`);
   const bad = rows.filter((r) => r.result === 'MISMATCH');
   if (bad.length) {
     console.log(`\n${bad.length} MISMATCH:`);
@@ -527,7 +621,10 @@ function printTable() {
       console.log(`  ${r.level}  ${r.solution}: declared ${r.declared}, engine ${r.engine}`);
       if (r.because) console.log(`      declared because: ${r.because}`);
       if (r.note) console.log(`      note: ${r.note}`);
-      for (const f of r.feedback) console.log(`      [${f.tag}] #${f.index} ${f.type}: ${f.message.split('\n').join('\n          ')}`);
+      for (const f of r.feedback)
+        console.log(
+          `      [${f.tag}] #${f.index} ${f.type}: ${f.message.split('\n').join('\n          ')}`,
+        );
     }
   }
 }
@@ -557,6 +654,9 @@ if (opts.json) {
     per[r.chapter] ??= { PASS: 0, MISMATCH: 0, SKIPPED: 0 };
     per[r.chapter][r.result] += 1;
   }
-  writeFileSync(opts.json, `${JSON.stringify({ engine: opts.engine, at: new Date().toISOString(), summary: per, rows }, null, 2)}\n`);
+  writeFileSync(
+    opts.json,
+    `${JSON.stringify({ engine: opts.engine, at: new Date().toISOString(), summary: per, rows }, null, 2)}\n`,
+  );
 }
 process.exit(rows.some((r) => r.result === 'MISMATCH') ? 1 : 0);

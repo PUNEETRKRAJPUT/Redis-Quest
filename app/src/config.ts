@@ -21,7 +21,9 @@ export interface AppEnv {
 
 const int = (v: string | undefined, dflt: number, min: number, max: number): number => {
   const n = Number(v);
-  return v !== undefined && v !== '' && Number.isFinite(n) ? Math.min(max, Math.max(min, Math.trunc(n))) : dflt;
+  return v !== undefined && v !== '' && Number.isFinite(n)
+    ? Math.min(max, Math.max(min, Math.trunc(n)))
+    : dflt;
 };
 
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): AppEnv {

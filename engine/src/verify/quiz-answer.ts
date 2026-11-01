@@ -14,9 +14,16 @@ export interface SimpleResult {
 }
 
 export function gradeQuiz(q: QuizVerifier, submitted: string | string[] | undefined): SimpleResult {
-  const picked = submitted === undefined ? [] : (Array.isArray(submitted) ? submitted : [submitted]).map((s) => s.trim()).filter(Boolean);
+  const picked =
+    submitted === undefined
+      ? []
+      : (Array.isArray(submitted) ? submitted : [submitted]).map((s) => s.trim()).filter(Boolean);
   if (picked.length === 0) {
-    return { ok: false, message: 'No answer was submitted for this question.', details: { question: q.question, picked: [] } };
+    return {
+      ok: false,
+      message: 'No answer was submitted for this question.',
+      details: { question: q.question, picked: [] },
+    };
   }
   const labels = new Map(q.options.map((o) => [o.id, o.label]));
   const unknown = picked.filter((p) => !labels.has(p));
@@ -32,7 +39,11 @@ export function gradeQuiz(q: QuizVerifier, submitted: string | string[] | undefi
   const ok = want.size === got.size && [...want].every((c) => got.has(c));
   const pickedLabels = [...got].map((p) => `"${labels.get(p)}"`).join(', ');
   if (ok) {
-    return { ok: true, message: `Correct. ${q.explanation}`, details: { question: q.question, picked, explanation: q.explanation } };
+    return {
+      ok: true,
+      message: `Correct. ${q.explanation}`,
+      details: { question: q.question, picked, explanation: q.explanation },
+    };
   }
   const message =
     want.size > 1
@@ -50,7 +61,10 @@ export function cleanTyped(text: string): string {
   return s;
 }
 
-function transformExpected(reply: Reply, transform: 'string' | 'number' | 'length'): string | number | null {
+function transformExpected(
+  reply: Reply,
+  transform: 'string' | 'number' | 'length',
+): string | number | null {
   if (transform === 'length') {
     if (reply === null) return 0;
     return Array.isArray(reply) ? reply.length : String(reply).length;
@@ -60,11 +74,20 @@ function transformExpected(reply: Reply, transform: 'string' | 'number' | 'lengt
   return String(reply);
 }
 
-export async function gradeAnswer(a: AnswerVerifier, typed: string | string[] | undefined, send: SendCommand): Promise<SimpleResult> {
+export async function gradeAnswer(
+  a: AnswerVerifier,
+  typed: string | string[] | undefined,
+  send: SendCommand,
+): Promise<SimpleResult> {
   const transform = a.expected.transform ?? 'string';
   const compare = a.compare ?? 'equals';
   const text = Array.isArray(typed) ? typed[0] : typed;
-  const details: Record<string, unknown> = { prompt: a.prompt, typed: text ?? null, compare, transform };
+  const details: Record<string, unknown> = {
+    prompt: a.prompt,
+    typed: text ?? null,
+    compare,
+    transform,
+  };
   if (text === undefined || text.trim() === '') {
     return { ok: false, message: `${a.message} (nothing was typed)`, details };
   }
@@ -75,15 +98,25 @@ export async function gradeAnswer(a: AnswerVerifier, typed: string | string[] | 
   try {
     reply = normalizeReply(await send(a.expected.cmd));
   } catch (err) {
-    const why = isRedisErrorReply(err) ? `Redis answered ${formatCommand(a.expected.cmd)} with an error` : 'Redis is not reachable right now';
-    return { ok: false, message: `${a.message} (could not read the expected value: ${why})`, details };
+    const why = isRedisErrorReply(err)
+      ? `Redis answered ${formatCommand(a.expected.cmd)} with an error`
+      : 'Redis is not reachable right now';
+    return {
+      ok: false,
+      message: `${a.message} (could not read the expected value: ${why})`,
+      details,
+    };
   }
   const expected = transformExpected(reply, transform);
   const cleaned = cleanTyped(text);
   details.cleaned = cleaned;
   if (expected === null) {
     // Nothing to compare against (nil or a list for a string answer): no typed value can be right.
-    return { ok: false, message: `${a.message} (you typed ${JSON.stringify(text.trim())}; Redis has no value to compare it with right now)`, details };
+    return {
+      ok: false,
+      message: `${a.message} (you typed ${JSON.stringify(text.trim())}; Redis has no value to compare it with right now)`,
+      details,
+    };
   }
   let ok: boolean;
   if (compare === 'numeric_within') {

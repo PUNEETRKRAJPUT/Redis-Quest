@@ -24,16 +24,23 @@ function handle(msg: WsMessage): void {
       q.pushTick(d as unknown as MetricsTick);
       break;
     case 'log.line':
-      if (LOG_SERVICES.includes(d.service as LogService)) q.pushLog(d.service as LogService, String(d.line ?? ''));
+      if (LOG_SERVICES.includes(d.service as LogService))
+        q.pushLog(d.service as LogService, String(d.line ?? ''));
       break;
     case 'level.event':
-      q.pushEvent({ at: msg.at, kind: String(d.kind ?? ''), name: typeof d.name === 'string' ? d.name : undefined, data: d.data });
+      q.pushEvent({
+        at: msg.at,
+        kind: String(d.kind ?? ''),
+        name: typeof d.name === 'string' ? d.name : undefined,
+        data: d.data,
+      });
       break;
     case 'cli.dangerous': {
       const command = String(d.command ?? '');
       q.setDangerous(command);
       // A flush wipes the game:* mirror; ask the engine whether it is still in sync.
-      if (command === 'FLUSHALL' || command === 'FLUSHDB') setTimeout(() => void useQuest.getState().refreshMirror(), 400);
+      if (command === 'FLUSHALL' || command === 'FLUSHDB')
+        setTimeout(() => void useQuest.getState().refreshMirror(), 400);
       break;
     }
     default:

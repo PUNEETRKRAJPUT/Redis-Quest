@@ -35,7 +35,8 @@ export function runInChild(job: ChildJob, killAfterMs: number): Promise<ExecOutc
     const capture = (tag: string) => (chunk: Buffer) => {
       if (size > MAX_CAPTURE) return;
       size += chunk.length;
-      for (const line of chunk.toString('utf8').split('\n')) if (line.trim()) captured.push(`[${tag}] ${line}`);
+      for (const line of chunk.toString('utf8').split('\n'))
+        if (line.trim()) captured.push(`[${tag}] ${line}`);
     };
     child.stdout?.on('data', capture('stdout'));
     child.stderr?.on('data', capture('stderr'));
@@ -87,5 +88,8 @@ export function crashResults(
   totalMs: number,
 ): { results: LearnerCallResult[]; metrics: LearnerMetrics } {
   const results: LearnerCallResult[] = job.calls.map(() => ({ ok: false, error: crash, ms: 0 }));
-  return { results, metrics: aggregateMetrics(results, { redisCommands: 0, dbQueries: 0 }, totalMs) };
+  return {
+    results,
+    metrics: aggregateMetrics(results, { redisCommands: 0, dbQueries: 0 }, totalMs),
+  };
 }

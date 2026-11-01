@@ -20,7 +20,9 @@ describe('lineDiff (F-04)', () => {
 
 describe('workspaceFileFromTask', () => {
   it('finds the file named in the task', () => {
-    expect(workspaceFileFromTask('Fill in `getPlayerStats` in `workspace/ch2/cache.js`.')).toBe('ch2/cache.js');
+    expect(workspaceFileFromTask('Fill in `getPlayerStats` in `workspace/ch2/cache.js`.')).toBe(
+      'ch2/cache.js',
+    );
     expect(workspaceFileFromTask('no file here')).toBeNull();
   });
 });

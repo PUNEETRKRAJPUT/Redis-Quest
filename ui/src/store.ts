@@ -50,7 +50,8 @@ interface QuestState {
   setDangerous: (command: string) => void;
 }
 
-const emptyLogs = () => Object.fromEntries(LOG_SERVICES.map((s) => [s, [] as string[]])) as Record<LogService, string[]>;
+const emptyLogs = () =>
+  Object.fromEntries(LOG_SERVICES.map((s) => [s, [] as string[]])) as Record<LogService, string[]>;
 
 export const useQuest = create<QuestState>((set, get) => ({
   boot: 'loading',
@@ -73,11 +74,17 @@ export const useQuest = create<QuestState>((set, get) => ({
       set({ progress: p, boot: 'ready', bootError: null });
       void get().refreshChapters();
       void get().refreshMirror();
-      void api.health().then((h) => set({ health: h })).catch(() => undefined);
+      void api
+        .health()
+        .then((h) => set({ health: h }))
+        .catch(() => undefined);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 404 && e.code === 'no_player') set({ boot: 'welcome', bootError: null });
+      if (e instanceof ApiError && e.status === 404 && e.code === 'no_player')
+        set({ boot: 'welcome', bootError: null });
       else if (e instanceof ApiError && e.code === 'levels_invalid') {
-        const errs = Array.isArray(e.body.errors) ? (e.body.errors as unknown[]).map(String) : [e.message];
+        const errs = Array.isArray(e.body.errors)
+          ? (e.body.errors as unknown[]).map(String)
+          : [e.message];
         set({ boot: 'invalid', invalidErrors: errs });
       } else set({ boot: 'offline', bootError: e instanceof Error ? e.message : String(e) });
     }
@@ -126,9 +133,13 @@ export const useQuest = create<QuestState>((set, get) => ({
     set((s) => {
       if (!(service in s.logs)) return s;
       const next = [...s.logs[service], line];
-      return { logs: { ...s.logs, [service]: next.length > MAX_LOG ? next.slice(-MAX_LOG) : next } };
+      return {
+        logs: { ...s.logs, [service]: next.length > MAX_LOG ? next.slice(-MAX_LOG) : next },
+      };
     }),
-  seedLog: (service, lines) => set((s) => ({ logs: { ...s.logs, [service]: lines.slice(-MAX_LOG) } })),
-  pushEvent: (e) => set((s) => ({ events: [...s.events, { ...e, seq: ++eventSeq }].slice(-MAX_EVENTS) })),
+  seedLog: (service, lines) =>
+    set((s) => ({ logs: { ...s.logs, [service]: lines.slice(-MAX_LOG) } })),
+  pushEvent: (e) =>
+    set((s) => ({ events: [...s.events, { ...e, seq: ++eventSeq }].slice(-MAX_EVENTS) })),
   setDangerous: (command) => set({ dangerous: { command, at: Date.now() } }),
 }));

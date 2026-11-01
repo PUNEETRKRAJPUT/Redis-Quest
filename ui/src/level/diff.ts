@@ -11,7 +11,10 @@ export function lineDiff(mine: string, ref: string): DiffRow[] {
   const t = new Uint16Array((a.length + 1) * w);
   for (let i = a.length - 1; i >= 0; i--) {
     for (let j = b.length - 1; j >= 0; j--) {
-      t[i * w + j] = a[i] === b[j] ? t[(i + 1) * w + j + 1]! + 1 : Math.max(t[(i + 1) * w + j]!, t[i * w + j + 1]!);
+      t[i * w + j] =
+        a[i] === b[j]
+          ? t[(i + 1) * w + j + 1]! + 1
+          : Math.max(t[(i + 1) * w + j]!, t[i * w + j + 1]!);
     }
   }
   const out: DiffRow[] = [];

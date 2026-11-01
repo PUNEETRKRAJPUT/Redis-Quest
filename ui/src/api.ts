@@ -40,10 +40,20 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
     json = text ? (JSON.parse(text) as Record<string, unknown>) : {};
   } catch {
     // A non-JSON body is almost always the proxy answering 502 while the engine boots.
-    if (!res.ok) throw new ApiError(res.status, 'bad_gateway', `The engine answered ${res.status}. It may still be starting.`);
+    if (!res.ok)
+      throw new ApiError(
+        res.status,
+        'bad_gateway',
+        `The engine answered ${res.status}. It may still be starting.`,
+      );
   }
   if (!res.ok) {
-    throw new ApiError(res.status, String(json.error ?? 'error'), String(json.message ?? `HTTP ${res.status}`), json);
+    throw new ApiError(
+      res.status,
+      String(json.error ?? 'error'),
+      String(json.message ?? `HTTP ${res.status}`),
+      json,
+    );
   }
   return json as T;
 }
@@ -54,23 +64,47 @@ export const api = {
   health: () => call<Health>('GET', '/health'),
   progress: () => call<Progress>('GET', '/api/progress'),
   mirror: () => call<MirrorStatus>('GET', '/api/progress/mirror'),
-  restore: () => call<{ ok: boolean; restored: boolean; levels: number }>('POST', '/api/progress/restore', {}),
+  restore: () =>
+    call<{ ok: boolean; restored: boolean; levels: number }>('POST', '/api/progress/restore', {}),
   createPlayer: (name: string) => call<Progress>('POST', '/api/player', { name }),
   chapters: () => call<ChaptersResponse>('GET', '/api/chapters'),
   level: (id: string) => call<LevelData>('GET', `/api/levels/${enc(id)}`),
-  start: (id: string) => call<{ status: string; startedAt: string; setup: { ran: number; skipped: unknown[] } }>('POST', `/api/levels/${enc(id)}/start`, {}),
+  start: (id: string) =>
+    call<{ status: string; startedAt: string; setup: { ran: number; skipped: unknown[] } }>(
+      'POST',
+      `/api/levels/${enc(id)}/start`,
+      {},
+    ),
   brainstorm: (id: string, optionId: string, text: string) =>
-    call<{ brainstorm: { optionId: string; text: string; at: string }; isReasonable: boolean }>('POST', `/api/levels/${enc(id)}/brainstorm`, { optionId, text }),
-  hint: (id: string) => call<{ index: number; hint: string; revealed: number; hintsTotal: number }>('POST', `/api/levels/${enc(id)}/hint`, {}),
+    call<{ brainstorm: { optionId: string; text: string; at: string }; isReasonable: boolean }>(
+      'POST',
+      `/api/levels/${enc(id)}/brainstorm`,
+      { optionId, text },
+    ),
+  hint: (id: string) =>
+    call<{ index: number; hint: string; revealed: number; hintsTotal: number }>(
+      'POST',
+      `/api/levels/${enc(id)}/hint`,
+      {},
+    ),
   verify: (id: string, answers: Record<string, string | string[]>) =>
     call<VerifyResponse>('POST', `/api/levels/${enc(id)}/verify`, { answers }),
   ideal: (id: string) => call<IdealResponse>('GET', `/api/levels/${enc(id)}/ideal`),
   cli: (command: string) => call<CliReply>('POST', '/api/cli', { command }),
   target: () => call<{ redisUrl: string; state: 'up' | 'down' }>('GET', '/api/target'),
-  event: (name: string, data?: unknown) => call<{ ok: boolean }>('POST', '/api/events', { kind: 'custom', name, data }),
+  event: (name: string, data?: unknown) =>
+    call<{ ok: boolean }>('POST', '/api/events', { kind: 'custom', name, data }),
   metrics: (seconds = 60) => call<MetricsSeries>('GET', `/api/metrics?seconds=${seconds}`),
-  logs: (service: LogService, lines = 500) => call<{ service: string; lines: string[] }>('GET', `/api/logs/${service}?lines=${lines}`),
+  logs: (service: LogService, lines = 500) =>
+    call<{ service: string; lines: string[] }>('GET', `/api/logs/${service}?lines=${lines}`),
   tree: () => call<{ entries: WorkspaceEntry[] }>('GET', '/api/workspace/tree'),
-  readFile: (path: string) => call<{ path: string; content: string; size: number; mtime: string }>('GET', `/api/workspace/file?path=${enc(path)}`),
-  writeFile: (path: string, content: string) => call<{ path: string; size: number }>('PUT', `/api/workspace/file?path=${enc(path)}`, { content }),
+  readFile: (path: string) =>
+    call<{ path: string; content: string; size: number; mtime: string }>(
+      'GET',
+      `/api/workspace/file?path=${enc(path)}`,
+    ),
+  writeFile: (path: string, content: string) =>
+    call<{ path: string; size: number }>('PUT', `/api/workspace/file?path=${enc(path)}`, {
+      content,
+    }),
 };

@@ -14,7 +14,11 @@ export interface AssertionOutcome {
 
 const list = (vs: readonly Reply[]) => vs.map(formatReply).join(', ');
 
-function asNumberOutcome(reply: Reply, expected: string, test: (n: number) => boolean): AssertionOutcome {
+function asNumberOutcome(
+  reply: Reply,
+  expected: string,
+  test: (n: number) => boolean,
+): AssertionOutcome {
   const n = numericValue(reply);
   if (n === null) return { ok: false, expected, observed: describeNonNumber(reply) };
   return { ok: test(n), expected, observed: formatReply(reply) };
@@ -28,7 +32,11 @@ function describeNonNumber(reply: Reply): string {
 
 export function evaluateAssertion(check: RedisCheck, reply: Reply): AssertionOutcome {
   if (check.equals !== undefined) {
-    return { ok: replyEquals(reply, check.equals), expected: formatReply(check.equals), observed: formatReply(reply) };
+    return {
+      ok: replyEquals(reply, check.equals),
+      expected: formatReply(check.equals),
+      observed: formatReply(reply),
+    };
   }
   if (check.notEquals !== undefined) {
     return {
@@ -60,8 +68,13 @@ export function evaluateAssertion(check: RedisCheck, reply: Reply): AssertionOut
   }
   if (check.matches !== undefined) {
     const expected = `something matching /${check.matches}/`;
-    if (reply === null || Array.isArray(reply)) return { ok: false, expected, observed: formatReply(reply) };
-    return { ok: new RegExp(check.matches).test(String(reply)), expected, observed: formatReply(reply) };
+    if (reply === null || Array.isArray(reply))
+      return { ok: false, expected, observed: formatReply(reply) };
+    return {
+      ok: new RegExp(check.matches).test(String(reply)),
+      expected,
+      observed: formatReply(reply),
+    };
   }
   if (check.oneOf !== undefined) {
     return {
@@ -73,15 +86,28 @@ export function evaluateAssertion(check: RedisCheck, reply: Reply): AssertionOut
   if (check.lengthGte !== undefined) {
     // List length, or string length; nil counts as length 0 (a missing key holds nothing).
     const len = reply === null ? 0 : Array.isArray(reply) ? reply.length : String(reply).length;
-    return { ok: len >= check.lengthGte, expected: `length at least ${check.lengthGte}`, observed: `length ${len}` };
+    return {
+      ok: len >= check.lengthGte,
+      expected: `length at least ${check.lengthGte}`,
+      observed: `length ${len}`,
+    };
   }
   if (check.contains !== undefined) {
     const want = check.contains;
     const expected = `something containing ${formatReply(want)}`;
     if (reply === null) return { ok: false, expected, observed: 'nil' };
-    if (Array.isArray(reply)) return { ok: reply.some((e) => replyEquals(e, want)), expected, observed: formatReply(reply) };
+    if (Array.isArray(reply))
+      return {
+        ok: reply.some((e) => replyEquals(e, want)),
+        expected,
+        observed: formatReply(reply),
+      };
     return { ok: String(reply).includes(String(want)), expected, observed: formatReply(reply) };
   }
   // The schema guarantees exactly one assertion; a check without one must never pass.
-  return { ok: false, expected: 'an assertion (this check has none)', observed: formatReply(reply) };
+  return {
+    ok: false,
+    expected: 'an assertion (this check has none)',
+    observed: formatReply(reply),
+  };
 }

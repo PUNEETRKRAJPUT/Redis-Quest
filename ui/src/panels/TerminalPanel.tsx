@@ -26,7 +26,11 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
       cursorBlink: true,
       convertEol: false,
       scrollback: 2000,
-      theme: { background: cssVar('--term-bg', '#12100d'), foreground: cssVar('--term-fg', '#eee7da'), cursor: cssVar('--accent', '#f59a3c') },
+      theme: {
+        background: cssVar('--term-bg', '#12100d'),
+        foreground: cssVar('--term-fg', '#eee7da'),
+        cursor: cssVar('--accent', '#f59a3c'),
+      },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -49,7 +53,12 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
     // textarea positioning make no difference), so the page scroll is pinned for the length of the press.
     const pinScrollOnOutsidePress = (e: PointerEvent) => {
       const ta = el.querySelector('textarea');
-      if (!ta || document.activeElement !== ta || (e.target instanceof Node && el.contains(e.target))) return;
+      if (
+        !ta ||
+        document.activeElement !== ta ||
+        (e.target instanceof Node && el.contains(e.target))
+      )
+        return;
       const x = window.scrollX;
       const y = window.scrollY;
       const pin = () => {
@@ -92,18 +101,24 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
       redraw();
     };
 
-    void api.target().then((t) => {
-      try {
-        const u = new URL(t.redisUrl);
-        prompt = `${u.hostname}:${u.port || '6379'}> `;
-        if (!busy) redraw();
-      } catch {
-        /* keep the default prompt */
-      }
-    }).catch(() => undefined);
+    void api
+      .target()
+      .then((t) => {
+        try {
+          const u = new URL(t.redisUrl);
+          prompt = `${u.hostname}:${u.port || '6379'}> `;
+          if (!busy) redraw();
+        } catch {
+          /* keep the default prompt */
+        }
+      })
+      .catch(() => undefined);
 
     if (transcript) term.write(transcript);
-    else out(`${C.dim}Redis terminal. It talks to the same Redis your app uses. Type HELP, or just start.${C.off}\r\n`);
+    else
+      out(
+        `${C.dim}Redis terminal. It talks to the same Redis your app uses. Type HELP, or just start.${C.off}\r\n`,
+      );
     showPrompt();
 
     const run = async (line: string) => {
@@ -117,7 +132,9 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
         return showPrompt();
       }
       if (/^help$/i.test(text)) {
-        out(`${C.dim}Type any Redis command, for example PING, SET greeting hi, GET greeting.\r\nUp and down arrows walk your history. clear wipes the screen.${C.off}\r\n`);
+        out(
+          `${C.dim}Type any Redis command, for example PING, SET greeting hi, GET greeting.\r\nUp and down arrows walk your history. clear wipes the screen.${C.off}\r\n`,
+        );
         return showPrompt();
       }
       const note = dangerNote(text);
@@ -189,10 +206,16 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
           }
           return;
         case `${ESC}D`:
-          if (cur > 0) { cur--; redraw(); }
+          if (cur > 0) {
+            cur--;
+            redraw();
+          }
           return;
         case `${ESC}C`:
-          if (cur < buf.length) { cur++; redraw(); }
+          if (cur < buf.length) {
+            cur++;
+            redraw();
+          }
           return;
         case '\x01':
         case `${ESC}H`:
@@ -236,7 +259,13 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
 
   return (
     <div className="terminal-wrap" style={{ height }}>
-      <div ref={host} className="terminal" data-testid="terminal" role="group" aria-label="Redis terminal. Click, then type a command and press Enter." />
+      <div
+        ref={host}
+        className="terminal"
+        data-testid="terminal"
+        role="group"
+        aria-label="Redis terminal. Click, then type a command and press Enter."
+      />
     </div>
   );
 }

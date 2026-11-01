@@ -15,9 +15,29 @@ import {
 } from './harness.js';
 
 const STATS_COLUMNS = [
-  'player_id', 'name', 'team_id', 'role', 'matches_played', 'innings_batted', 'runs', 'balls_faced', 'fours',
-  'sixes', 'dismissals', 'batting_avg', 'strike_rate', 'balls_bowled', 'runs_conceded', 'wickets', 'economy',
-  'selected_count', 'selected_pct', 'captain_pct', 'last5_selected_pct', 'last5_points', 'avg_team_points',
+  'player_id',
+  'name',
+  'team_id',
+  'role',
+  'matches_played',
+  'innings_batted',
+  'runs',
+  'balls_faced',
+  'fours',
+  'sixes',
+  'dismissals',
+  'batting_avg',
+  'strike_rate',
+  'balls_bowled',
+  'runs_conceded',
+  'wickets',
+  'economy',
+  'selected_count',
+  'selected_pct',
+  'captain_pct',
+  'last5_selected_pct',
+  'last5_points',
+  'avg_team_points',
   'last5_avg_team_points',
 ];
 
@@ -49,7 +69,12 @@ async function get(p: string, init?: RequestInit) {
 }
 
 async function health() {
-  return (await get('/app/health')).body as { activeSlots: string[]; configEtag: string | null; target: { redisUrl: string }; redis: string };
+  return (await get('/app/health')).body as {
+    activeSlots: string[];
+    configEtag: string | null;
+    target: { redisUrl: string };
+    redis: string;
+  };
 }
 
 /** Change the stub engine's config and wait until the app reports it applied that ETag. */
@@ -64,14 +89,20 @@ beforeAll(async () => {
   await redis.del(['test:p07:calls', 'cache:player-stats:p-028', 'cache:player-stats:p-151']);
   ws = tempDir('ws');
   logDir = tempDir('logs');
-  engine = await startStubEngine({ target: { redisUrl: REDIS_URL }, activeSlots: [], dbExtraLatencyMs: 0 });
+  engine = await startStubEngine({
+    target: { redisUrl: REDIS_URL },
+    activeSlots: [],
+    dbExtraLatencyMs: 0,
+  });
   app = await startApp({ engineUrl: engine.url, workspaceDir: ws, logDir });
 }, 30_000);
 
 afterAll(async () => {
   await app?.stop();
   await engine?.close();
-  await redis.del(['test:p07:calls', 'cache:player-stats:p-028', 'cache:player-stats:p-151']).catch(() => 0);
+  await redis
+    .del(['test:p07:calls', 'cache:player-stats:p-028', 'cache:player-stats:p-151'])
+    .catch(() => 0);
   await redis.close();
   rmSync(ws, { recursive: true, force: true });
   rmSync(logDir, { recursive: true, force: true });
@@ -81,7 +112,12 @@ describe('health and config pull', () => {
   test('health reports the instance, target and active slots', async () => {
     const h = await get('/app/health');
     expect(h.status).toBe(200);
-    expect(h.body).toMatchObject({ ok: true, service: 'app', target: { redisUrl: REDIS_URL }, activeSlots: [] });
+    expect(h.body).toMatchObject({
+      ok: true,
+      service: 'app',
+      target: { redisUrl: REDIS_URL },
+      activeSlots: [],
+    });
     expect(String(h.body.instance)).toMatch(/^test-/);
   });
 
@@ -91,7 +127,9 @@ describe('health and config pull', () => {
     expect(first.ifNoneMatch).toBeUndefined();
     expect(first.status).toBe(200);
     const later = engine.configRequests.slice(1);
-    expect(later.every((r) => r.ifNoneMatch === `"${engine.etag()}"` && r.status === 304)).toBe(true);
+    expect(later.every((r) => r.ifNoneMatch === `"${engine.etag()}"` && r.status === 304)).toBe(
+      true,
+    );
     expect((await health()).configEtag).toBe(`"${engine.etag()}"`);
   });
 });
@@ -117,7 +155,11 @@ describe('slots', () => {
     const r = await get('/app/players/p-001/stats');
     expect(r.status).toBe(200);
     expect(r.headers.get('x-quest-slots')).toBe('cache.getPlayerStats=baseline-load-error');
-    const slots = (await get('/app/slots')).body.slots as Array<{ name: string; state: string; error?: { message: string } }>;
+    const slots = (await get('/app/slots')).body.slots as Array<{
+      name: string;
+      state: string;
+      error?: { message: string };
+    }>;
     const s = slots.find((x) => x.name === 'cache.getPlayerStats')!;
     expect(s.state).toBe('load_error');
     expect(s.error?.message).toMatch(/module not found/);
@@ -133,16 +175,25 @@ describe('slots', () => {
     expect(r.body).toEqual({ player_id: 'p-028', source: 'learner', version: 'v1' });
     expect(await redis.get('test:p07:calls')).not.toBeNull();
     // deps.log lines land in app.log.
-    await waitFor('learner log line', () => readFileSync(app.logFile, 'utf8').includes('fake cache called for p-028'));
+    await waitFor('learner log line', () =>
+      readFileSync(app.logFile, 'utf8').includes('fake cache called for p-028'),
+    );
   });
 
   test('hot reload: an edited file is used within a couple of poll intervals', async () => {
     const dest = path.join(ws, 'ch2', 'cache.js');
-    writeFileSync(dest, readFileSync(path.join(FIXTURES, 'cache-fake.js'), 'utf8').replace("'v1'", "'v2-edited'"));
-    const r = await waitFor('edited version', async () => {
-      const x = await get('/app/players/p-028/stats');
-      return x.body.version === 'v2-edited' ? x : undefined;
-    }, 5000);
+    writeFileSync(
+      dest,
+      readFileSync(path.join(FIXTURES, 'cache-fake.js'), 'utf8').replace("'v1'", "'v2-edited'"),
+    );
+    const r = await waitFor(
+      'edited version',
+      async () => {
+        const x = await get('/app/players/p-028/stats');
+        return x.body.version === 'v2-edited' ? x : undefined;
+      },
+      5000,
+    );
     expect(r.status).toBe(200);
   });
 
@@ -153,11 +204,18 @@ describe('slots', () => {
       return x.status === 500 ? x : undefined;
     });
     expect(r.headers.get('x-quest-slot-error')).toBe('cache exploded for p-028');
-    expect(r.body).toMatchObject({ error: 'slot_error', slot: 'cache.getPlayerStats', name: 'Error', message: 'cache exploded for p-028' });
+    expect(r.body).toMatchObject({
+      error: 'slot_error',
+      slot: 'cache.getPlayerStats',
+      name: 'Error',
+      message: 'cache exploded for p-028',
+    });
     expect((await get('/app/health')).status).toBe(200);
     expect((await get('/app/players/p-001')).status).toBe(200);
     const log = readFileSync(app.logFile, 'utf8');
-    expect(log).toMatch(/learner code in slot cache\.getPlayerStats failed: Error: cache exploded for p-028/);
+    expect(log).toMatch(
+      /learner code in slot cache\.getPlayerStats failed: Error: cache exploded for p-028/,
+    );
     expect(app.proc.exitCode).toBeNull();
   });
 
@@ -181,10 +239,15 @@ describe('slots', () => {
 
   test('a file with a syntax error is reported and the baseline serves', async () => {
     // Written here, not kept as a fixture, so the linter never parses it.
-    writeFileSync(path.join(ws, 'ch2', 'cache.js'), 'export default async function getPlayerStats( {\n');
+    writeFileSync(
+      path.join(ws, 'ch2', 'cache.js'),
+      'export default async function getPlayerStats( {\n',
+    );
     const r = await waitFor('syntax error version', async () => {
       const x = await get('/app/players/p-001/stats');
-      return x.headers.get('x-quest-slots') === 'cache.getPlayerStats=baseline-load-error' ? x : undefined;
+      return x.headers.get('x-quest-slots') === 'cache.getPlayerStats=baseline-load-error'
+        ? x
+        : undefined;
     });
     expect(r.status).toBe(200);
     expect(readFileSync(app.logFile, 'utf8')).toMatch(/SyntaxError/);
@@ -221,15 +284,28 @@ describe('metrics push', () => {
     await get('/app/players/p-001/stats');
     await get('/app/players/p-999/stats');
     const push = await waitFor('a push with the stats route', () =>
-      engine.pushes.slice(before).find((p) => (p.routes as Record<string, unknown>)['GET /app/players/:id/stats']),
+      engine.pushes
+        .slice(before)
+        .find((p) => (p.routes as Record<string, unknown>)['GET /app/players/:id/stats']),
     );
     expect(push.instance).toMatch(/^test-/);
     expect(push.instanceId).toBe(push.instance);
     expect(typeof push.at).toBe('number');
     expect((push.at as number) % 1000).toBe(0);
     expect(push.configEtag).toBe(`"${engine.etag()}"`);
-    const route = (push.routes as Record<string, Record<string, number>>)['GET /app/players/:id/stats']!;
-    for (const k of ['count', 'errors', 'p50Ms', 'p99Ms', 'dbQueries', 'redisCommands', 'noDbCount', 'slotErrors']) {
+    const route = (push.routes as Record<string, Record<string, number>>)[
+      'GET /app/players/:id/stats'
+    ]!;
+    for (const k of [
+      'count',
+      'errors',
+      'p50Ms',
+      'p99Ms',
+      'dbQueries',
+      'redisCommands',
+      'noDbCount',
+      'slotErrors',
+    ]) {
       expect(typeof route[k]).toBe('number');
     }
     expect(route.count).toBeGreaterThanOrEqual(1);
@@ -240,7 +316,9 @@ describe('metrics push', () => {
 
   test('learner redis commands and slot errors are counted', async () => {
     const pushes = engine.pushes;
-    const all = pushes.flatMap((p) => Object.entries(p.routes as Record<string, Record<string, number>>));
+    const all = pushes.flatMap((p) =>
+      Object.entries(p.routes as Record<string, Record<string, number>>),
+    );
     const stats = all.filter(([k]) => k === 'GET /app/players/:id/stats').map(([, v]) => v);
     expect(stats.reduce((n, s) => n + s.redisCommands, 0)).toBeGreaterThan(0);
     expect(stats.reduce((n, s) => n + s.errors, 0)).toBeGreaterThanOrEqual(2);
@@ -249,7 +327,10 @@ describe('metrics push', () => {
   });
 
   test('GET /app/metrics shows running totals and the last pushed window', async () => {
-    const m = (await get('/app/metrics')).body as { totals: Record<string, Record<string, number>>; lastWindow: { instance: string } };
+    const m = (await get('/app/metrics')).body as {
+      totals: Record<string, Record<string, number>>;
+      lastWindow: { instance: string };
+    };
     const t = m.totals['GET /app/players/:id/stats']!;
     expect(t.count).toBeGreaterThan(5);
     expect(t.redisCommands).toBeGreaterThan(0);

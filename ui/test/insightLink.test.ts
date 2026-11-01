@@ -11,8 +11,12 @@ describe('insightLink (F-07)', () => {
     expect(insightLink(null, 'localhost', 'abc')).toBe('http://localhost:5540/');
   });
   it('prefers insightUrl from the engine when it is an http(s) URL', () => {
-    expect(insightLink({ insightUrl: 'http://localhost:5543/' }, 'localhost', '9999')).toBe('http://localhost:5543/');
-    expect(insightLink({ insightUrl: 'javascript:alert(1)' }, 'localhost', null)).toBe('http://localhost:5540/');
+    expect(insightLink({ insightUrl: 'http://localhost:5543/' }, 'localhost', '9999')).toBe(
+      'http://localhost:5543/',
+    );
+    expect(insightLink({ insightUrl: 'javascript:alert(1)' }, 'localhost', null)).toBe(
+      'http://localhost:5540/',
+    );
   });
   it('brackets an IPv6 hostname', () => {
     expect(insightLink(null, '::1', null)).toBe('http://[::1]:5540/');

@@ -18,7 +18,11 @@ hljs.registerLanguage('redis', () => ({
     { className: 'comment', begin: /(^|\s)#/, end: /$/ },
     { className: 'meta', begin: /^\((?:integer|nil|error|empty array|double)\)/m, end: /(?=\s|$)/ },
     { className: 'keyword', begin: /^[A-Z][A-Z.]+(?:\s+[A-Z]{2,}\b)?(?=\s|$)/m },
-    { className: 'keyword', begin: /\b(?:EX|PX|NX|XX|GT|LT|KEEPTTL|WITHSCORES|REV|COUNT|MATCH|BYLEX|BYSCORE|LIMIT|MAXLEN|BLOCK|STREAMS)\b/ },
+    {
+      className: 'keyword',
+      begin:
+        /\b(?:EX|PX|NX|XX|GT|LT|KEEPTTL|WITHSCORES|REV|COUNT|MATCH|BYLEX|BYSCORE|LIMIT|MAXLEN|BLOCK|STREAMS)\b/,
+    },
     { className: 'string', begin: /"/, end: /"/, contains: [{ begin: /\\./ }] },
     { className: 'string', begin: /'/, end: /'/ },
     { className: 'number', begin: /\b-?\d+(?:\.\d+)?\b/ },
@@ -73,7 +77,8 @@ const components: Components = {
   a({ href, children }) {
     const external = typeof href === 'string' && /^https?:/.test(href);
     // Level text may carry a learner-supplied name, so only plain http(s) and in-app hash links are live.
-    if (typeof href === 'string' && !external && !href.startsWith('#')) return <span>{children}</span>;
+    if (typeof href === 'string' && !external && !href.startsWith('#'))
+      return <span>{children}</span>;
     return (
       <a href={href} {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
         {children}

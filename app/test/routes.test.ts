@@ -2,7 +2,16 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:
 import path from 'node:path';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { DATABASE_URL, FIXTURES, REDIS_URL, startApp, startStubEngine, tempDir, waitFor, type RunningApp } from './harness.js';
+import {
+  DATABASE_URL,
+  FIXTURES,
+  REDIS_URL,
+  startApp,
+  startStubEngine,
+  tempDir,
+  waitFor,
+  type RunningApp,
+} from './harness.js';
 
 let app: RunningApp;
 let ws: string;
@@ -14,7 +23,11 @@ async function call(p: string, init?: RequestInit) {
   const body = (await res.json().catch(() => null)) as Record<string, unknown>;
   return { status: res.status, headers: res.headers, body };
 }
-const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const json = (method: string, body: unknown): RequestInit => ({
+  method,
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify(body),
+});
 
 async function deleteTestUser(): Promise<void> {
   const c = new pg.Client({ connectionString: DATABASE_URL });
@@ -80,17 +93,23 @@ describe('baseline routes (no engine configured)', () => {
     expect(r.status).toBe(200);
     expect(entries).toHaveLength(5);
     expect(entries.map((e) => e.rank)).toEqual([1, 2, 3, 4, 5]);
-    for (let i = 1; i < entries.length; i++) expect(entries[i - 1]!.points).toBeGreaterThanOrEqual(entries[i]!.points);
+    for (let i = 1; i < entries.length; i++)
+      expect(entries[i - 1]!.points).toBeGreaterThanOrEqual(entries[i]!.points);
     expect(((await call('/app/leaderboard/62')).body.entries as unknown[]).length).toBe(10);
     expect((await call('/app/leaderboard/abc')).status).toBe(400);
   });
 
   test('GET /app/limits/ping: fixed window per x-user-id', async () => {
     const statuses: number[] = [];
-    for (let i = 0; i < 12; i++) statuses.push((await call('/app/limits/ping', { headers: { 'x-user-id': 'u-000001' } })).status);
+    for (let i = 0; i < 12; i++)
+      statuses.push(
+        (await call('/app/limits/ping', { headers: { 'x-user-id': 'u-000001' } })).status,
+      );
     expect(statuses.filter((s) => s === 200)).toHaveLength(10);
     expect(statuses.slice(10)).toEqual([429, 429]);
-    expect((await call('/app/limits/ping', { headers: { 'x-user-id': 'u-000002' } })).status).toBe(200);
+    expect((await call('/app/limits/ping', { headers: { 'x-user-id': 'u-000002' } })).status).toBe(
+      200,
+    );
     expect((await call('/app/limits/ping')).status).toBe(400);
   });
 
@@ -100,12 +119,23 @@ describe('baseline routes (no engine configured)', () => {
     expect(r.status).toBe(201);
     expect(r.body).toMatchObject({ ok: true, id: NEW_USER });
     expect((await call('/app/register', json('POST', user))).status).toBe(409);
-    expect((await call('/app/register', json('POST', { ...user, id: 'u-p07-other', college_id: 'c-99' }))).status).toBe(400);
+    expect(
+      (
+        await call(
+          '/app/register',
+          json('POST', { ...user, id: 'u-p07-other', college_id: 'c-99' }),
+        )
+      ).status,
+    ).toBe(400);
     expect((await call('/app/register', json('POST', { id: 'x' }))).status).toBe(400);
   });
 
   test('engine not configured is visible in health', async () => {
-    expect((await call('/app/health')).body).toMatchObject({ engine: 'unconfigured', activeSlots: [], configEtag: null });
+    expect((await call('/app/health')).body).toMatchObject({
+      engine: 'unconfigured',
+      activeSlots: [],
+      configEtag: null,
+    });
   });
 });
 
@@ -115,20 +145,41 @@ describe('synchronous infinite loop in learner code', () => {
     const logs2 = tempDir('logs-spin');
     mkdirSync(path.join(ws2, 'ch2'), { recursive: true });
     copyFileSync(path.join(FIXTURES, 'cache-spins.js'), path.join(ws2, 'ch2', 'cache.js'));
-    const engine = await startStubEngine({ target: { redisUrl: REDIS_URL }, activeSlots: ['cache.getPlayerStats'], dbExtraLatencyMs: 0 });
-    const spin = await startApp({ engineUrl: engine.url, workspaceDir: ws2, logDir: logs2, env: { SLOT_TIMEOUT_MS: '500' } });
+    const engine = await startStubEngine({
+      target: { redisUrl: REDIS_URL },
+      activeSlots: ['cache.getPlayerStats'],
+      dbExtraLatencyMs: 0,
+    });
+    const spin = await startApp({
+      engineUrl: engine.url,
+      workspaceDir: ws2,
+      logDir: logs2,
+      env: { SLOT_TIMEOUT_MS: '500' },
+    });
     try {
       await waitFor('slot loaded', async () => {
-        const s = (await (await fetch(`${spin.url}/app/slots`)).json()) as { slots: Array<{ name: string; state: string }> };
+        const s = (await (await fetch(`${spin.url}/app/slots`)).json()) as {
+          slots: Array<{ name: string; state: string }>;
+        };
         return s.slots.find((x) => x.name === 'cache.getPlayerStats')?.state === 'loaded';
       });
-      void fetch(`${spin.url}/app/players/p-028/stats`, { signal: AbortSignal.timeout(3000) }).catch(() => undefined);
-      const line = await waitFor('watchdog line', () => {
-        const file = path.join(logs2, 'app', 'app.log');
-        const text = existsSync(file) ? readFileSync(file, 'utf8') : '';
-        return text.split('\n').find((l) => l.includes('event loop blocked'));
-      }, 5000);
-      expect(JSON.parse(line)).toMatchObject({ level: 50, suspectSlot: 'cache.getPlayerStats', instance: expect.stringMatching(/^test-/) });
+      void fetch(`${spin.url}/app/players/p-028/stats`, {
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => undefined);
+      const line = await waitFor(
+        'watchdog line',
+        () => {
+          const file = path.join(logs2, 'app', 'app.log');
+          const text = existsSync(file) ? readFileSync(file, 'utf8') : '';
+          return text.split('\n').find((l) => l.includes('event loop blocked'));
+        },
+        5000,
+      );
+      expect(JSON.parse(line)).toMatchObject({
+        level: 50,
+        suspectSlot: 'cache.getPlayerStats',
+        instance: expect.stringMatching(/^test-/),
+      });
     } finally {
       await spin.stop();
       await engine.close();

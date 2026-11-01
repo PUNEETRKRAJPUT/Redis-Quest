@@ -19,7 +19,8 @@ import type { SlotDef } from './types.js';
 /** How a slot call was served, reported in `x-quest-slots` and `/app/slots`. */
 export type SlotPath = 'baseline' | 'learner' | 'baseline-load-error';
 
-type LoadResult = { ok: true; fn: LearnerFn; at: string } | { ok: false; error: LearnerError; at: string };
+type LoadResult =
+  { ok: true; fn: LearnerFn; at: string } | { ok: false; error: LearnerError; at: string };
 
 export interface SlotState {
   name: string;
@@ -47,8 +48,16 @@ export class RequestScope {
   readonly served: string[] = [];
   private constructor(private readonly ctx: LearnerContext) {}
 
-  static async create(opts: { redis: LearnerRedis; pool: pg.Pool; log: (line: string) => void }): Promise<RequestScope> {
-    const ctx = await createLearnerDeps({ redisClient: opts.redis, dbPool: opts.pool, log: opts.log });
+  static async create(opts: {
+    redis: LearnerRedis;
+    pool: pg.Pool;
+    log: (line: string) => void;
+  }): Promise<RequestScope> {
+    const ctx = await createLearnerDeps({
+      redisClient: opts.redis,
+      dbPool: opts.pool,
+      log: opts.log,
+    });
     return new RequestScope(ctx);
   }
 
@@ -114,12 +123,20 @@ export class SlotRuntime {
       for (const name of names) {
         this.cache.delete(name);
         this.last.delete(name);
-        this.opts.log.info({ slot: name, file: this.defs.get(name)?.file, event }, 'learner file changed');
+        this.opts.log.info(
+          { slot: name, file: this.defs.get(name)?.file, event },
+          'learner file changed',
+        );
         if (this.activeSet.has(name)) void this.load(this.defs.get(name)!);
       }
     };
-    this.watcher.on('add', onFile('add')).on('change', onFile('change')).on('unlink', onFile('unlink'));
-    this.watcher.on('error', (err) => this.opts.log.warn({ err: (err as Error).message }, 'file watcher error'));
+    this.watcher
+      .on('add', onFile('add'))
+      .on('change', onFile('change'))
+      .on('unlink', onFile('unlink'));
+    this.watcher.on('error', (err) =>
+      this.opts.log.warn({ err: (err as Error).message }, 'file watcher error'),
+    );
     await new Promise<void>((resolve) => this.watcher!.once('ready', () => resolve()));
   }
 
@@ -134,13 +151,17 @@ export class SlotRuntime {
       if (this.defs.has(n)) next.add(n);
       else if (!this.unknownWarned.has(n)) {
         this.unknownWarned.add(n);
-        this.opts.log.warn({ slot: n }, 'engine activated a slot this app does not declare; ignored');
+        this.opts.log.warn(
+          { slot: n },
+          'engine activated a slot this app does not declare; ignored',
+        );
       }
     }
     const added = [...next].filter((n) => !this.activeSet.has(n));
     const removed = [...this.activeSet].filter((n) => !next.has(n));
     this.activeSet = next;
-    if (added.length || removed.length) this.opts.log.info({ added, removed, active: this.active }, 'active slots changed');
+    if (added.length || removed.length)
+      this.opts.log.info({ added, removed, active: this.active }, 'active slots changed');
     // Load eagerly so a broken file shows up in the log at activation, not on the first request.
     for (const n of added) void this.load(this.defs.get(n)!);
   }
@@ -182,7 +203,11 @@ export class SlotRuntime {
       })
       .then(
         (m) => ({ ok: true as const, fn: m.fn, at: new Date().toISOString() }),
-        (err: unknown) => ({ ok: false as const, error: toLearnerError(err), at: new Date().toISOString() }),
+        (err: unknown) => ({
+          ok: false as const,
+          error: toLearnerError(err),
+          at: new Date().toISOString(),
+        }),
       );
     this.cache.set(def.name, p);
     void p.then((r) => {
@@ -226,7 +251,8 @@ export class SlotRuntime {
         }
       : loaded.fn;
     const r = await callLearner(fn, scope.deps, args, { timeoutMs: this.opts.timeoutMs });
-    if (!r.ok) throw new SlotError(name, r.error ?? { name: 'Error', message: 'unknown learner error' });
+    if (!r.ok)
+      throw new SlotError(name, r.error ?? { name: 'Error', message: 'unknown learner error' });
     return r.value;
   }
 
@@ -254,7 +280,12 @@ export class SlotRuntime {
       if (!active) return { ...base, state: 'inactive' as const };
       if (!r) return { ...base, state: 'pending' as const };
       if (r.ok) return { ...base, state: 'loaded' as const, loadedAt: r.at };
-      return { ...base, state: 'load_error' as const, error: { name: r.error.name, message: r.error.message }, loadedAt: r.at };
+      return {
+        ...base,
+        state: 'load_error' as const,
+        error: { name: r.error.name, message: r.error.message },
+        loadedAt: r.at,
+      };
     });
   }
 

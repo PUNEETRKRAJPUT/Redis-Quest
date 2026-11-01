@@ -25,9 +25,11 @@ function envFilePort(name: string, dflt: number): number {
   return dflt;
 }
 // Explicit URLs win (CI sets them for its service containers); otherwise the quest-p07 ports.
-export const REDIS_URL = process.env.REDIS_URL ?? `redis://127.0.0.1:${envFilePort('REDIS_PORT', 6391)}`;
+export const REDIS_URL =
+  process.env.REDIS_URL ?? `redis://127.0.0.1:${envFilePort('REDIS_PORT', 6391)}`;
 export const DATABASE_URL =
-  process.env.DATABASE_URL ?? `postgres://quest:quest@127.0.0.1:${envFilePort('PG_PORT', 5433)}/quest`;
+  process.env.DATABASE_URL ??
+  `postgres://quest:quest@127.0.0.1:${envFilePort('PG_PORT', 5433)}/quest`;
 
 export function tempDir(prefix: string): string {
   return mkdtempSync(path.join(tmpdir(), `quest-p07-${prefix}-`));
@@ -69,7 +71,10 @@ export async function startStubEngine(initial: StubConfig): Promise<StubEngine> 
     pushes: [] as StubEngine['pushes'],
     etag(): string {
       const c = stub.config;
-      return createHash('sha1').update(JSON.stringify([c.target.redisUrl, c.activeSlots, c.dbExtraLatencyMs])).digest('hex').slice(0, 16);
+      return createHash('sha1')
+        .update(JSON.stringify([c.target.redisUrl, c.activeSlots, c.dbExtraLatencyMs]))
+        .digest('hex')
+        .slice(0, 16);
     },
   };
   const server: Server = createServer((req, res) => {
@@ -115,9 +120,15 @@ export interface RunningApp {
   stop(): Promise<void>;
 }
 
-export async function startApp(opts: { engineUrl?: string; workspaceDir: string; logDir: string; env?: Record<string, string> }): Promise<RunningApp> {
+export async function startApp(opts: {
+  engineUrl?: string;
+  workspaceDir: string;
+  logDir: string;
+  env?: Record<string, string>;
+}): Promise<RunningApp> {
   const main = path.join(APP_DIR, 'dist', 'main.js');
-  if (!existsSync(main)) throw new Error('app/dist/main.js missing: run pnpm --filter @quest/app build first');
+  if (!existsSync(main))
+    throw new Error('app/dist/main.js missing: run pnpm --filter @quest/app build first');
   const port = await freePort();
   let out = '';
   const proc = spawn(process.execPath, [main], {
@@ -171,7 +182,11 @@ export async function startApp(opts: { engineUrl?: string; workspaceDir: string;
 export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Poll `fn` until it returns a truthy value or the time runs out. */
-export async function waitFor<T>(what: string, fn: () => Promise<T | undefined | false> | T | undefined | false, timeoutMs = 8000): Promise<T> {
+export async function waitFor<T>(
+  what: string,
+  fn: () => Promise<T | undefined | false> | T | undefined | false,
+  timeoutMs = 8000,
+): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   let last: unknown;
   for (;;) {
@@ -181,7 +196,8 @@ export async function waitFor<T>(what: string, fn: () => Promise<T | undefined |
     } catch (err) {
       last = err;
     }
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}${last ? `: ${String(last)}` : ''}`);
+    if (Date.now() > deadline)
+      throw new Error(`timed out waiting for ${what}${last ? `: ${String(last)}` : ''}`);
     await sleep(100);
   }
 }

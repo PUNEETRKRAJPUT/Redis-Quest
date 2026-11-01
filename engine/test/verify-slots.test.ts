@@ -8,7 +8,10 @@ import { SLOT_FILES } from '../src/verify/slots.js';
 test('slot files match app/src/slots/registry.ts', () => {
   const file = join(dirname(fileURLToPath(import.meta.url)), '../../app/src/slots/registry.ts');
   const src = readFileSync(file, 'utf8');
-  const pairs = [...src.matchAll(/name:\s*'([^']+)',\s*file:\s*'([^']+)'/g)].map((m) => [m[1], m[2]]);
+  const pairs = [...src.matchAll(/name:\s*'([^']+)',\s*file:\s*'([^']+)'/g)].map((m) => [
+    m[1],
+    m[2],
+  ]);
   expect(pairs.length).toBeGreaterThan(0);
   expect(Object.fromEntries(pairs)).toEqual(SLOT_FILES);
 });

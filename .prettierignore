@@ -5,3 +5,12 @@ node_modules/
 fiction/*.json
 postgres/init/002-seed.sql.gz
 workspace/
+levels/
+scenarios/
+fiction/
+postgres/init/
+ui/e2e/screenshots/
+*.md
+*.yaml
+*.yml
+.github/

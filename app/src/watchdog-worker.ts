@@ -18,7 +18,16 @@ let reported = false;
 
 function write(level: number, msg: string, extra: Record<string, unknown>): void {
   // pino's line shape, so the engine's log tail and the UI treat it like any other app line.
-  const line = JSON.stringify({ level, time: Date.now(), pid: process.pid, name: 'app', instance: d.instance, ...extra, msg }) + '\n';
+  const line =
+    JSON.stringify({
+      level,
+      time: Date.now(),
+      pid: process.pid,
+      name: 'app',
+      instance: d.instance,
+      ...extra,
+      msg,
+    }) + '\n';
   try {
     writeSync(2, line);
   } catch {
@@ -48,9 +57,13 @@ setInterval(() => {
     reported = true;
     const i = Atomics.load(d.shared, 1);
     const slot = i > 0 ? d.slotNames[i - 1] : undefined;
-    write(50, 'event loop blocked: learner code is stuck in a synchronous loop and this app instance is frozen. Fix the file, then restart the app container.', {
-      blockedMs: now - lastChange,
-      suspectSlot: slot ?? null,
-    });
+    write(
+      50,
+      'event loop blocked: learner code is stuck in a synchronous loop and this app instance is frozen. Fix the file, then restart the app container.',
+      {
+        blockedMs: now - lastChange,
+        suspectSlot: slot ?? null,
+      },
+    );
   }
 }, 250);

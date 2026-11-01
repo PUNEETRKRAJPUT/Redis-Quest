@@ -55,10 +55,16 @@ export function isProgressFile(v: unknown): v is ProgressFile {
   const target = p.target as Record<string, unknown> | undefined;
   return (
     p.version === 1 &&
-    !!player && typeof player.id === 'string' && typeof player.name === 'string' && typeof player.createdAt === 'string' &&
-    !!target && typeof target.redisUrl === 'string' &&
+    !!player &&
+    typeof player.id === 'string' &&
+    typeof player.name === 'string' &&
+    typeof player.createdAt === 'string' &&
+    !!target &&
+    typeof target.redisUrl === 'string' &&
     Array.isArray(p.activeSlots) &&
-    !!p.levels && typeof p.levels === 'object' && !Array.isArray(p.levels) &&
+    !!p.levels &&
+    typeof p.levels === 'object' &&
+    !Array.isArray(p.levels) &&
     typeof p.xp === 'number' &&
     Array.isArray(p.badges)
   );
@@ -83,7 +89,8 @@ export async function readProgressFile(dir: string): Promise<ReadResult> {
   } catch (err) {
     return { kind: 'invalid', reason: `not valid JSON: ${(err as Error).message}` };
   }
-  if (!isProgressFile(parsed)) return { kind: 'invalid', reason: 'does not match schema version 1' };
+  if (!isProgressFile(parsed))
+    return { kind: 'invalid', reason: 'does not match schema version 1' };
   return { kind: 'ok', progress: parsed };
 }
 
@@ -91,7 +98,8 @@ export async function readProgressFile(dir: string): Promise<ReadResult> {
 export async function cleanTempFiles(dir: string): Promise<void> {
   try {
     for (const name of await readdir(dir)) {
-      if (name.startsWith(`${PROGRESS_FILE_NAME}.`) && name.endsWith('.tmp')) await rm(join(dir, name), { force: true });
+      if (name.startsWith(`${PROGRESS_FILE_NAME}.`) && name.endsWith('.tmp'))
+        await rm(join(dir, name), { force: true });
     }
   } catch {
     // directory may not exist yet
@@ -127,7 +135,13 @@ export function reconcileLevels(p: ProgressFile, orderedIds: readonly string[]):
   return changed;
 }
 
-export function newProgress(args: { id: string; name: string; redisUrl: string; activeSlots: string[]; now: Date }): ProgressFile {
+export function newProgress(args: {
+  id: string;
+  name: string;
+  redisUrl: string;
+  activeSlots: string[];
+  now: Date;
+}): ProgressFile {
   return {
     version: 1,
     player: { id: args.id, name: args.name, createdAt: args.now.toISOString() },

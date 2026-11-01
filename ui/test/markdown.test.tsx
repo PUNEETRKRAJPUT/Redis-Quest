@@ -18,7 +18,9 @@ describe('highlight', () => {
 
 describe('Markdown', () => {
   test('external links open in a new tab, raw html is dropped', () => {
-    const html = renderToStaticMarkup(<Markdown source={'[docs](https://redis.io/docs/latest/) <img src=x onerror=alert(1)>'} />);
+    const html = renderToStaticMarkup(
+      <Markdown source={'[docs](https://redis.io/docs/latest/) <img src=x onerror=alert(1)>'} />,
+    );
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).not.toContain('onerror');
@@ -28,7 +30,9 @@ describe('Markdown', () => {
     expect(html).not.toContain('href');
   });
   test('inline code, fenced blocks and indented blocks', () => {
-    const html = renderToStaticMarkup(<Markdown source={'Run `PING`.\n\n```redis\nGET a\n```\n\n    DBSIZE\n    (integer) 0\n'} />);
+    const html = renderToStaticMarkup(
+      <Markdown source={'Run `PING`.\n\n```redis\nGET a\n```\n\n    DBSIZE\n    (integer) 0\n'} />,
+    );
     expect(html).toContain('inline-code');
     expect(html.match(/class="codeblock"/g)).toHaveLength(2);
     expect(html).toContain('language-redis');

@@ -1,7 +1,17 @@
 import { SAMPLE } from '../showme/sample';
 import {
-  BitmapStreakView, CacheStatsView, GeoMapView, HashCardView, HllCounterView, JsonTreeView, KvCardView,
-  LeaderboardPanelView, ListFeedView, SetChipsView, StreamLogView, TtlTimerView,
+  BitmapStreakView,
+  CacheStatsView,
+  GeoMapView,
+  HashCardView,
+  HllCounterView,
+  JsonTreeView,
+  KvCardView,
+  LeaderboardPanelView,
+  ListFeedView,
+  SetChipsView,
+  StreamLogView,
+  TtlTimerView,
 } from '../showme/views';
 
 /** Every show-me view with fixed sample data. A reference page for content authors; not linked from the nav. */

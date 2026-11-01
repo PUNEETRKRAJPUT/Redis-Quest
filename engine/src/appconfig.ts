@@ -8,7 +8,11 @@ export interface AppConfig {
 
 export function etagOf(cfg: AppConfig): string {
   // Key order is fixed here so the same config always hashes the same.
-  const canonical = JSON.stringify([cfg.target.redisUrl, [...cfg.activeSlots], cfg.dbExtraLatencyMs]);
+  const canonical = JSON.stringify([
+    cfg.target.redisUrl,
+    [...cfg.activeSlots],
+    cfg.dbExtraLatencyMs,
+  ]);
   return createHash('sha1').update(canonical).digest('hex').slice(0, 16);
 }
 

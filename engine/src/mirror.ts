@@ -28,7 +28,10 @@ export class Mirror {
         await this.writeNow(snapshot);
         return true;
       } catch (err) {
-        this.log.warn({ err: (err as Error).message }, 'mirror write failed (progress.json is still correct)');
+        this.log.warn(
+          { err: (err as Error).message },
+          'mirror write failed (progress.json is still correct)',
+        );
         return false;
       }
     };
@@ -66,22 +69,40 @@ export class Mirror {
   async setGift(p: ProgressFile, remainingSeconds = GIFT_TTL_SECONDS): Promise<void> {
     if (remainingSeconds <= 0) return;
     try {
-      await this.redis.send(['SET', KEY_GIFT, `welcome gift for ${p.player.name} (${p.player.id})`, 'EX', String(Math.floor(remainingSeconds)), 'NX']);
+      await this.redis.send([
+        'SET',
+        KEY_GIFT,
+        `welcome gift for ${p.player.name} (${p.player.id})`,
+        'EX',
+        String(Math.floor(remainingSeconds)),
+        'NX',
+      ]);
     } catch (err) {
       this.log.warn({ err: (err as Error).message }, 'welcome gift write failed');
     }
   }
 
   /** Whether the mirror is present and agrees with the file. */
-  async status(p: ProgressFile): Promise<{ present: boolean; inSync: boolean; expectedLevels: number; mirroredLevels: number }> {
+  async status(p: ProgressFile): Promise<{
+    present: boolean;
+    inSync: boolean;
+    expectedLevels: number;
+    mirroredLevels: number;
+  }> {
     const expected = Object.keys(p.levels).length;
     try {
-      const hash = (await this.redis.send<Record<string, string> | unknown[]>(['HGETALL', KEY_PROGRESS])) as unknown[];
+      const hash = (await this.redis.send<Record<string, string> | unknown[]>([
+        'HGETALL',
+        KEY_PROGRESS,
+      ])) as unknown[];
       const mirrored: Record<string, string> = {};
       for (let i = 0; i + 1 < hash.length; i += 2) mirrored[String(hash[i])] = String(hash[i + 1]);
       const n = Object.keys(mirrored).length;
       const player = (await this.redis.send<number>(['EXISTS', keyPlayer(p.player.id)])) === 1;
-      const inSync = player && n === expected && Object.entries(p.levels).every(([id, l]) => mirrored[id] === l.status);
+      const inSync =
+        player &&
+        n === expected &&
+        Object.entries(p.levels).every(([id, l]) => mirrored[id] === l.status);
       return { present: n > 0 && player, inSync, expectedLevels: expected, mirroredLevels: n };
     } catch {
       return { present: false, inSync: false, expectedLevels: expected, mirroredLevels: 0 };

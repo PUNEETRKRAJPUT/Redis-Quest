@@ -19,7 +19,9 @@ const RING = 2000;
 const LATEST_MAX = 500;
 
 function isOwnProgress(d: LevelEventData): boolean {
-  return d.kind === 'custom' && typeof d.name === 'string' && d.name.startsWith(VERIFY_EVENT_PREFIX);
+  return (
+    d.kind === 'custom' && typeof d.name === 'string' && d.name.startsWith(VERIFY_EVENT_PREFIX)
+  );
 }
 
 export class EventLog {
@@ -29,7 +31,8 @@ export class EventLog {
 
   constructor(bus?: Pick<EventBus, 'subscribe' | 'since'>) {
     if (!bus) return;
-    for (const e of bus.since()) if (e.type === 'level.event') this.add(e.at, e.data as LevelEventData);
+    for (const e of bus.since())
+      if (e.type === 'level.event') this.add(e.at, e.data as LevelEventData);
     bus.subscribe((e: EngineEvent) => {
       if (e.type === 'level.event') this.add(e.at, e.data as LevelEventData);
     });
@@ -50,7 +53,8 @@ export class EventLog {
     const key = `${data.kind}|${data.name ?? ''}|${payload}`;
     this.latest.delete(key);
     this.latest.set(key, e);
-    if (this.latest.size > LATEST_MAX) this.latest.delete(this.latest.keys().next().value as string);
+    if (this.latest.size > LATEST_MAX)
+      this.latest.delete(this.latest.keys().next().value as string);
     for (const l of this.listeners) l(e);
   }
 
@@ -77,9 +81,14 @@ function looseEqual(a: unknown, b: JsonValue): boolean {
   if (b === null || typeof b !== 'object') {
     if (a === b) return true;
     // Event payloads come from JSON bodies and Redis messages, so "42" and 42 are the same fact.
-    return (typeof a === 'string' || typeof a === 'number') && (typeof b === 'string' || typeof b === 'number') && String(a) === String(b);
+    return (
+      (typeof a === 'string' || typeof a === 'number') &&
+      (typeof b === 'string' || typeof b === 'number') &&
+      String(a) === String(b)
+    );
   }
-  if (Array.isArray(b)) return Array.isArray(a) && a.length === b.length && b.every((x, i) => looseEqual(a[i], x));
+  if (Array.isArray(b))
+    return Array.isArray(a) && a.length === b.length && b.every((x, i) => looseEqual(a[i], x));
   if (!a || typeof a !== 'object' || Array.isArray(a)) return false;
   return Object.entries(b).every(([k, v]) => looseEqual((a as Record<string, unknown>)[k], v));
 }
@@ -93,7 +102,8 @@ export function eventMatches(v: Pick<EventVerifier, 'kind' | 'match'>, d: LevelE
   if (d.kind !== v.kind) return false;
   for (const [k, want] of Object.entries(v.match ?? {})) {
     const top = (d as unknown as Record<string, unknown>)[k];
-    const nested = d.data && typeof d.data === 'object' ? (d.data as Record<string, unknown>)[k] : undefined;
+    const nested =
+      d.data && typeof d.data === 'object' ? (d.data as Record<string, unknown>)[k] : undefined;
     if (!looseEqual(top !== undefined ? top : nested, want)) return false;
   }
   return true;
@@ -133,10 +143,20 @@ export interface EventOutcome {
   waitedMs: number;
 }
 
-export async function waitForEvent(log: EventLog, v: Pick<EventVerifier, 'kind' | 'match'>, opts: EventWaitOptions): Promise<EventOutcome> {
+export async function waitForEvent(
+  log: EventLog,
+  v: Pick<EventVerifier, 'kind' | 'match'>,
+  opts: EventWaitOptions,
+): Promise<EventOutcome> {
   const since = opts.sinceIso ? Date.parse(opts.sinceIso) : 0;
   const past = log.since(Number.isNaN(since) ? 0 : since).find((e) => eventMatches(v, e.data));
-  if (past) return { ok: true, how: 'already_happened', event: { at: past.at, data: past.data }, waitedMs: 0 };
+  if (past)
+    return {
+      ok: true,
+      how: 'already_happened',
+      event: { at: past.at, data: past.data },
+      waitedMs: 0,
+    };
   if (opts.waitMs <= 0) return { ok: false, how: 'timeout', waitedMs: 0 };
 
   const started = Date.now();
@@ -152,13 +172,28 @@ export async function waitForEvent(log: EventLog, v: Pick<EventVerifier, 'kind' 
       resolve(o);
     };
     const off = log.onEvent((e) => {
-      if (eventMatches(v, e.data)) finish({ ok: true, how: 'arrived', event: { at: e.at, data: e.data }, waitedMs: Date.now() - started });
+      if (eventMatches(v, e.data))
+        finish({
+          ok: true,
+          how: 'arrived',
+          event: { at: e.at, data: e.data },
+          waitedMs: Date.now() - started,
+        });
     });
-    const timer = setTimeout(() => finish({ ok: false, how: 'timeout', waitedMs: Date.now() - started }), opts.waitMs);
+    const timer = setTimeout(
+      () => finish({ ok: false, how: 'timeout', waitedMs: Date.now() - started }),
+      opts.waitMs,
+    );
     if (opts.subscribe) {
       opts
         .subscribe((data) => {
-          if (eventMatches(v, data)) finish({ ok: true, how: 'arrived', event: { at: new Date().toISOString(), data }, waitedMs: Date.now() - started });
+          if (eventMatches(v, data))
+            finish({
+              ok: true,
+              how: 'arrived',
+              event: { at: new Date().toISOString(), data },
+              waitedMs: Date.now() - started,
+            });
         })
         .then((unsub) => {
           if (done) void Promise.resolve(unsub()).catch(() => undefined);

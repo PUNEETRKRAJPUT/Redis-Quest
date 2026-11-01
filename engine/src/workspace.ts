@@ -2,12 +2,26 @@ import { lstat, mkdir, readdir, readFile, realpath, stat } from 'node:fs/promise
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { writeFileAtomic } from './progress.js';
 
-export const ALLOWED_EXTENSIONS = ['.js', '.mjs', '.md', '.redis', '.sh', '.yaml', '.json'] as const;
+export const ALLOWED_EXTENSIONS = [
+  '.js',
+  '.mjs',
+  '.md',
+  '.redis',
+  '.sh',
+  '.yaml',
+  '.json',
+] as const;
 export const MAX_FILE_BYTES = 1024 * 1024;
 
 export class WorkspaceError extends Error {
   constructor(
-    readonly code: 'invalid_path' | 'path_escapes_workspace' | 'extension_not_allowed' | 'not_found' | 'too_large' | 'not_a_file',
+    readonly code:
+      | 'invalid_path'
+      | 'path_escapes_workspace'
+      | 'extension_not_allowed'
+      | 'not_found'
+      | 'too_large'
+      | 'not_a_file',
     message: string,
   ) {
     super(message);
@@ -21,14 +35,17 @@ export function hasAllowedExtension(p: string): boolean {
 
 /** Pure check on the text of a relative path, before touching the disk. */
 export function validateRelative(rel: unknown): string {
-  if (typeof rel !== 'string' || rel.length === 0) throw new WorkspaceError('invalid_path', 'path is required');
+  if (typeof rel !== 'string' || rel.length === 0)
+    throw new WorkspaceError('invalid_path', 'path is required');
   if (rel.includes('\0')) throw new WorkspaceError('invalid_path', 'path contains a NUL byte');
   if (isAbsolute(rel) || rel.startsWith('/') || rel.startsWith('\\') || /^[a-zA-Z]:/.test(rel)) {
     throw new WorkspaceError('invalid_path', 'path must be relative to the workspace');
   }
   const parts = rel.split(/[\\/]/);
-  if (parts.some((s) => s === '..')) throw new WorkspaceError('invalid_path', 'path may not contain ..');
-  if (parts.some((s) => s === '')) throw new WorkspaceError('invalid_path', 'path has an empty segment');
+  if (parts.some((s) => s === '..'))
+    throw new WorkspaceError('invalid_path', 'path may not contain ..');
+  if (parts.some((s) => s === ''))
+    throw new WorkspaceError('invalid_path', 'path has an empty segment');
   return parts.join('/');
 }
 
@@ -45,12 +62,17 @@ export async function resolveInside(root: string, rel: unknown): Promise<string>
   const clean = validateRelative(rel);
   const realRoot = await realpath(root);
   const target = resolve(realRoot, clean);
-  if (!inside(realRoot, target)) throw new WorkspaceError('invalid_path', 'path leaves the workspace');
+  if (!inside(realRoot, target))
+    throw new WorkspaceError('invalid_path', 'path leaves the workspace');
   let probe = target;
   for (;;) {
     try {
       const real = await realpath(probe);
-      if (!inside(realRoot, real)) throw new WorkspaceError('path_escapes_workspace', 'a symlink in this path points outside the workspace');
+      if (!inside(realRoot, real))
+        throw new WorkspaceError(
+          'path_escapes_workspace',
+          'a symlink in this path points outside the workspace',
+        );
       return target;
     } catch (err) {
       if (err instanceof WorkspaceError) throw err;
@@ -97,28 +119,52 @@ export async function listTree(root: string): Promise<TreeEntry[]> {
   return out;
 }
 
-export async function readWorkspaceFile(root: string, rel: unknown): Promise<{ path: string; content: string; size: number; mtime: string }> {
+export async function readWorkspaceFile(
+  root: string,
+  rel: unknown,
+): Promise<{ path: string; content: string; size: number; mtime: string }> {
   const clean = validateRelative(rel);
-  if (!hasAllowedExtension(clean)) throw new WorkspaceError('extension_not_allowed', `only ${ALLOWED_EXTENSIONS.join(' ')} files are available`);
+  if (!hasAllowedExtension(clean))
+    throw new WorkspaceError(
+      'extension_not_allowed',
+      `only ${ALLOWED_EXTENSIONS.join(' ')} files are available`,
+    );
   const abs = await resolveInside(root, clean);
   let st;
   try {
     st = await stat(abs);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') throw new WorkspaceError('not_found', `${clean} does not exist`);
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT')
+      throw new WorkspaceError('not_found', `${clean} does not exist`);
     throw err;
   }
   if (!st.isFile()) throw new WorkspaceError('not_a_file', `${clean} is not a file`);
-  if (st.size > MAX_FILE_BYTES) throw new WorkspaceError('too_large', `${clean} is larger than ${MAX_FILE_BYTES} bytes`);
-  return { path: clean, content: await readFile(abs, 'utf8'), size: st.size, mtime: st.mtime.toISOString() };
+  if (st.size > MAX_FILE_BYTES)
+    throw new WorkspaceError('too_large', `${clean} is larger than ${MAX_FILE_BYTES} bytes`);
+  return {
+    path: clean,
+    content: await readFile(abs, 'utf8'),
+    size: st.size,
+    mtime: st.mtime.toISOString(),
+  };
 }
 
-export async function writeWorkspaceFile(root: string, rel: unknown, content: unknown): Promise<{ path: string; size: number }> {
+export async function writeWorkspaceFile(
+  root: string,
+  rel: unknown,
+  content: unknown,
+): Promise<{ path: string; size: number }> {
   const clean = validateRelative(rel);
-  if (!hasAllowedExtension(clean)) throw new WorkspaceError('extension_not_allowed', `only ${ALLOWED_EXTENSIONS.join(' ')} files can be written`);
-  if (typeof content !== 'string') throw new WorkspaceError('invalid_path', 'content must be a string');
+  if (!hasAllowedExtension(clean))
+    throw new WorkspaceError(
+      'extension_not_allowed',
+      `only ${ALLOWED_EXTENSIONS.join(' ')} files can be written`,
+    );
+  if (typeof content !== 'string')
+    throw new WorkspaceError('invalid_path', 'content must be a string');
   const size = Buffer.byteLength(content, 'utf8');
-  if (size > MAX_FILE_BYTES) throw new WorkspaceError('too_large', `content is larger than ${MAX_FILE_BYTES} bytes`);
+  if (size > MAX_FILE_BYTES)
+    throw new WorkspaceError('too_large', `content is larger than ${MAX_FILE_BYTES} bytes`);
   await mkdir(root, { recursive: true });
   const abs = await resolveInside(root, clean);
   await mkdir(dirname(abs), { recursive: true });

@@ -13,5 +13,8 @@ export function createLogger(logDir: string): Logger {
     // A read-only or missing log dir must not stop the game.
     console.error(`engine: cannot write ${logDir}/engine/engine.log: ${(err as Error).message}`);
   }
-  return pino({ level: process.env.LOG_LEVEL ?? 'info', base: { service: 'engine' } }, pino.multistream(streams));
+  return pino(
+    { level: process.env.LOG_LEVEL ?? 'info', base: { service: 'engine' } },
+    pino.multistream(streams),
+  );
 }

@@ -5,13 +5,24 @@ import { loadChapter } from '@quest/shared';
 import { buildIdeal, idealAccess, solutionComments } from '../src/verify/ideal.js';
 
 const LEVELS = join(dirname(fileURLToPath(import.meta.url)), '../../levels/_examples');
-const ctx = (id: string, ch: string) => ({ player: { id: 'p-1', name: 'Asha' }, level: { id }, chapter: { id: ch }, env: {} });
+const ctx = (id: string, ch: string) => ({
+  player: { id: 'p-1', name: 'Asha' },
+  level: { id },
+  chapter: { id: ch },
+  env: {},
+});
 
 describe('ideal', () => {
   test('access: passed, or 3 attempts', () => {
     expect(idealAccess('passed', 1).allowed).toBe(true);
-    expect(idealAccess('in_progress', 3)).toEqual({ allowed: true, reason: 'Shown after 3 attempts (3 so far).' });
-    expect(idealAccess('in_progress', 2)).toEqual({ allowed: false, reason: 'Not passed yet, and 2 of 3 attempts used. You can still reveal it.' });
+    expect(idealAccess('in_progress', 3)).toEqual({
+      allowed: true,
+      reason: 'Shown after 3 attempts (3 so far).',
+    });
+    expect(idealAccess('in_progress', 2)).toEqual({
+      allowed: false,
+      reason: 'Not passed yet, and 2 of 3 attempts used. You can still reveal it.',
+    });
   });
   test('comments per file type', () => {
     expect(solutionComments('a.redis', '# one\nZADD k 1 m\n# two')).toEqual(['one', 'two']);
@@ -27,7 +38,9 @@ describe('ideal', () => {
     expect(i.reference.content).toContain('ZADD lb:hostel:h-c-02-2 120 user:p-1');
     expect(i.wrong.map((w) => w.expect)).toEqual(['wrong', 'works_but_wrong']);
     expect(i.reasoning).toMatch(/^Reference: one sorted set is the whole scoreboard/);
-    expect(i.reasoning).toContain('- solutions/01-wrong-zadd-twice.redis (wrong): The second ZADD replaces');
+    expect(i.reasoning).toContain(
+      '- solutions/01-wrong-zadd-twice.redis (wrong): The second ZADD replaces',
+    );
   });
   test('decision level: correct options and explanations', async () => {
     const r = await loadChapter(join(LEVELS, 'example-decision'));

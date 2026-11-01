@@ -13,7 +13,9 @@ export function validateRegistry(defs: readonly SlotDef[]): string[] {
     names.add(d.name);
     const norm = path.posix.normalize(d.file);
     if (path.posix.isAbsolute(d.file) || norm.startsWith('..') || norm !== d.file) {
-      problems.push(`${d.name}: file must be a plain relative path inside the workspace (got ${d.file})`);
+      problems.push(
+        `${d.name}: file must be a plain relative path inside the workspace (got ${d.file})`,
+      );
     }
     if (!/^ch[0-9][a-z0-9]*\/[a-z0-9][a-z0-9-]*\.m?js$/.test(d.file)) {
       problems.push(`${d.name}: file must look like chN/some-name.js (got ${d.file})`);
@@ -22,7 +24,8 @@ export function validateRegistry(defs: readonly SlotDef[]): string[] {
     if (targets.has(target)) problems.push(`${d.name}: ${target} is already used by another slot`);
     targets.add(target);
     if (typeof d.baseline !== 'function') problems.push(`${d.name}: baseline must be a function`);
-    if (!/^\(deps(, [a-zA-Z]+)*\)$/.test(d.signature)) problems.push(`${d.name}: signature must look like (deps, arg)`);
+    if (!/^\(deps(, [a-zA-Z]+)*\)$/.test(d.signature))
+      problems.push(`${d.name}: signature must look like (deps, arg)`);
   }
   return problems;
 }

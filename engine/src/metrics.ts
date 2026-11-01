@@ -25,18 +25,23 @@ interface Sample {
 export function parsePush(body: unknown): MetricsPush {
   if (!body || typeof body !== 'object') throw new Error('body must be an object');
   const b = body as Record<string, unknown>;
-  if (typeof b.instanceId !== 'string' || !b.instanceId || b.instanceId.length > 100) throw new Error('instanceId must be a non-empty string');
-  if (b.at !== undefined && (typeof b.at !== 'number' || !Number.isFinite(b.at))) throw new Error('at must be epoch milliseconds');
-  if (!b.routes || typeof b.routes !== 'object' || Array.isArray(b.routes)) throw new Error('routes must be an object');
+  if (typeof b.instanceId !== 'string' || !b.instanceId || b.instanceId.length > 100)
+    throw new Error('instanceId must be a non-empty string');
+  if (b.at !== undefined && (typeof b.at !== 'number' || !Number.isFinite(b.at)))
+    throw new Error('at must be epoch milliseconds');
+  if (!b.routes || typeof b.routes !== 'object' || Array.isArray(b.routes))
+    throw new Error('routes must be an object');
   const routes: Record<string, RouteStat> = {};
   for (const [name, v] of Object.entries(b.routes as Record<string, unknown>)) {
     if (!v || typeof v !== 'object') throw new Error(`routes.${name} must be an object`);
     const s = v as Record<string, unknown>;
     for (const k of ['count', 'errors', 'p50Ms', 'p99Ms']) {
-      if (typeof s[k] !== 'number' || !Number.isFinite(s[k])) throw new Error(`routes.${name}.${k} must be a number`);
+      if (typeof s[k] !== 'number' || !Number.isFinite(s[k]))
+        throw new Error(`routes.${name}.${k} must be a number`);
     }
     const stat: Record<string, number> = {};
-    for (const [k, val] of Object.entries(s)) if (typeof val === 'number' && Number.isFinite(val)) stat[k] = val;
+    for (const [k, val] of Object.entries(s))
+      if (typeof val === 'number' && Number.isFinite(val)) stat[k] = val;
     routes[name] = stat as RouteStat;
   }
   return { instanceId: b.instanceId, at: b.at as number | undefined, routes };

@@ -31,7 +31,12 @@ function fromCdf(cdf: Float64Array, r: number): number {
  * Returns a sampler of indexes in [0, n). Zipf: P(rank k) is proportional to 1 / k^skew, rank 1
  * (index 0) the hottest, which is how one celebrity player becomes the hot key.
  */
-export function indexSampler(n: number, dist: Distribution, rand: () => number, skew = 1): () => number {
+export function indexSampler(
+  n: number,
+  dist: Distribution,
+  rand: () => number,
+  skew = 1,
+): () => number {
   if (dist === 'uniform') return () => Math.min(n - 1, Math.floor(rand() * n));
   const cdf = new Float64Array(n);
   let sum = 0;
@@ -42,7 +47,10 @@ export function indexSampler(n: number, dist: Distribution, rand: () => number, 
   return () => fromCdf(cdf, rand());
 }
 
-export function weightedPicker<T extends { weight: number }>(items: readonly T[], rand: () => number): () => T {
+export function weightedPicker<T extends { weight: number }>(
+  items: readonly T[],
+  rand: () => number,
+): () => T {
   const cdf = new Float64Array(items.length);
   let sum = 0;
   items.forEach((it, i) => {
@@ -74,7 +82,8 @@ function fill(s: string, vars: Record<string, string>, encode = false): string {
 function fillDeep(v: unknown, vars: Record<string, string>): unknown {
   if (typeof v === 'string') return fill(v, vars);
   if (Array.isArray(v)) return v.map((x) => fillDeep(x, vars));
-  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fillDeep(x, vars)]));
+  if (v && typeof v === 'object')
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fillDeep(x, vars)]));
   return v;
 }
 
@@ -83,10 +92,16 @@ export function requestFactory(s: Scenario, seed = s.seed): () => PlannedRequest
   const rand = rng(seed);
   const pickRequest = weightedPicker<ScenarioRequest>(s.requests, rand);
   const pickUser = indexSampler(s.users.count, s.users.distribution, rand, s.users.zipfSkew);
-  const pools = Object.entries(s.params).map(([name, p]) => ({ name, values: p.values, pick: indexSampler(p.values.length, p.distribution, rand, p.zipfSkew) }));
+  const pools = Object.entries(s.params).map(([name, p]) => ({
+    name,
+    values: p.values,
+    pick: indexSampler(p.values.length, p.distribution, rand, p.zipfSkew),
+  }));
   return () => {
     const req = pickRequest();
-    const vars: Record<string, string> = { user: userId(s.users.idPattern, s.users.pad, pickUser() + 1) };
+    const vars: Record<string, string> = {
+      user: userId(s.users.idPattern, s.users.pad, pickUser() + 1),
+    };
     for (const p of pools) vars[p.name] = p.values[p.pick()] as string;
     const headers: Record<string, string> = {};
     if (req.userIdHeader) headers[req.userIdHeader] = vars.user as string;

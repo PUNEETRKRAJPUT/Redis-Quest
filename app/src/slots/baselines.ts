@@ -15,7 +15,10 @@ export async function getPlayerStats(deps: LearnerDeps, playerId: string): Promi
  * also writes an outbox row through the P0-04 trigger. players has no updated_at column.
  */
 export async function invalidatePlayerStats(deps: LearnerDeps, playerId: string): Promise<unknown> {
-  const { rows } = await deps.db.query('UPDATE players SET name = name WHERE id = $1 RETURNING id', [playerId]);
+  const { rows } = await deps.db.query(
+    'UPDATE players SET name = name WHERE id = $1 RETURNING id',
+    [playerId],
+  );
   return { touched: rows.length };
 }
 
@@ -47,7 +50,11 @@ export async function createSession(_deps: LearnerDeps, user: SessionUser): Prom
     const oldest = sessions.keys().next().value;
     if (oldest !== undefined) sessions.delete(oldest);
   }
-  sessions.set(sid, { userId: user.id, name: user.display_name, createdAt: new Date().toISOString() });
+  sessions.set(sid, {
+    userId: user.id,
+    name: user.display_name,
+    createdAt: new Date().toISOString(),
+  });
   return sid;
 }
 
@@ -56,7 +63,11 @@ export async function getSession(_deps: LearnerDeps, sid: string): Promise<unkno
 }
 
 /** Chapter 3 leaderboard: ORDER BY over the unindexed contest_entries table on every read. */
-export async function leaderboardTop(deps: LearnerDeps, contestId: number, limit: number): Promise<unknown> {
+export async function leaderboardTop(
+  deps: LearnerDeps,
+  contestId: number,
+  limit: number,
+): Promise<unknown> {
   const { rows } = await deps.db.query(
     `SELECT fantasy_team_id, user_id, points FROM contest_entries
       WHERE contest_id = $1 ORDER BY points DESC, id LIMIT $2`,

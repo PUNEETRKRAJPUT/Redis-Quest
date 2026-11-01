@@ -4,7 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { summarizeAutocannon } from '../src/load/run.js';
 import { indexSampler, requestFactory, rng, userId, weightedPicker } from '../src/load/sample.js';
-import { applyCaps, loadScenario, parseScenario, ScenarioError, scenarioHash } from '../src/load/scenario.js';
+import {
+  applyCaps,
+  loadScenario,
+  parseScenario,
+  ScenarioError,
+  scenarioHash,
+} from '../src/load/scenario.js';
 import { loadCaps } from '../src/verify/config.js';
 
 const SCENARIOS = join(dirname(fileURLToPath(import.meta.url)), '../../scenarios');
@@ -20,15 +26,25 @@ const base = {
 describe('parseScenario', () => {
   test('defaults: pipelining 1, seed 1, weight 1, idPattern u-{n} padded to 6', () => {
     const s = parseScenario(base, 'demo');
-    expect(s).toMatchObject({ pipelining: 1, seed: 1, users: { idPattern: 'u-{n}', pad: 6 }, requests: [{ weight: 1, method: 'GET' }], params: {} });
+    expect(s).toMatchObject({
+      pipelining: 1,
+      seed: 1,
+      users: { idPattern: 'u-{n}', pad: 6 },
+      requests: [{ weight: 1, method: 'GET' }],
+      params: {},
+    });
   });
   test('rejects what can never be right', () => {
-    const bad = (patch: object, msg: RegExp) => expect(() => parseScenario({ ...base, ...patch }, 'demo')).toThrow(msg);
+    const bad = (patch: object, msg: RegExp) =>
+      expect(() => parseScenario({ ...base, ...patch }, 'demo')).toThrow(msg);
     bad({ id: 'other' }, /id must be demo/);
     bad({ extra: 1 }, /unknown key 'extra'/);
     bad({ durationSec: 0 }, /durationSec must be an integer/);
     bad({ users: { count: 10, distribution: 'zipf' } }, /zipfSkew must be a number/);
-    bad({ users: { count: 10, distribution: 'uniform', zipfSkew: 1 } }, /only used with distribution: zipf/);
+    bad(
+      { users: { count: 10, distribution: 'uniform', zipfSkew: 1 } },
+      /only used with distribution: zipf/,
+    );
     bad({ requests: [{ method: 'GET', path: '/players/1' }] }, /must start with \/app\//);
     bad({ requests: [{ method: 'GET', path: '/app/x/{nope}' }] }, /\{nope\}/);
     bad({ requests: [{ method: 'BREW', path: '/app/x' }] }, /method must be one of/);
@@ -39,32 +55,51 @@ describe('parseScenario', () => {
   test('every file in scenarios/ parses and its id matches its name', async () => {
     const files = readdirSync(SCENARIOS).filter((f) => f.endsWith('.yaml'));
     expect(files.length).toBeGreaterThan(0);
-    for (const f of files) await expect(loadScenario(SCENARIOS, f.replace(/\.yaml$/, ''))).resolves.toBeTruthy();
+    for (const f of files)
+      await expect(loadScenario(SCENARIOS, f.replace(/\.yaml$/, ''))).resolves.toBeTruthy();
   });
   test('missing scenario', async () => {
-    await expect(loadScenario(SCENARIOS, 'no-such-scenario')).rejects.toThrow('scenarios/no-such-scenario.yaml does not exist');
+    await expect(loadScenario(SCENARIOS, 'no-such-scenario')).rejects.toThrow(
+      'scenarios/no-such-scenario.yaml does not exist',
+    );
   });
   test('hash changes with content', () => {
-    expect(scenarioHash(parseScenario(base))).not.toBe(scenarioHash(parseScenario({ ...base, connections: 51 })));
+    expect(scenarioHash(parseScenario(base))).not.toBe(
+      scenarioHash(parseScenario({ ...base, connections: 51 })),
+    );
   });
 });
 
 describe('caps', () => {
   test('defaults 200 connections, 30 s; LOW_POWER halves both', () => {
     expect(loadCaps({})).toEqual({ maxConnections: 200, maxDurationSec: 30, lowPower: false });
-    expect(loadCaps({ LOW_POWER: '1' })).toEqual({ maxConnections: 100, maxDurationSec: 15, lowPower: true });
-    expect(loadCaps({ LOAD_MAX_CONNECTIONS: '40', LOAD_MAX_DURATION_SEC: '8', LOW_POWER: '1' })).toEqual({ maxConnections: 20, maxDurationSec: 4, lowPower: true });
+    expect(loadCaps({ LOW_POWER: '1' })).toEqual({
+      maxConnections: 100,
+      maxDurationSec: 15,
+      lowPower: true,
+    });
+    expect(
+      loadCaps({ LOAD_MAX_CONNECTIONS: '40', LOAD_MAX_DURATION_SEC: '8', LOW_POWER: '1' }),
+    ).toEqual({ maxConnections: 20, maxDurationSec: 4, lowPower: true });
     expect(loadCaps({ LOAD_MAX_CONNECTIONS: 'abc' }).maxConnections).toBe(200);
   });
   test('applyCaps clamps the scenario and the warmup, and says so', () => {
-    const s = parseScenario({ ...base, connections: 500, durationSec: 60, warmup: { durationSec: 20, connections: 300 } });
+    const s = parseScenario({
+      ...base,
+      connections: 500,
+      durationSec: 60,
+      warmup: { durationSec: 20, connections: 300 },
+    });
     expect(applyCaps(s, loadCaps({}))).toEqual({
       connections: 200,
       durationSec: 30,
       warmup: { durationSec: 20, connections: 200 },
       capped: { connections: true, durationSec: true },
     });
-    expect(applyCaps(parseScenario(base), loadCaps({})).capped).toEqual({ connections: false, durationSec: false });
+    expect(applyCaps(parseScenario(base), loadCaps({})).capped).toEqual({
+      connections: false,
+      durationSec: false,
+    });
   });
 });
 
@@ -97,7 +132,13 @@ describe('sampling (deterministic with a seed)', () => {
     expect(counts[1]).toBeGreaterThan(counts[9]);
   });
   test('weighted mix', () => {
-    const pick = weightedPicker([{ id: 'a', weight: 3 }, { id: 'b', weight: 1 }], rng(3));
+    const pick = weightedPicker(
+      [
+        { id: 'a', weight: 3 },
+        { id: 'b', weight: 1 },
+      ],
+      rng(3),
+    );
     let a = 0;
     for (let i = 0; i < 40_000; i++) if (pick().id === 'a') a += 1;
     expect(a / 40_000).toBeCloseTo(0.75, 1);
@@ -106,7 +147,10 @@ describe('sampling (deterministic with a seed)', () => {
     const s = parseScenario({
       ...base,
       params: { player: { values: ['p-028', 'p-101'], distribution: 'uniform' } },
-      requests: [{ method: 'GET', path: '/app/players/{player}/stats', userIdHeader: 'x-user-id' }, { method: 'POST', path: '/app/login', weight: 1, body: { userId: '{user}' } }],
+      requests: [
+        { method: 'GET', path: '/app/players/{player}/stats', userIdHeader: 'x-user-id' },
+        { method: 'POST', path: '/app/login', weight: 1, body: { userId: '{user}' } },
+      ],
     });
     const f1 = requestFactory(s, 9);
     const f2 = requestFactory(s, 9);
@@ -132,7 +176,12 @@ describe('summarizeAutocannon', () => {
         timeouts: 2,
         non2xx: 40,
         '2xx': 950,
-        statusCodeStats: { '200': { count: 950 }, '404': { count: 20 }, '429': { count: 10 }, '503': { count: 10 } },
+        statusCodeStats: {
+          '200': { count: 950 },
+          '404': { count: 20 },
+          '429': { count: 10 },
+          '503': { count: 10 },
+        },
         start: new Date(),
         finish: new Date(),
       },

@@ -25,7 +25,10 @@ export function EditorPanel({ chapter, height = 420 }: { chapter?: string; heigh
   const files = useMemo(() => (entries ?? []).filter((e) => e.type === 'file'), [entries]);
 
   useEffect(() => {
-    api.tree().then((t) => setEntries(t.entries)).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    api
+      .tree()
+      .then((t) => setEntries(t.entries))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
   const open = useCallback(async (p: string) => {
@@ -42,8 +45,13 @@ export function EditorPanel({ chapter, height = 420 }: { chapter?: string; heigh
 
   useEffect(() => {
     if (!path && files.length) {
-      const mine = chapter ? files.find((f) => f.path.startsWith(`${chapter}/`) && f.editable !== false) : undefined;
-      void open((mine ?? files.find((f) => f.editable !== false && !f.path.startsWith('_')) ?? files[0])?.path ?? '');
+      const mine = chapter
+        ? files.find((f) => f.path.startsWith(`${chapter}/`) && f.editable !== false)
+        : undefined;
+      void open(
+        (mine ?? files.find((f) => f.editable !== false && !f.path.startsWith('_')) ?? files[0])
+          ?.path ?? '',
+      );
     }
   }, [files, chapter, path, open]);
 
@@ -66,7 +74,13 @@ export function EditorPanel({ chapter, height = 420 }: { chapter?: string; heigh
       <nav className="filelist" aria-label="Workspace files">
         {files.length === 0 ? <p className="muted pad">workspace/ is empty.</p> : null}
         {files.map((f) => (
-          <button key={f.path} type="button" className={f.path === path ? 'file active' : 'file'} onClick={() => void open(f.path)} aria-current={f.path === path}>
+          <button
+            key={f.path}
+            type="button"
+            className={f.path === path ? 'file active' : 'file'}
+            onClick={() => void open(f.path)}
+            aria-current={f.path === path}
+          >
             {f.path}
           </button>
         ))}
@@ -74,20 +88,33 @@ export function EditorPanel({ chapter, height = 420 }: { chapter?: string; heigh
       <div className="editor-main">
         <div className="editor-bar">
           <code>{path ? `workspace/${path}` : 'no file open'}</code>
-          <span className="muted">{dirty ? 'unsaved changes' : note ?? ''}</span>
-          <button type="button" className="btn small" onClick={() => void save()} disabled={!path || !dirty}>Save</button>
+          <span className="muted">{dirty ? 'unsaved changes' : (note ?? '')}</span>
+          <button
+            type="button"
+            className="btn small"
+            onClick={() => void save()}
+            disabled={!path || !dirty}
+          >
+            Save
+          </button>
         </div>
         <div className="editor-host">
           {path ? (
             <Suspense fallback={<p className="muted pad">Loading the editor...</p>}>
-              <MonacoEditor value={text} language={langOf(path)} onChange={setText} onSave={() => void save()} />
+              <MonacoEditor
+                value={text}
+                language={langOf(path)}
+                onChange={setText}
+                onSave={() => void save()}
+              />
             </Suspense>
           ) : (
             <p className="muted pad">Pick a file on the left.</p>
           )}
         </div>
         <p className="muted editor-foot">
-          Prefer your own editor? Open the same file in VS Code: <code>code workspace/{path ?? '<file>'}</code>. The game reads what is on disk.
+          Prefer your own editor? Open the same file in VS Code:{' '}
+          <code>code workspace/{path ?? '<file>'}</code>. The game reads what is on disk.
         </p>
       </div>
     </div>

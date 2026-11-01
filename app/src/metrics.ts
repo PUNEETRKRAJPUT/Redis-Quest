@@ -52,7 +52,14 @@ export class MetricsRecorder {
   readonly totals: Record<string, RouteTotals> = {};
 
   record(route: string, s: Sample): void {
-    const t = (this.totals[route] ??= { count: 0, errors: 0, dbQueries: 0, redisCommands: 0, noDbCount: 0, slotErrors: 0 });
+    const t = (this.totals[route] ??= {
+      count: 0,
+      errors: 0,
+      dbQueries: 0,
+      redisCommands: 0,
+      noDbCount: 0,
+      slotErrors: 0,
+    });
     t.count += 1;
     if (s.status >= 500) t.errors += 1;
     t.dbQueries += s.dbQueries;

@@ -18,8 +18,13 @@ export function parseAppConfig(body: unknown): AppConfig {
     throw new Error('activeSlots must be a list of strings');
   }
   const lat = b.dbExtraLatencyMs ?? 0;
-  if (typeof lat !== 'number' || !Number.isFinite(lat) || lat < 0) throw new Error('dbExtraLatencyMs must be >= 0');
-  return { target: { redisUrl: target.redisUrl }, activeSlots: [...b.activeSlots] as string[], dbExtraLatencyMs: Math.min(lat, 5000) };
+  if (typeof lat !== 'number' || !Number.isFinite(lat) || lat < 0)
+    throw new Error('dbExtraLatencyMs must be >= 0');
+  return {
+    target: { redisUrl: target.redisUrl },
+    activeSlots: [...b.activeSlots] as string[],
+    dbExtraLatencyMs: Math.min(lat, 5000),
+  };
 }
 
 /**
@@ -63,7 +68,8 @@ export class ConfigPoller {
       const body = (await res.json()) as Record<string, unknown>;
       const cfg = parseAppConfig(body);
       // Prefer the header (it is what If-None-Match must echo); fall back to the body's bare etag.
-      const etag = res.headers.get('etag') ?? (typeof body.etag === 'string' ? `"${body.etag}"` : undefined);
+      const etag =
+        res.headers.get('etag') ?? (typeof body.etag === 'string' ? `"${body.etag}"` : undefined);
       await this.apply(cfg);
       this.etag = etag;
       return 'changed';
@@ -76,7 +82,11 @@ export class ConfigPoller {
   private markUp(up: boolean, why?: string): void {
     if (up !== this.engineUp) {
       if (up) this.log.info({ engine: this.url }, 'engine reachable; following its app config');
-      else this.log.warn({ engine: this.url, err: why }, 'engine config pull failed; keeping the last config');
+      else
+        this.log.warn(
+          { engine: this.url, err: why },
+          'engine config pull failed; keeping the last config',
+        );
     }
     this.engineUp = up;
   }
@@ -116,7 +126,11 @@ export class MetricsPusher {
     private readonly url: string | undefined,
     private readonly intervalMs: number,
     private readonly recorder: MetricsRecorder,
-    private readonly info: () => { instance: string; configEtag: string | null; activeSlots: string[] },
+    private readonly info: () => {
+      instance: string;
+      configEtag: string | null;
+      activeSlots: string[];
+    },
     private readonly log: Logger,
   ) {}
 
@@ -152,11 +166,16 @@ export class MetricsPusher {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(Math.max(500, this.intervalMs - 100)),
       });
-      if (!res.ok) throw new Error(`engine answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      if (!res.ok)
+        throw new Error(`engine answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
       if (this.failing) this.log.info('metrics push recovered');
       this.failing = false;
     } catch (err) {
-      if (!this.failing) this.log.warn({ err: (err as Error).message }, 'metrics push failed; dropping windows until the engine answers');
+      if (!this.failing)
+        this.log.warn(
+          { err: (err as Error).message },
+          'metrics push failed; dropping windows until the engine answers',
+        );
       this.failing = true;
     }
   }

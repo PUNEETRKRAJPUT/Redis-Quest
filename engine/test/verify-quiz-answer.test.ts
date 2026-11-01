@@ -16,7 +16,10 @@ const quiz: QuizVerifier = {
 
 describe('quiz', () => {
   test('correct option, with the explanation', () => {
-    expect(gradeQuiz(quiz, 'a')).toMatchObject({ ok: true, message: 'Correct. It needs ordering.' });
+    expect(gradeQuiz(quiz, 'a')).toMatchObject({
+      ok: true,
+      message: 'Correct. It needs ordering.',
+    });
   });
   test('wrong option does not reveal the answer', () => {
     const r = gradeQuiz(quiz, 'b');
@@ -28,12 +31,20 @@ describe('quiz', () => {
     expect(gradeQuiz(quiz, 'zz').message).toBe('zz is not one of the options for this question.');
     const multi = { ...quiz, correct: ['a', 'c'] };
     expect(gradeQuiz(multi, ['c', 'a']).ok).toBe(true);
-    expect(gradeQuiz(multi, ['a']).message).toBe('Not quite: you picked "Sorted set". This question has 2 correct options.');
+    expect(gradeQuiz(multi, ['a']).message).toBe(
+      'Not quite: you picked "Sorted set". This question has 2 correct options.',
+    );
   });
 });
 
 const answer = (a: Partial<AnswerVerifier>): AnswerVerifier =>
-  ({ type: 'answer', prompt: 'P?', expected: { cmd: ['HGET', 'h', 'name'] }, message: 'That is not the name.', ...a }) as AnswerVerifier;
+  ({
+    type: 'answer',
+    prompt: 'P?',
+    expected: { cmd: ['HGET', 'h', 'name'] },
+    message: 'That is not the name.',
+    ...a,
+  }) as AnswerVerifier;
 
 describe('answer', () => {
   test('string equals, lenient about redis-cli quotes', async () => {
@@ -41,7 +52,10 @@ describe('answer', () => {
     expect((await gradeAnswer(answer({}), 'Puneet', send)).ok).toBe(true);
     expect((await gradeAnswer(answer({}), ' "Puneet" ', send)).ok).toBe(true);
     const miss = await gradeAnswer(answer({}), 'puneet', send);
-    expect(miss).toMatchObject({ ok: false, message: 'That is not the name. (you typed "puneet")' });
+    expect(miss).toMatchObject({
+      ok: false,
+      message: 'That is not the name. (you typed "puneet")',
+    });
     expect(miss.message).not.toContain('Puneet');
   });
   test('number transform accepts "(integer) 0"', async () => {
@@ -53,7 +67,11 @@ describe('answer', () => {
   });
   test('numeric_within for a moving TTL', async () => {
     const send = async () => 86000;
-    const a = answer({ expected: { cmd: ['TTL', 'g'], transform: 'number' }, compare: 'numeric_within', tolerance: 600 });
+    const a = answer({
+      expected: { cmd: ['TTL', 'g'], transform: 'number' },
+      compare: 'numeric_within',
+      tolerance: 600,
+    });
     expect((await gradeAnswer(a, '85500', send)).ok).toBe(true);
     expect((await gradeAnswer(a, '0', send)).ok).toBe(false);
   });
@@ -63,8 +81,12 @@ describe('answer', () => {
     expect((await gradeAnswer(a, '3', send)).ok).toBe(true);
   });
   test('nothing typed, nil expected, Redis down', async () => {
-    expect((await gradeAnswer(answer({}), '  ', async () => 'x')).message).toBe('That is not the name. (nothing was typed)');
-    expect((await gradeAnswer(answer({}), 'x', async () => null)).message).toMatch(/Redis has no value to compare it with/);
+    expect((await gradeAnswer(answer({}), '  ', async () => 'x')).message).toBe(
+      'That is not the name. (nothing was typed)',
+    );
+    expect((await gradeAnswer(answer({}), 'x', async () => null)).message).toMatch(
+      /Redis has no value to compare it with/,
+    );
     const down = await gradeAnswer(answer({}), 'x', async () => {
       throw new Error('redis is down');
     });

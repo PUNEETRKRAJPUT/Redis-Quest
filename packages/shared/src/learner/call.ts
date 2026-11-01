@@ -21,7 +21,9 @@ function safeString(v: unknown): string {
 export function toJsonValue(value: unknown): unknown {
   if (value === undefined) return null;
   try {
-    const text = JSON.stringify(value, (_k, v: unknown) => (typeof v === 'bigint' ? v.toString() : v));
+    const text = JSON.stringify(value, (_k, v: unknown) =>
+      typeof v === 'bigint' ? v.toString() : v,
+    );
     return text === undefined ? String(value) : (JSON.parse(text) as unknown);
   } catch {
     return String(value);
@@ -44,7 +46,10 @@ export async function callLearner(
   let timer: NodeJS.Timeout | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new LearnerTimeoutError(`call exceeded ${timeoutMs} ms`)), Math.max(1, timeoutMs));
+      timer = setTimeout(
+        () => reject(new LearnerTimeoutError(`call exceeded ${timeoutMs} ms`)),
+        Math.max(1, timeoutMs),
+      );
     });
     const value = await Promise.race([Promise.resolve().then(() => fn(deps, ...args)), timeout]);
     return { ok: true, value: toJsonValue(value), ms: performance.now() - start };
@@ -81,7 +86,10 @@ export async function runLearnerCalls(
       if (remaining <= 0) {
         results[i] = {
           ok: false,
-          error: { name: 'TimeoutError', message: `run budget of ${timeoutMs} ms spent before this call started` },
+          error: {
+            name: 'TimeoutError',
+            message: `run budget of ${timeoutMs} ms spent before this call started`,
+          },
           ms: 0,
         };
         continue;

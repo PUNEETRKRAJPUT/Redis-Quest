@@ -38,7 +38,10 @@ export function loadCaps(env: NodeJS.ProcessEnv): LoadCaps {
   };
 }
 
-export function loadVerifyConfig(opts: { progressDir: string; port: number }, env: NodeJS.ProcessEnv = process.env): VerifyConfig {
+export function loadVerifyConfig(
+  opts: { progressDir: string; port: number },
+  env: NodeJS.ProcessEnv = process.env,
+): VerifyConfig {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..'); // <root>/engine/dist/verify
   const wait = env.VERIFY_MAX_EVENT_WAIT_MS;
   return {
@@ -48,6 +51,9 @@ export function loadVerifyConfig(opts: { progressDir: string; port: number }, en
     baselinesDir: resolve(opts.progressDir, 'baselines'),
     engineApi: `http://127.0.0.1:${opts.port}/api`,
     caps: loadCaps(env),
-    maxEventWaitMs: wait !== undefined && wait !== '' && Number.isFinite(Number(wait)) ? Math.max(0, Number(wait)) : null,
+    maxEventWaitMs:
+      wait !== undefined && wait !== '' && Number.isFinite(Number(wait))
+        ? Math.max(0, Number(wait))
+        : null,
   };
 }

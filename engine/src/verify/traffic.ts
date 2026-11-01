@@ -3,10 +3,22 @@
 
 import type { TrafficVerifier } from '@quest/shared';
 import type { Logger } from 'pino';
-import { fingerprintDiff, type BaselineFingerprint, type BaselineRecord, type BaselineStore, type RunSummary } from '../load/baseline.js';
+import {
+  fingerprintDiff,
+  type BaselineFingerprint,
+  type BaselineRecord,
+  type BaselineStore,
+  type RunSummary,
+} from '../load/baseline.js';
 import type { MetricsTap } from '../load/metrics-tap.js';
 import type { LoadRunner } from '../load/run.js';
-import { applyCaps, loadScenario, scenarioHash, type EffectiveLoad, type Scenario } from '../load/scenario.js';
+import {
+  applyCaps,
+  loadScenario,
+  scenarioHash,
+  type EffectiveLoad,
+  type Scenario,
+} from '../load/scenario.js';
 import type { VerifyConfig } from './config.js';
 
 /** The app as the verifier controls it: engine config in, slot switches out, health to see them land. */
@@ -41,7 +53,8 @@ export const IMPLICIT_MAX_ERROR_RATE = 0.01;
 export const BASELINE_MAX_ERROR_RATE = 0.5;
 
 const sortU = (xs: Iterable<string>) => [...new Set(xs)].sort();
-const sameSet = (a: readonly string[], b: readonly string[]) => JSON.stringify(sortU(a)) === JSON.stringify(sortU(b));
+const sameSet = (a: readonly string[], b: readonly string[]) =>
+  JSON.stringify(sortU(a)) === JSON.stringify(sortU(b));
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 function fmtMs(n: number): string {
@@ -64,58 +77,138 @@ export interface AssertionVerdict {
 }
 
 /** Pure grading of one run (and its baseline) against a traffic verifier's assertions. */
-export function evaluateTraffic(a: TrafficVerifier['assertions'], run: RunSummary, base: RunSummary | null): AssertionVerdict[] {
+export function evaluateTraffic(
+  a: TrafficVerifier['assertions'],
+  run: RunSummary,
+  base: RunSummary | null,
+): AssertionVerdict[] {
   const out: AssertionVerdict[] = [];
-  const add = (key: string, ok: boolean, value: number | null, needs: string, text: string) => out.push({ key, ok, value, needs, text });
+  const add = (key: string, ok: boolean, value: number | null, needs: string, text: string) =>
+    out.push({ key, ok, value, needs, text });
   const app = run.app;
   const noApp = 'no app metrics arrived during the run, so this cannot be measured';
 
   if (run.load.ok2xx === 0) {
-    add('requests', false, 0, 'some successful responses', 'no request got a successful response during the run');
+    add(
+      'requests',
+      false,
+      0,
+      'some successful responses',
+      'no request got a successful response during the run',
+    );
   }
   const ratio = (num: number, den: number) => (den > 0 ? num / den : null);
 
   if (a.p99_ratio_lte !== undefined) {
     const need = `at most ${a.p99_ratio_lte}`;
     const r = base ? ratio(run.load.p99Ms, base.load.p99Ms) : null;
-    if (r === null) add('p99_ratio_lte', false, null, need, 'p99 ratio cannot be computed (no usable baseline)');
-    else add('p99_ratio_lte', r <= a.p99_ratio_lte, r, need, `p99 ratio ${fmtRatio(r)} (${fmtMs(run.load.p99Ms)} now vs ${fmtMs(base!.load.p99Ms)} baseline), needs ${need}`);
+    if (r === null)
+      add('p99_ratio_lte', false, null, need, 'p99 ratio cannot be computed (no usable baseline)');
+    else
+      add(
+        'p99_ratio_lte',
+        r <= a.p99_ratio_lte,
+        r,
+        need,
+        `p99 ratio ${fmtRatio(r)} (${fmtMs(run.load.p99Ms)} now vs ${fmtMs(base!.load.p99Ms)} baseline), needs ${need}`,
+      );
   }
   if (a.rps_ratio_gte !== undefined) {
     const need = `at least ${a.rps_ratio_gte}`;
     const r = base ? ratio(run.load.rps, base.load.rps) : null;
-    if (r === null) add('rps_ratio_gte', false, null, need, 'requests-per-second ratio cannot be computed (no usable baseline)');
-    else add('rps_ratio_gte', r >= a.rps_ratio_gte, r, need, `throughput ratio ${fmtRatio(r)} (${run.load.rps} req/s now vs ${base!.load.rps} baseline), needs ${need}`);
+    if (r === null)
+      add(
+        'rps_ratio_gte',
+        false,
+        null,
+        need,
+        'requests-per-second ratio cannot be computed (no usable baseline)',
+      );
+    else
+      add(
+        'rps_ratio_gte',
+        r >= a.rps_ratio_gte,
+        r,
+        need,
+        `throughput ratio ${fmtRatio(r)} (${run.load.rps} req/s now vs ${base!.load.rps} baseline), needs ${need}`,
+      );
   }
   if (a.db_calls_ratio_lte !== undefined) {
     const need = `at most ${a.db_calls_ratio_lte}`;
     if (!app) add('db_calls_ratio_lte', false, null, need, `Postgres calls per request: ${noApp}`);
-    else if (!base?.app || base.app.dbPerRequest === 0) add('db_calls_ratio_lte', false, null, need, 'Postgres calls ratio cannot be computed (the baseline has no Postgres calls to compare with)');
+    else if (!base?.app || base.app.dbPerRequest === 0)
+      add(
+        'db_calls_ratio_lte',
+        false,
+        null,
+        need,
+        'Postgres calls ratio cannot be computed (the baseline has no Postgres calls to compare with)',
+      );
     else {
       const r = app.dbPerRequest / base.app.dbPerRequest;
-      add('db_calls_ratio_lte', r <= a.db_calls_ratio_lte, r, need, `Postgres calls per request ratio ${fmtRatio(r)} (${app.dbPerRequest} per request now vs ${base.app.dbPerRequest} baseline), needs ${need}`);
+      add(
+        'db_calls_ratio_lte',
+        r <= a.db_calls_ratio_lte,
+        r,
+        need,
+        `Postgres calls per request ratio ${fmtRatio(r)} (${app.dbPerRequest} per request now vs ${base.app.dbPerRequest} baseline), needs ${need}`,
+      );
     }
   }
   if (a.hit_ratio_gte !== undefined) {
     const need = `at least ${a.hit_ratio_gte}`;
     if (!app) add('hit_ratio_gte', false, null, need, `cache hit ratio: ${noApp}`);
-    else add('hit_ratio_gte', app.hitRatio >= a.hit_ratio_gte, app.hitRatio, need, `cache hit ratio ${fmtRatio(app.hitRatio)} (${app.noDbCount} of ${app.requests} requests skipped Postgres), needs ${need}`);
+    else
+      add(
+        'hit_ratio_gte',
+        app.hitRatio >= a.hit_ratio_gte,
+        app.hitRatio,
+        need,
+        `cache hit ratio ${fmtRatio(app.hitRatio)} (${app.noDbCount} of ${app.requests} requests skipped Postgres), needs ${need}`,
+      );
   }
   if (a.error_rate_lte !== undefined) {
     const need = `at most ${a.error_rate_lte}`;
-    add('error_rate_lte', run.load.errorRate <= a.error_rate_lte, run.load.errorRate, need, `error rate ${pct(run.load.errorRate)} (${run.load.status5xx} 5xx, ${run.load.connErrors} without a response), needs ${need}`);
+    add(
+      'error_rate_lte',
+      run.load.errorRate <= a.error_rate_lte,
+      run.load.errorRate,
+      need,
+      `error rate ${pct(run.load.errorRate)} (${run.load.status5xx} 5xx, ${run.load.connErrors} without a response), needs ${need}`,
+    );
   } else {
     const ok = run.load.errorRate <= IMPLICIT_MAX_ERROR_RATE;
-    add('error_rate', ok, run.load.errorRate, `at most ${IMPLICIT_MAX_ERROR_RATE}`, ok ? `error rate ${pct(run.load.errorRate)}` : `${pct(run.load.errorRate)} of requests failed (${run.load.status5xx} 5xx, ${run.load.connErrors} without a response); a fast error is not a fast page`);
+    add(
+      'error_rate',
+      ok,
+      run.load.errorRate,
+      `at most ${IMPLICIT_MAX_ERROR_RATE}`,
+      ok
+        ? `error rate ${pct(run.load.errorRate)}`
+        : `${pct(run.load.errorRate)} of requests failed (${run.load.status5xx} 5xx, ${run.load.connErrors} without a response); a fast error is not a fast page`,
+    );
   }
   if (a.db_queries_lte !== undefined) {
     const need = `at most ${a.db_queries_lte}`;
     if (!app) add('db_queries_lte', false, null, need, `Postgres queries: ${noApp}`);
-    else add('db_queries_lte', app.dbQueries <= a.db_queries_lte, app.dbQueries, need, `${app.dbQueries} Postgres queries during the run, needs ${need}`);
+    else
+      add(
+        'db_queries_lte',
+        app.dbQueries <= a.db_queries_lte,
+        app.dbQueries,
+        need,
+        `${app.dbQueries} Postgres queries during the run, needs ${need}`,
+      );
   }
   if (a.p99_ms_lte !== undefined) {
     const need = `at most ${a.p99_ms_lte} ms`;
-    add('p99_ms_lte', run.load.p99Ms <= a.p99_ms_lte, run.load.p99Ms, need, `p99 ${fmtMs(run.load.p99Ms)}, needs ${need}`);
+    add(
+      'p99_ms_lte',
+      run.load.p99Ms <= a.p99_ms_lte,
+      run.load.p99Ms,
+      need,
+      `p99 ${fmtMs(run.load.p99Ms)}, needs ${need}`,
+    );
   }
   return out;
 }
@@ -128,10 +221,17 @@ export interface TrafficGrade {
   details: Record<string, unknown>;
 }
 
-export function trafficMessage(v: Pick<TrafficVerifier, 'message'>, verdicts: AssertionVerdict[]): { ok: boolean; message: string } {
+export function trafficMessage(
+  v: Pick<TrafficVerifier, 'message'>,
+  verdicts: AssertionVerdict[],
+): { ok: boolean; message: string } {
   const failed = verdicts.filter((x) => !x.ok);
-  if (failed.length === 0) return { ok: true, message: `Passed under load: ${verdicts.map((x) => x.text).join('; ')}.` };
-  return { ok: false, message: `${v.message ?? DEFAULT_TRAFFIC_MESSAGE} (${failed.map((x) => x.text).join('; ')})` };
+  if (failed.length === 0)
+    return { ok: true, message: `Passed under load: ${verdicts.map((x) => x.text).join('; ')}.` };
+  return {
+    ok: false,
+    message: `${v.message ?? DEFAULT_TRAFFIC_MESSAGE} (${failed.map((x) => x.text).join('; ')})`,
+  };
 }
 
 export class TrafficRunner {
@@ -148,10 +248,21 @@ export class TrafficRunner {
   /** Warmup (discarded), quiet gap, measured run, then the app metrics for exactly that window. */
   async measure(s: Scenario, eff: EffectiveLoad): Promise<RunSummary> {
     if (eff.warmup) {
-      await this.d.runLoad({ origin: this.origin(), scenario: s, connections: eff.warmup.connections, durationSec: eff.warmup.durationSec, seed: s.seed + 7919 });
+      await this.d.runLoad({
+        origin: this.origin(),
+        scenario: s,
+        connections: eff.warmup.connections,
+        durationSec: eff.warmup.durationSec,
+        seed: s.seed + 7919,
+      });
       await this.sleep(WARMUP_GAP_MS);
     }
-    const load = await this.d.runLoad({ origin: this.origin(), scenario: s, connections: eff.connections, durationSec: eff.durationSec });
+    const load = await this.d.runLoad({
+      origin: this.origin(),
+      scenario: s,
+      connections: eff.connections,
+      durationSec: eff.durationSec,
+    });
     await this.sleep(METRICS_SETTLE_MS);
     const from = Math.floor(load.startedAt / 1000) * 1000 - 1000;
     const app = this.d.tap.window(from, load.finishedAt + 2000);
@@ -164,7 +275,11 @@ export class TrafficRunner {
   }
 
   /** Records (or re-records) the baseline for `scenario` with `baselineSlots` active. */
-  async recordBaseline(s: Scenario, eff: EffectiveLoad, fp: BaselineFingerprint): Promise<BaselineRecord> {
+  async recordBaseline(
+    s: Scenario,
+    eff: EffectiveLoad,
+    fp: BaselineFingerprint,
+  ): Promise<BaselineRecord> {
     this.d.onPhase?.('baseline', { scenario: s.id, activeSlots: fp.activeSlots });
     await this.switchSlots(fp.activeSlots);
     const run = await this.measure(s, eff);
@@ -173,13 +288,27 @@ export class TrafficRunner {
         `the baseline run of ${s.id} failed (${run.load.ok2xx} successful responses, error rate ${pct(run.load.errorRate)}); is the app up behind the proxy?`,
       );
     }
-    const rec: BaselineRecord = { version: 1, scenario: s.id, recordedAt: new Date().toISOString(), fingerprint: fp, run };
+    const rec: BaselineRecord = {
+      version: 1,
+      scenario: s.id,
+      recordedAt: new Date().toISOString(),
+      fingerprint: fp,
+      run,
+    };
     await this.d.baselines.write(rec);
-    this.d.log?.info({ scenario: s.id, p99Ms: run.load.p99Ms, rps: run.load.rps, app: run.app }, 'baseline recorded');
+    this.d.log?.info(
+      { scenario: s.id, p99Ms: run.load.p99Ms, rps: run.load.rps, app: run.app },
+      'baseline recorded',
+    );
     return rec;
   }
 
-  fingerprint(s: Scenario, eff: EffectiveLoad, activeSlots: string[], dbExtraLatencyMs: number): BaselineFingerprint {
+  fingerprint(
+    s: Scenario,
+    eff: EffectiveLoad,
+    activeSlots: string[],
+    dbExtraLatencyMs: number,
+  ): BaselineFingerprint {
     return {
       scenarioHash: scenarioHash(s),
       activeSlots: sortU(activeSlots),
@@ -208,7 +337,10 @@ export class TrafficRunner {
       const now = await this.d.app.getConfig();
       if (!sameSet(now.activeSlots, original)) await this.d.app.setSlots(original);
     } catch (err) {
-      this.d.log?.warn({ err: (err as Error).message }, 'could not restore active slots after a traffic run');
+      this.d.log?.warn(
+        { err: (err as Error).message },
+        'could not restore active slots after a traffic run',
+      );
     }
   }
 
@@ -227,7 +359,12 @@ export class TrafficRunner {
     try {
       let base: RunSummary | null = null;
       if (v.baseline) {
-        const fp = this.fingerprint(s, eff, original.filter((x) => !levelSlots.includes(x)), cfgNow.dbExtraLatencyMs);
+        const fp = this.fingerprint(
+          s,
+          eff,
+          original.filter((x) => !levelSlots.includes(x)),
+          cfgNow.dbExtraLatencyMs,
+        );
         const existing = await this.d.baselines.read(s.id);
         const diffs = existing ? fingerprintDiff(existing.fingerprint, fp) : ['none recorded yet'];
         let rec: BaselineRecord;
@@ -236,7 +373,12 @@ export class TrafficRunner {
           details.baseline = { recordedAt: rec.recordedAt, reused: true, run: rec.run };
         } else {
           rec = await this.recordBaseline(s, eff, fp);
-          details.baseline = { recordedAt: rec.recordedAt, reused: false, recordedBecause: diffs, run: rec.run };
+          details.baseline = {
+            recordedAt: rec.recordedAt,
+            reused: false,
+            recordedBecause: diffs,
+            run: rec.run,
+          };
         }
         base = rec.run;
       }
@@ -256,11 +398,17 @@ export class TrafficRunner {
 }
 
 /** AppControl over HTTP: the engine's own API for slots, the app's /app/health to see them applied. */
-export function httpAppControl(engineOrigin: string, appUrl: string, sleep = defaultSleep): AppControl {
+export function httpAppControl(
+  engineOrigin: string,
+  appUrl: string,
+  sleep = defaultSleep,
+): AppControl {
   const base = appUrl.replace(/\/$/, '');
   return {
     async getConfig() {
-      const res = await fetch(`${engineOrigin}/internal/app-config`, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(`${engineOrigin}/internal/app-config`, {
+        signal: AbortSignal.timeout(5000),
+      });
       if (!res.ok) throw new TrafficError(`engine app-config answered ${res.status}`);
       const b = (await res.json()) as { activeSlots?: string[]; dbExtraLatencyMs?: number };
       return { activeSlots: b.activeSlots ?? [], dbExtraLatencyMs: b.dbExtraLatencyMs ?? 0 };
@@ -272,7 +420,10 @@ export function httpAppControl(engineOrigin: string, appUrl: string, sleep = def
         body: JSON.stringify({ active: slots }),
         signal: AbortSignal.timeout(5000),
       });
-      if (!res.ok) throw new TrafficError(`PUT /api/slots answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      if (!res.ok)
+        throw new TrafficError(
+          `PUT /api/slots answered ${res.status}: ${(await res.text()).slice(0, 200)}`,
+        );
     },
     async waitForSlots(slots, timeoutMs) {
       // Several instances may sit behind the proxy, so require a few matching answers in a row.
@@ -284,8 +435,14 @@ export function httpAppControl(engineOrigin: string, appUrl: string, sleep = def
         try {
           const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(2000) });
           const b = (await res.json()) as { activeSlots?: string[] };
-          last = res.ok ? `active slots ${JSON.stringify(b.activeSlots ?? null)}` : `status ${res.status}`;
-          if (res.ok && Array.isArray(b.activeSlots) && JSON.stringify(sortU(b.activeSlots)) === want) {
+          last = res.ok
+            ? `active slots ${JSON.stringify(b.activeSlots ?? null)}`
+            : `status ${res.status}`;
+          if (
+            res.ok &&
+            Array.isArray(b.activeSlots) &&
+            JSON.stringify(sortU(b.activeSlots)) === want
+          ) {
             streak += 1;
             if (streak >= 4) return;
           } else streak = 0;
@@ -295,7 +452,9 @@ export function httpAppControl(engineOrigin: string, appUrl: string, sleep = def
         }
         await sleep(250);
       }
-      throw new TrafficError(`the app did not switch to slots ${want} within ${Math.round(timeoutMs / 1000)} s (last: ${last}); is the app up behind the proxy?`);
+      throw new TrafficError(
+        `the app did not switch to slots ${want} within ${Math.round(timeoutMs / 1000)} s (last: ${last}); is the app up behind the proxy?`,
+      );
     },
   };
 }

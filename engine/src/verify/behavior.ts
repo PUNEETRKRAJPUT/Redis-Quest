@@ -51,9 +51,14 @@ export function httpRunner(runnerUrl: string): RunFn {
       body: JSON.stringify(req),
       signal: AbortSignal.timeout(req.timeoutMs + 15_000),
     });
-    const body = (await res.json()) as RunnerResponse & { ok?: boolean; error?: { message?: string } };
+    const body = (await res.json()) as RunnerResponse & {
+      ok?: boolean;
+      error?: { message?: string };
+    };
     if (!res.ok || !Array.isArray(body.results)) {
-      throw new Error(`runner answered ${res.status}: ${body.error?.message ?? JSON.stringify(body).slice(0, 200)}`);
+      throw new Error(
+        `runner answered ${res.status}: ${body.error?.message ?? JSON.stringify(body).slice(0, 200)}`,
+      );
     }
     return body;
   };
@@ -68,10 +73,18 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     const bb = b as unknown[];
     return a.length === bb.length && a.every((x, i) => deepEqual(x, bb[i]));
   }
-  const ka = Object.keys(a as object).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
-  const kb = Object.keys(b as object).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
+  const ka = Object.keys(a as object).filter(
+    (k) => (a as Record<string, unknown>)[k] !== undefined,
+  );
+  const kb = Object.keys(b as object).filter(
+    (k) => (b as Record<string, unknown>)[k] !== undefined,
+  );
   if (ka.length !== kb.length) return false;
-  return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+  return ka.every(
+    (k) =>
+      Object.prototype.hasOwnProperty.call(b, k) &&
+      deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+  );
 }
 
 function countText(ec: NonNullable<BehaviorAssertion['expectCount']>): string {
@@ -110,7 +123,10 @@ export interface AssertionReport {
 }
 
 /** Judges one assertion's runner results. Exported for unit tests. */
-export function judgeCalls(a: BehaviorAssertion, results: RunnerCallResult[]): { ok: boolean; detail: string; matching?: number } {
+export function judgeCalls(
+  a: BehaviorAssertion,
+  results: RunnerCallResult[],
+): { ok: boolean; detail: string; matching?: number } {
   const n = results.length;
   const failed = results.filter((r) => !r.ok);
   const on = (i: number) => (n > 1 ? ` on call ${i + 1} of ${n}` : '');
@@ -120,9 +136,16 @@ export function judgeCalls(a: BehaviorAssertion, results: RunnerCallResult[]): {
   if (a.expectError !== undefined) {
     const re = typeof a.expectError === 'string' ? new RegExp(a.expectError) : null;
     for (const [i, r] of results.entries()) {
-      if (r.ok) return { ok: false, detail: `expected it to throw, but it returned ${formatJson(r.value)}${on(i)}` };
+      if (r.ok)
+        return {
+          ok: false,
+          detail: `expected it to throw, but it returned ${formatJson(r.value)}${on(i)}`,
+        };
       if (re && !re.test(r.error?.message ?? '')) {
-        return { ok: false, detail: `expected an error matching /${a.expectError}/, got ${errorText(r.error)}${on(i)}` };
+        return {
+          ok: false,
+          detail: `expected an error matching /${a.expectError}/, got ${errorText(r.error)}${on(i)}`,
+        };
       }
     }
     return { ok: true, detail: '' };
@@ -137,7 +160,11 @@ export function judgeCalls(a: BehaviorAssertion, results: RunnerCallResult[]): {
 
   if (a.expect !== undefined) {
     const i = results.findIndex((r) => !deepEqual(r.value, a.expect));
-    if (i !== -1) return { ok: false, detail: `expected ${formatJson(a.expect)}, got ${formatJson(results[i]?.value)}${on(i)}` };
+    if (i !== -1)
+      return {
+        ok: false,
+        detail: `expected ${formatJson(a.expect)}, got ${formatJson(results[i]?.value)}${on(i)}`,
+      };
     return { ok: true, detail: '' };
   }
 
@@ -148,20 +175,29 @@ export function judgeCalls(a: BehaviorAssertion, results: RunnerCallResult[]): {
     return {
       ok,
       matching,
-      detail: ok ? '' : `expected ${countText(ec)} of ${n} calls to return ${formatJson(ec.value)}, got ${matching}`,
+      detail: ok
+        ? ''
+        : `expected ${countText(ec)} of ${n} calls to return ${formatJson(ec.value)}, got ${matching}`,
     };
   }
   return { ok: true, detail: '' };
 }
 
-export async function loadFixtureSteps(level: LoadedLevel, rel: string, ctx: TemplateContext): Promise<SetupStep[]> {
+export async function loadFixtureSteps(
+  level: LoadedLevel,
+  rel: string,
+  ctx: TemplateContext,
+): Promise<SetupStep[]> {
   const file = resolveLevelPath(level, rel);
   const parsed = fixtureFileSchema.parse(parseYaml(await readFile(file, 'utf8')));
   return renderTemplates(parsed.steps, ctx) as SetupStep[];
 }
 
 /** Runs fixture steps; returns an error line instead of throwing, so the verifier can report it. */
-export async function runFixtureSteps(steps: readonly SetupStep[], send: SendCommand): Promise<string | null> {
+export async function runFixtureSteps(
+  steps: readonly SetupStep[],
+  send: SendCommand,
+): Promise<string | null> {
   for (const [i, step] of steps.entries()) {
     if (!('cmd' in step)) {
       // Never skip silently: a skipped reset could make a wrong solution pass.
@@ -192,7 +228,12 @@ export async function runAssertions(
   const reports: AssertionReport[] = [];
   const lines: string[] = [];
   if (!v.module) {
-    return { ok: false, message: `The engine does not know which workspace file implements slot ${v.slot}.`, reports, concurrency };
+    return {
+      ok: false,
+      message: `The engine does not know which workspace file implements slot ${v.slot}.`,
+      reports,
+      concurrency,
+    };
   }
   for (const a of v.assertions) {
     const repeat = a.repeat ?? 1;
@@ -205,20 +246,30 @@ export async function runAssertions(
         module: v.module,
         calls: Array.from({ length: repeat }, () => ({ args: a.call.args })),
         concurrency,
-        timeoutMs: deps.timeoutMs ?? Math.min(60_000, 10_000 + Math.ceil(repeat / concurrency) * 200),
+        timeoutMs:
+          deps.timeoutMs ?? Math.min(60_000, 10_000 + Math.ceil(repeat / concurrency) * 200),
         ...(deps.redisUrl ? { redisUrl: deps.redisUrl } : {}),
       });
       results = res.results;
     } catch (err) {
       runnerError = (err as Error).message;
     }
-    const report: AssertionReport = { call: a.call, repeat, ok: false, feedback: '', errors: results.filter((r) => !r.ok).length, ms: 0 };
+    const report: AssertionReport = {
+      call: a.call,
+      repeat,
+      ok: false,
+      feedback: '',
+      errors: results.filter((r) => !r.ok).length,
+      ms: 0,
+    };
     const firstErr = results.find((r) => !r.ok)?.error;
     if (firstErr) report.firstError = errorText(firstErr);
 
     const assertionLines: string[] = [];
     if (runnerError) {
-      assertionLines.push(`${base} (the runner that calls your function is not reachable: ${runnerError})`);
+      assertionLines.push(
+        `${base} (the runner that calls your function is not reachable: ${runnerError})`,
+      );
     } else {
       const judged = judgeCalls(a, results);
       if (judged.matching !== undefined) report.returnedMatching = judged.matching;
@@ -230,7 +281,11 @@ export async function runAssertions(
           if (it.ok) return;
           // A side-effect check without its own message borrows the assertion's.
           const own = a.sideEffect?.[i]?.message;
-          assertionLines.push(own ? it.feedback : `${base} (after the call, ${it.cmd}: expected ${it.expected}, got ${it.observed})`);
+          assertionLines.push(
+            own
+              ? it.feedback
+              : `${base} (after the call, ${it.cmd}: expected ${it.expected}, got ${it.observed})`,
+          );
         });
       }
     }
@@ -242,5 +297,14 @@ export async function runAssertions(
   }
   const ok = lines.length === 0;
   const n = v.assertions.length;
-  return { ok, message: ok ? (n === 1 ? 'The assertion held.' : `All ${n} assertions held.`) : lines.join('\n'), reports, concurrency };
+  return {
+    ok,
+    message: ok
+      ? n === 1
+        ? 'The assertion held.'
+        : `All ${n} assertions held.`
+      : lines.join('\n'),
+    reports,
+    concurrency,
+  };
 }

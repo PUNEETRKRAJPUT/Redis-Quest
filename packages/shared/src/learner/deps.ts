@@ -33,7 +33,9 @@ const DEFAULT_DATABASE_URL = 'postgres://quest:quest@localhost:5432/quest';
  * Build `{ redis, db, log }` for one learner run plus the counters the proxies fill in.
  * Async because the Redis client must be connected before the learner sees it.
  */
-export async function createLearnerDeps(opts: CreateLearnerDepsOptions = {}): Promise<LearnerContext> {
+export async function createLearnerDeps(
+  opts: CreateLearnerDepsOptions = {},
+): Promise<LearnerContext> {
   const counters: LearnerCounters = { redisCommands: 0, dbQueries: 0 };
   const emit = opts.log ?? (() => undefined);
   const log = (...args: unknown[]): void => emit(format(...args));
@@ -49,7 +51,8 @@ export async function createLearnerDeps(opts: CreateLearnerDepsOptions = {}): Pr
       socket: {
         connectTimeout: opts.connectTimeoutMs ?? 3000,
         // Short backoff, then give up so a dead Redis becomes an error the learner can read.
-        reconnectStrategy: (retries: number) => (retries < 3 ? 100 : new Error('Redis connection lost')),
+        reconnectStrategy: (retries: number) =>
+          retries < 3 ? 100 : new Error('Redis connection lost'),
       },
     }) as unknown as LearnerRedis;
     created.on('error', (err: Error) => log(`[redis] ${err.message}`));

@@ -43,7 +43,11 @@ export class LevelService {
   }
 }
 
-export function templateContext(cfg: Config, p: ProgressFile, entry: LevelIndexEntry): TemplateContext {
+export function templateContext(
+  cfg: Config,
+  p: ProgressFile,
+  entry: LevelIndexEntry,
+): TemplateContext {
   return {
     player: { id: p.player.id, name: p.player.name },
     level: { id: entry.level.level.id },
@@ -54,11 +58,21 @@ export function templateContext(cfg: Config, p: ProgressFile, entry: LevelIndexE
 
 /** What the UI sees of a verifier: enough to draw a quiz or an answer box, never the expected values. */
 export type PublicVerifier =
-  | { index: number; type: 'quiz'; question: string; options: { id: string; label: string }[]; multiple: boolean }
+  | {
+      index: number;
+      type: 'quiz';
+      question: string;
+      options: { id: string; label: string }[];
+      multiple: boolean;
+    }
   | { index: number; type: 'answer'; prompt: string }
   | { index: number; type: string };
 
-export function renderLevel(entry: LevelIndexEntry, ctx: TemplateContext, lp: { hintsRevealed?: number }) {
+export function renderLevel(
+  entry: LevelIndexEntry,
+  ctx: TemplateContext,
+  lp: { hintsRevealed?: number },
+) {
   const lv = entry.level.level;
   const r = renderTemplates(
     {
@@ -75,7 +89,13 @@ export function renderLevel(entry: LevelIndexEntry, ctx: TemplateContext, lp: { 
   const revealed = Math.min(lp.hintsRevealed ?? 0, r.hints.length);
   const verifiers: PublicVerifier[] = r.verify.map((v, index): PublicVerifier => {
     if (v.type === 'quiz') {
-      return { index, type: 'quiz', question: v.question, options: v.options.map((o) => ({ id: o.id, label: o.label })), multiple: v.correct.length > 1 };
+      return {
+        index,
+        type: 'quiz',
+        question: v.question,
+        options: v.options.map((o) => ({ id: o.id, label: o.label })),
+        multiple: v.correct.length > 1,
+      };
     }
     if (v.type === 'answer') return { index, type: 'answer', prompt: v.prompt };
     return { index, type: v.type };

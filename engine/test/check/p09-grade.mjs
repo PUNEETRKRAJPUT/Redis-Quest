@@ -6,7 +6,14 @@
 //
 // Env: BASE (http://127.0.0.1:3200), CHECK_DIR (scratch dir with levels/ and workspace/), TRAFFIC (1|0).
 /* global fetch, setTimeout, WebSocket, AbortSignal */
-import { mkdirSync, readFileSync, rmSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
+import {
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  appendFileSync,
+  existsSync,
+} from 'node:fs';
 import { join, dirname } from 'node:path';
 import { loadAllLevels, resolveLevelPath, renderTemplate } from '@quest/shared';
 
@@ -51,7 +58,7 @@ async function api(method, path, body) {
  */
 const KNOWN_MISMATCHES = {
   'example-code-01-cache-aside|solutions/01-works-but-wrong-no-ttl.js':
-    'the behavior verifier\'s sideEffect TTL between [1, 30] already fails a cache without TTL, so the antipattern can never be the only failure (example content bug, P0-05)',
+    "the behavior verifier's sideEffect TTL between [1, 30] already fails a cache without TTL, so the antipattern can never be the only failure (example content bug, P0-05)",
   'ch0-05-roommate-ran-down|solutions/05-reference.sh':
     'redis runs with --save "" --appendonly no, so docker compose down empties Redis and game:engine:boots restarts at 1 (C0 content vs compose)',
   'example-ops-01-roommate-ran-down|solutions/01-reference.sh':
@@ -67,7 +74,9 @@ function record(levelId, solution, expected, outcome, note = '') {
     if (KNOWN_MISMATCHES[key]) info(`(listed as a known mismatch, but now matches: ${key})`);
     pass(`${levelId} ${solution}: ${got}${note ? ` (${note})` : ''}`);
   } else if (KNOWN_MISMATCHES[key]) {
-    known(`${levelId} ${solution}: expected ${expected}, engine says ${got}: ${KNOWN_MISMATCHES[key]}`);
+    known(
+      `${levelId} ${solution}: expected ${expected}, engine says ${got}: ${KNOWN_MISMATCHES[key]}`,
+    );
   } else {
     fail(`${levelId} ${solution}: expected ${expected}, engine says ${got}`);
   }
@@ -75,7 +84,9 @@ function record(levelId, solution, expected, outcome, note = '') {
     for (const c of outcome.checks) {
       const tag = c.skipped ? 'skip' : c.ok ? ' ok ' : c.type === 'antipattern' ? 'HIT ' : 'fail';
       const firstLine = String(c.message).split('\n').join(' | ');
-      info(`[${tag}] #${c.index} ${c.type} (${c.durationMs} ms): ${firstLine.length > 400 ? `${firstLine.slice(0, 400)}…` : firstLine}`);
+      info(
+        `[${tag}] #${c.index} ${c.type} (${c.durationMs} ms): ${firstLine.length > 400 ? `${firstLine.slice(0, 400)}…` : firstLine}`,
+      );
     }
   }
 }
@@ -113,7 +124,10 @@ function typedAnswers(level, transcript) {
     const want = v.expected.cmd.map((a) => a.toLowerCase());
     const hit = transcript.find((t) => {
       const argv = t.line.split(/\s+/).map((a) => a.toLowerCase());
-      return argv.length === want.length && argv.every((a, j) => renderTemplate(want[j], ctxOf(level)).toLowerCase() === a);
+      return (
+        argv.length === want.length &&
+        argv.every((a, j) => renderTemplate(want[j], ctxOf(level)).toLowerCase() === a)
+      );
     });
     answers[String(i)] = hit ? hit.reply : 'not-the-answer';
   });
@@ -121,11 +135,17 @@ function typedAnswers(level, transcript) {
 }
 
 let player = null;
-const ctxOf = (level) => ({ player: { id: player.id, name: player.name }, level: { id: level.level.id }, chapter: { id: level.chapterId }, env: {} });
+const ctxOf = (level) => ({
+  player: { id: player.id, name: player.name },
+  level: { id: level.level.id },
+  chapter: { id: level.chapterId },
+  env: {},
+});
 
 async function start(levelId) {
   const r = await api('POST', `/api/levels/${levelId}/start`);
-  if (r.status !== 200) throw new Error(`start ${levelId} -> ${r.status} ${JSON.stringify(r.body)}`);
+  if (r.status !== 200)
+    throw new Error(`start ${levelId} -> ${r.status} ${JSON.stringify(r.body)}`);
   return r.body;
 }
 async function verify(levelId, answers = {}) {
@@ -155,12 +175,21 @@ function putWorkspace(rel, content) {
 
 async function gradeCli(level) {
   const id = level.level.id;
-  const sols = [{ path: level.level.solutions.reference, expect: 'right' }, ...level.level.solutions.wrong];
+  const sols = [
+    { path: level.level.solutions.reference, expect: 'right' },
+    ...level.level.solutions.wrong,
+  ];
   for (const s of sols) {
     await start(id);
     const transcript = await runRedisFile(resolveLevelPath(level, s.path), ctxOf(level));
     const answers = typedAnswers(level, transcript);
-    record(id, s.path, s.expect, await verify(id, answers), Object.keys(answers).length ? `typed ${JSON.stringify(answers)}` : '');
+    record(
+      id,
+      s.path,
+      s.expect,
+      await verify(id, answers),
+      Object.keys(answers).length ? `typed ${JSON.stringify(answers)}` : '',
+    );
   }
 }
 
@@ -170,10 +199,16 @@ async function gradeDecision(level) {
   const ref = {};
   for (const [v, i] of quizzes) ref[String(i)] = v.correct.length > 1 ? v.correct : v.correct[0];
   await start(id);
-  record(id, `reference ${JSON.stringify(level.level.solutions.reference)}`, 'right', await verify(id, ref));
+  record(
+    id,
+    `reference ${JSON.stringify(level.level.solutions.reference)}`,
+    'right',
+    await verify(id, ref),
+  );
   for (const w of level.level.solutions.wrong) {
     const answers = { ...ref };
-    for (const [v, i] of quizzes) if (v.options.some((o) => o.id === w.option)) answers[String(i)] = w.option;
+    for (const [v, i] of quizzes)
+      if (v.options.some((o) => o.id === w.option)) answers[String(i)] = w.option;
     record(id, `option ${w.option}`, w.expect, await verify(id, answers));
   }
   record(id, 'no answers', 'wrong', await verify(id, {}));
@@ -182,7 +217,10 @@ async function gradeDecision(level) {
 async function gradeCode(level) {
   const id = level.level.id;
   const rel = slotFileFor(level);
-  const sols = [{ path: level.level.solutions.reference, expect: 'right' }, ...level.level.solutions.wrong];
+  const sols = [
+    { path: level.level.solutions.reference, expect: 'right' },
+    ...level.level.solutions.wrong,
+  ];
   for (const s of sols) {
     await start(id);
     putWorkspace(rel, readFileSync(resolveLevelPath(level, s.path), 'utf8'));
@@ -219,11 +257,17 @@ async function phase1() {
     cc = await api('GET', '/api/verify/command-check');
   }
   if (cc.status === 200 && typeof cc.body?.total === 'number') {
-    pass(`cross-check ran: ${cc.body.total} allowlisted, ${cc.body.readonlyFlagged} flagged readonly by the server`);
+    pass(
+      `cross-check ran: ${cc.body.total} allowlisted, ${cc.body.readonlyFlagged} flagged readonly by the server`,
+    );
     info(`flagged write: ${JSON.stringify(cc.body.write)}`);
     info(`unknown to the server: ${JSON.stringify(cc.body.unknown)}`);
-    info(`neither readonly nor write: ${JSON.stringify(cc.body.neither.map((x) => `${x.command} [${x.flags.join(' ')}]`))}`);
-    info(`readonly on the server but not allowlisted (${cc.body.readonlyNotListed.length}): ${JSON.stringify(cc.body.readonlyNotListed)}`);
+    info(
+      `neither readonly nor write: ${JSON.stringify(cc.body.neither.map((x) => `${x.command} [${x.flags.join(' ')}]`))}`,
+    );
+    info(
+      `readonly on the server but not allowlisted (${cc.body.readonlyNotListed.length}): ${JSON.stringify(cc.body.readonlyNotListed)}`,
+    );
     writeFileSync(join(CHECK_DIR, 'command-check.json'), JSON.stringify(cc.body, null, 2));
   } else fail(`GET /api/verify/command-check -> ${cc.status} ${JSON.stringify(cc.body)}`);
 
@@ -233,7 +277,8 @@ async function phase1() {
   ws.onmessage = (m) => {
     try {
       const e = JSON.parse(m.data);
-      if (e.type === 'level.event' && String(e.data?.name ?? '').startsWith('verify_')) wsEvents.push(e.data.name);
+      if (e.type === 'level.event' && String(e.data?.name ?? '').startsWith('verify_'))
+        wsEvents.push(e.data.name);
     } catch {
       // ignore
     }
@@ -249,9 +294,21 @@ async function phase1() {
     const id = 'ch0-01-bhai-it-works-on-my-laptop';
     await start(id);
     await api('POST', '/api/events', { kind: 'custom', name: 'ui_connected' });
-    record(id, 'solutions/01-reference.sh', 'right', await verify(id), 'simulated: stack up, page reloaded after start (ui_connected)');
+    record(
+      id,
+      'solutions/01-reference.sh',
+      'right',
+      await verify(id),
+      'simulated: stack up, page reloaded after start (ui_connected)',
+    );
     await start(id);
-    record(id, 'solutions/01-wrong-redis-only.sh', 'wrong', await verify(id), 'simulated: no page reached the engine since start');
+    record(
+      id,
+      'solutions/01-wrong-redis-only.sh',
+      'wrong',
+      await verify(id),
+      'simulated: no page reached the engine since start',
+    );
     await unlockNext(id);
   }
 
@@ -269,8 +326,20 @@ async function phase1() {
     await start(id);
     const ttl = await api('POST', '/api/cli', { command: 'TTL game:welcome:gift' });
     info(`TTL game:welcome:gift -> ${ttl.body.reply}`);
-    record(id, 'solutions/04-reference.sh', 'right', await verify(id, { 0: String(ttl.body.reply).replace('(integer) ', '') }), 'simulated: the TTL read in Insight');
-    record(id, 'solutions/04-wrong-port-8001.sh', 'wrong', await verify(id, { 0: '0' }), 'simulated: nothing on 8001, typed 0');
+    record(
+      id,
+      'solutions/04-reference.sh',
+      'right',
+      await verify(id, { 0: String(ttl.body.reply).replace('(integer) ', '') }),
+      'simulated: the TTL read in Insight',
+    );
+    record(
+      id,
+      'solutions/04-wrong-port-8001.sh',
+      'wrong',
+      await verify(id, { 0: '0' }),
+      'simulated: nothing on 8001, typed 0',
+    );
     await unlockNext(id);
   }
 
@@ -287,12 +356,18 @@ async function phase1() {
   {
     const level = levels.get('example-code-01-cache-aside');
     if (!TRAFFIC) {
-      skip('!!! TRAFFIC PORTION SKIPPED: the app is not serving /app/health on this stack; example-code-01 (traffic) not graded !!!');
+      skip(
+        '!!! TRAFFIC PORTION SKIPPED: the app is not serving /app/health on this stack; example-code-01 (traffic) not graded !!!',
+      );
     } else {
       await gradeCode(level);
-      const b = await api('POST', '/api/baselines/toss-time-100/refresh', { levelId: level.level.id });
+      const b = await api('POST', '/api/baselines/toss-time-100/refresh', {
+        levelId: level.level.id,
+      });
       if (b.status === 200 && b.body.run?.load?.p99Ms > 0) {
-        pass(`POST /api/baselines/toss-time-100/refresh re-recorded: p99 ${b.body.run.load.p99Ms} ms, ${b.body.run.load.rps} req/s, db per request ${b.body.run.app?.dbPerRequest}`);
+        pass(
+          `POST /api/baselines/toss-time-100/refresh re-recorded: p99 ${b.body.run.load.p99Ms} ms, ${b.body.run.load.rps} req/s, db per request ${b.body.run.app?.dbPerRequest}`,
+        );
       } else fail(`baseline refresh -> ${b.status} ${JSON.stringify(b.body).slice(0, 300)}`);
       const file = join(CHECK_DIR, 'progress', 'baselines', 'toss-time-100.json');
       if (existsSync(file)) pass(`baseline stored at progress/baselines/toss-time-100.json`);
@@ -313,11 +388,15 @@ async function phase1() {
   {
     const id = 'ch0-02-say-hello';
     await start(id); // no PING since start: the event check waits (capped at 3 s)
-    const [a, b] = await Promise.all([api('POST', `/api/levels/${id}/verify`, { answers: {} }), (async () => {
-      await sleep(300);
-      return api('POST', `/api/levels/${id}/verify`, { answers: {} });
-    })()]);
-    if (a.status === 200 && b.status === 409 && b.body.error === 'verify_in_progress') pass('second verify while the first runs -> 409 verify_in_progress');
+    const [a, b] = await Promise.all([
+      api('POST', `/api/levels/${id}/verify`, { answers: {} }),
+      (async () => {
+        await sleep(300);
+        return api('POST', `/api/levels/${id}/verify`, { answers: {} });
+      })(),
+    ]);
+    if (a.status === 200 && b.status === 409 && b.body.error === 'verify_in_progress')
+      pass('second verify while the first runs -> 409 verify_in_progress');
     else fail(`overlap: got ${a.status} and ${b.status} ${JSON.stringify(b.body)}`);
   }
 
@@ -327,20 +406,43 @@ async function phase1() {
     const id = 'example-cli-01-hostel-scoreboard';
     await start(id);
     const o = await verify(id, { 1: '0' });
-    if (o.ideal?.reference?.content?.includes(`user:${player.id}`) && o.ideal.wrong?.length === 2 && o.ideal.reasoning) {
-      pass(`verify response carries ideal after 3+ attempts (reference ${o.ideal.reference.path}, ${o.ideal.wrong.length} wrong, player id rendered)`);
+    if (
+      o.ideal?.reference?.content?.includes(`user:${player.id}`) &&
+      o.ideal.wrong?.length === 2 &&
+      o.ideal.reasoning
+    ) {
+      pass(
+        `verify response carries ideal after 3+ attempts (reference ${o.ideal.reference.path}, ${o.ideal.wrong.length} wrong, player id rendered)`,
+      );
     } else fail(`ideal in verify response: ${JSON.stringify(o.ideal).slice(0, 300)}`);
     const st = await start('example-ops-01-roommate-ran-down');
     void st;
     const g = await api('GET', '/api/levels/example-ops-01-roommate-ran-down/ideal');
-    if (g.status === 200 && g.body.allowed === false && g.body.reason && g.body.reference?.content?.includes('docker compose down')) {
-      pass(`GET /api/levels/:id/ideal on an unpassed level: allowed false, "${g.body.reason}", content served`);
+    if (
+      g.status === 200 &&
+      g.body.allowed === false &&
+      g.body.reason &&
+      g.body.reference?.content?.includes('docker compose down')
+    ) {
+      pass(
+        `GET /api/levels/:id/ideal on an unpassed level: allowed false, "${g.body.reason}", content served`,
+      );
     } else fail(`GET ideal: ${g.status} ${JSON.stringify(g.body).slice(0, 300)}`);
     const d = await api('GET', '/api/levels/example-decision-01-pick-the-structure/ideal');
-    if (d.status === 200 && d.body.allowed === true && d.body.mode === 'decision' && d.body.quizzes?.length === 3) pass('GET ideal on a decision level: correct options and explanations');
+    if (
+      d.status === 200 &&
+      d.body.allowed === true &&
+      d.body.mode === 'decision' &&
+      d.body.quizzes?.length === 3
+    )
+      pass('GET ideal on a decision level: correct options and explanations');
     else fail(`GET ideal decision: ${d.status} ${JSON.stringify(d.body).slice(0, 300)}`);
     const pf = JSON.parse(readFileSync(join(CHECK_DIR, 'progress', 'progress.json'), 'utf8'));
-    if (pf.levels['example-ops-01-roommate-ran-down'].idealRevealedAt && pf.levels[id].idealRevealedAt) pass('idealRevealedAt recorded in progress.json');
+    if (
+      pf.levels['example-ops-01-roommate-ran-down'].idealRevealedAt &&
+      pf.levels[id].idealRevealedAt
+    )
+      pass('idealRevealedAt recorded in progress.json');
     else fail('idealRevealedAt missing');
   }
 
@@ -349,12 +451,26 @@ async function phase1() {
     const p = JSON.parse(readFileSync(join(CHECK_DIR, 'progress', 'progress.json'), 'utf8'));
     const v = p.levels['example-cli-01-hostel-scoreboard'].verdicts;
     const last = v[v.length - 1];
-    if (v.length >= 3 && last.at && last.verdict && Array.isArray(last.checks) && typeof last.durationMs === 'number') {
-      pass(`progress.json keeps verdicts with timestamps and per-check results (${v.length} for example-cli; last ${JSON.stringify(last)})`);
+    if (
+      v.length >= 3 &&
+      last.at &&
+      last.verdict &&
+      Array.isArray(last.checks) &&
+      typeof last.durationMs === 'number'
+    ) {
+      pass(
+        `progress.json keeps verdicts with timestamps and per-check results (${v.length} for example-cli; last ${JSON.stringify(last)})`,
+      );
     } else fail(`progress verdicts: ${JSON.stringify(v)}`);
     const names = new Set(wsEvents);
-    if (['verify_started', 'verify_check_started', 'verify_check_finished', 'verify_finished'].every((n) => names.has(n))) {
-      pass(`WebSocket carried ${wsEvents.length} verifier progress events (${[...names].join(', ')})`);
+    if (
+      ['verify_started', 'verify_check_started', 'verify_check_finished', 'verify_finished'].every(
+        (n) => names.has(n),
+      )
+    ) {
+      pass(
+        `WebSocket carried ${wsEvents.length} verifier progress events (${[...names].join(', ')})`,
+      );
     } else fail(`WebSocket progress events: ${JSON.stringify([...names])}`);
     ws.close();
   }
@@ -371,14 +487,32 @@ async function phase2() {
   const boots = await api('POST', '/api/cli', { command: 'GET game:engine:boots' });
   const dbsize = await api('POST', '/api/cli', { command: 'DBSIZE' });
   const saved = await api('POST', '/api/cli', { command: `EXISTS game:player:${player.id}` });
-  info(`GET game:engine:boots -> ${boots.body.reply}; DBSIZE -> ${dbsize.body.reply}; EXISTS game:player:${player.id} -> ${saved.body.reply}`);
-  record('ch0-05-roommate-ran-down', 'solutions/05-reference.sh', 'right', await verify('ch0-05-roommate-ran-down'), 'down + up, before any restore');
+  info(
+    `GET game:engine:boots -> ${boots.body.reply}; DBSIZE -> ${dbsize.body.reply}; EXISTS game:player:${player.id} -> ${saved.body.reply}`,
+  );
+  record(
+    'ch0-05-roommate-ran-down',
+    'solutions/05-reference.sh',
+    'right',
+    await verify('ch0-05-roommate-ran-down'),
+    'down + up, before any restore',
+  );
   const r = await api('POST', '/api/progress/restore');
   info(`POST /api/progress/restore -> ${r.status} (what the UI offers when the mirror is gone)`);
   const o = await verify('ch0-05-roommate-ran-down');
-  info(`after restore ch0-05 grades: ${o.verdict}; ${o.checks?.map((c) => `#${c.index} ${c.ok ? 'ok' : c.message}`).join(' | ')}`);
-  record('example-ops-01-roommate-ran-down', 'solutions/01-reference.sh', 'right', await verify('example-ops-01-roommate-ran-down'), 'down + up, after restore');
-  skip('ch0-05 and example-ops wrong solutions (down -v) not simulated: with Redis persistence off, down and down -v leave Redis in the same state (see KNOWN lines)');
+  info(
+    `after restore ch0-05 grades: ${o.verdict}; ${o.checks?.map((c) => `#${c.index} ${c.ok ? 'ok' : c.message}`).join(' | ')}`,
+  );
+  record(
+    'example-ops-01-roommate-ran-down',
+    'solutions/01-reference.sh',
+    'right',
+    await verify('example-ops-01-roommate-ran-down'),
+    'down + up, after restore',
+  );
+  skip(
+    'ch0-05 and example-ops wrong solutions (down -v) not simulated: with Redis persistence off, down and down -v leave Redis in the same state (see KNOWN lines)',
+  );
 }
 
 try {

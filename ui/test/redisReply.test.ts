@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'vitest';
-import { asNumber, asPairs, asString, asStrings, parseReply, quoteArg, toCommand, unquote } from '../src/redisReply';
+import {
+  asNumber,
+  asPairs,
+  asString,
+  asStrings,
+  parseReply,
+  quoteArg,
+  toCommand,
+  unquote,
+} from '../src/redisReply';
 
 describe('parseReply', () => {
   test('scalars', () => {
@@ -8,22 +17,41 @@ describe('parseReply', () => {
     expect(parseReply('(nil)')).toEqual({ kind: 'nil' });
     expect(parseReply('OK')).toEqual({ kind: 'status', v: 'OK' });
     expect(parseReply('"hello world"')).toEqual({ kind: 'str', v: 'hello world' });
-    expect(parseReply('(error) ERR unknown command')).toEqual({ kind: 'error', v: 'ERR unknown command' });
+    expect(parseReply('(error) ERR unknown command')).toEqual({
+      kind: 'error',
+      v: 'ERR unknown command',
+    });
     expect(parseReply('(empty array)')).toEqual({ kind: 'array', v: [] });
   });
 
   test('flat array', () => {
     const r = parseReply('1) "name"\n2) "Asha"\n3) "xp"\n4) "45"');
-    expect(asPairs(r)).toEqual([['name', 'Asha'], ['xp', '45']]);
+    expect(asPairs(r)).toEqual([
+      ['name', 'Asha'],
+      ['xp', '45'],
+    ]);
   });
 
   test('arrays with two-digit indexes keep their nesting aligned', () => {
-    const lines = Array.from({ length: 11 }, (_, i) => `${String(i + 1).padStart(2, ' ').trimStart()}) "v${i + 1}"`);
+    const lines = Array.from(
+      { length: 11 },
+      (_, i) =>
+        `${String(i + 1)
+          .padStart(2, ' ')
+          .trimStart()}) "v${i + 1}"`,
+    );
     expect(asStrings(parseReply(lines.join('\n')))).toHaveLength(11);
   });
 
   test('nested arrays (stream entry shape)', () => {
-    const text = ['1) 1) "1730000002000-0"', '   2) 1) "over"', '      2) "17.4"', '2) 1) "1730000001000-0"', '   2) 1) "over"', '      2) "17.3"'].join('\n');
+    const text = [
+      '1) 1) "1730000002000-0"',
+      '   2) 1) "over"',
+      '      2) "17.4"',
+      '2) 1) "1730000001000-0"',
+      '   2) 1) "over"',
+      '      2) "17.3"',
+    ].join('\n');
     const r = parseReply(text);
     expect(r.kind).toBe('array');
     if (r.kind !== 'array') return;

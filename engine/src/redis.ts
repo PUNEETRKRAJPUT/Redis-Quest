@@ -142,10 +142,16 @@ export class RedisManager {
     if (!cli?.isReady) throw new Error('not connected');
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new CliTimeoutError(`no reply after ${CLI_TIMEOUT_MS / 1000}s`)), CLI_TIMEOUT_MS);
+      timer = setTimeout(
+        () => reject(new CliTimeoutError(`no reply after ${CLI_TIMEOUT_MS / 1000}s`)),
+        CLI_TIMEOUT_MS,
+      );
     });
     try {
-      return await Promise.race([cli.sendCommand(argv, { typeMapping: CLI_TYPE_MAPPING }), timeout]);
+      return await Promise.race([
+        cli.sendCommand(argv, { typeMapping: CLI_TYPE_MAPPING }),
+        timeout,
+      ]);
     } catch (err) {
       if (err instanceof CliTimeoutError) this.resetCli();
       throw err;

@@ -24,7 +24,15 @@ export function Workbench({ initial, chapter }: { initial: Tab | null; chapter: 
           const Icon = t.icon;
           const on = tab === t.id;
           return (
-            <button key={t.id} role="tab" type="button" aria-selected={on} className={on ? 'tab active' : 'tab'} onClick={() => setTab(on ? null : t.id)} data-testid={`tab-${t.id}`}>
+            <button
+              key={t.id}
+              role="tab"
+              type="button"
+              aria-selected={on}
+              className={on ? 'tab active' : 'tab'}
+              onClick={() => setTab(on ? null : t.id)}
+              data-testid={`tab-${t.id}`}
+            >
               <Icon size={16} /> {t.label}
             </button>
           );

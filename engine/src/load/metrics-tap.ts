@@ -50,7 +50,14 @@ export class MetricsTap {
   /** Sums every push whose second lies in [fromMs, toMs]. Null when nothing was pushed in the window. */
   window(fromMs: number, toMs: number): AppWindow | null {
     const inWindow = this.pushes.filter((p) => p.at >= fromMs && p.at <= toMs);
-    const sum = { requests: 0, errors: 0, dbQueries: 0, redisCommands: 0, noDbCount: 0, slotErrors: 0 };
+    const sum = {
+      requests: 0,
+      errors: 0,
+      dbQueries: 0,
+      redisCommands: 0,
+      noDbCount: 0,
+      slotErrors: 0,
+    };
     const instances = new Set<string>();
     const seconds = new Set<number>();
     for (const p of inWindow) {

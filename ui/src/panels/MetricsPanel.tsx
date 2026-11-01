@@ -3,11 +3,26 @@ import { api } from '../api';
 import { useQuest } from '../store';
 import type { MetricsTick } from '../types';
 
-export function Sparkline({ values, label, unit, fmt = (n: number) => n.toFixed(0) }: { values: number[]; label: string; unit: string; fmt?: (n: number) => string }) {
+export function Sparkline({
+  values,
+  label,
+  unit,
+  fmt = (n: number) => n.toFixed(0),
+}: {
+  values: number[];
+  label: string;
+  unit: string;
+  fmt?: (n: number) => string;
+}) {
   const W = 220;
   const H = 44;
   const max = Math.max(1, ...values);
-  const pts = values.map((v, i) => `${values.length < 2 ? W : (i / (values.length - 1)) * W},${H - 3 - (v / max) * (H - 8)}`).join(' ');
+  const pts = values
+    .map(
+      (v, i) =>
+        `${values.length < 2 ? W : (i / (values.length - 1)) * W},${H - 3 - (v / max) * (H - 8)}`,
+    )
+    .join(' ');
   const last = values.length ? (values[values.length - 1] as number) : null;
   return (
     <div className="metric" data-testid={`metric-${label}`}>
@@ -15,8 +30,21 @@ export function Sparkline({ values, label, unit, fmt = (n: number) => n.toFixed(
         <span>{label}</span>
         <strong>{last === null ? 'no data' : `${fmt(last)} ${unit}`}</strong>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`${label} over the last ${values.length} seconds`}>
-        {values.length > 1 ? <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" /> : null}
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`${label} over the last ${values.length} seconds`}
+      >
+        {values.length > 1 ? (
+          <polyline
+            points={pts}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+        ) : null}
       </svg>
     </div>
   );
@@ -51,7 +79,10 @@ export function MetricsPanel({ compact = false }: { compact?: boolean }) {
   const ticks = useQuest((s) => s.ticks);
   const seed = useQuest((s) => s.seedTicks);
   useEffect(() => {
-    api.metrics(60).then((m) => seed(m.series.map((x) => ({ ...x })))).catch(() => undefined);
+    api
+      .metrics(60)
+      .then((m) => seed(m.series.map((x) => ({ ...x }))))
+      .catch(() => undefined);
   }, [seed]);
   const s = useMemo(() => tickSeries(ticks), [ticks]);
   return (
@@ -62,7 +93,11 @@ export function MetricsPanel({ compact = false }: { compact?: boolean }) {
       <Sparkline label="errors/s" unit="err" values={s.errors} />
       <Sparkline label="db queries/s" unit="q" values={s.db} />
       <Sparkline label="redis commands/s" unit="cmd" values={s.redis} />
-      {ticks.length === 0 ? <p className="muted metrics-note">No traffic yet. The engine only sends a tick in a second where the app served requests.</p> : null}
+      {ticks.length === 0 ? (
+        <p className="muted metrics-note">
+          No traffic yet. The engine only sends a tick in a second where the app served requests.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -76,10 +111,22 @@ export function PainPanel() {
   const db = s.db.length ? (s.db[s.db.length - 1] as number) : null;
   return (
     <div className="pain" data-testid="pain">
-      <div><span>p99</span><strong>{last ? `${Math.round(last.p99Ms)} ms` : 'no traffic'}</strong></div>
-      <div><span>error rate</span><strong>{last ? `${errRate.toFixed(1)}%` : 'no traffic'}</strong></div>
-      <div><span>db calls/s</span><strong>{db === null ? (last ? 'not reported' : 'no traffic') : db}</strong></div>
-      <div><span>requests/s</span><strong>{last ? last.count : 'no traffic'}</strong></div>
+      <div>
+        <span>p99</span>
+        <strong>{last ? `${Math.round(last.p99Ms)} ms` : 'no traffic'}</strong>
+      </div>
+      <div>
+        <span>error rate</span>
+        <strong>{last ? `${errRate.toFixed(1)}%` : 'no traffic'}</strong>
+      </div>
+      <div>
+        <span>db calls/s</span>
+        <strong>{db === null ? (last ? 'not reported' : 'no traffic') : db}</strong>
+      </div>
+      <div>
+        <span>requests/s</span>
+        <strong>{last ? last.count : 'no traffic'}</strong>
+      </div>
     </div>
   );
 }

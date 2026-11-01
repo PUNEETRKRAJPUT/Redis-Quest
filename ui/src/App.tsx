@@ -28,7 +28,8 @@ function Header({ route }: { route: Route }) {
   const ws = useQuest((s) => s.wsState);
   const redisUp = useQuest((s) => s.redisUp);
   const live = ws === 'open' && redisUp !== false;
-  const active = (r: Route) => r.name === route.name || (r.name === 'home' && route.name === 'level');
+  const active = (r: Route) =>
+    r.name === route.name || (r.name === 'home' && route.name === 'level');
   return (
     <header className="topbar">
       <a className="brand" href="#/" aria-label="Redis Quest, home">
@@ -38,16 +39,37 @@ function Header({ route }: { route: Route }) {
         {NAV.map((n) => {
           const Icon = n.icon;
           return (
-            <a key={n.label} href={hrefFor(n.route)} className={active(n.route) ? 'nav active' : 'nav'} aria-current={active(n.route) ? 'page' : undefined}>
+            <a
+              key={n.label}
+              href={hrefFor(n.route)}
+              className={active(n.route) ? 'nav active' : 'nav'}
+              aria-current={active(n.route) ? 'page' : undefined}
+            >
               <Icon size={16} /> <span>{n.label}</span>
             </a>
           );
         })}
       </nav>
       <div className="status">
-        <span className={live ? 'dot-live on' : 'dot-live'} role="img" aria-label={live ? 'Connected to the engine and Redis' : ws !== 'open' ? 'Reconnecting to the engine' : 'Redis is down'} />
-        <span className="muted">{ws !== 'open' ? 'reconnecting' : redisUp === false ? 'redis down' : 'live'}</span>
-        {progress ? <span className="who-chip">{progress.player.name} <strong>{progress.xp} XP</strong></span> : null}
+        <span
+          className={live ? 'dot-live on' : 'dot-live'}
+          role="img"
+          aria-label={
+            live
+              ? 'Connected to the engine and Redis'
+              : ws !== 'open'
+                ? 'Reconnecting to the engine'
+                : 'Redis is down'
+          }
+        />
+        <span className="muted">
+          {ws !== 'open' ? 'reconnecting' : redisUp === false ? 'redis down' : 'live'}
+        </span>
+        {progress ? (
+          <span className="who-chip">
+            {progress.player.name} <strong>{progress.xp} XP</strong>
+          </span>
+        ) : null}
       </div>
     </header>
   );
@@ -60,7 +82,10 @@ function MirrorBanner() {
   if (!mirror || mirror.redis !== 'up' || (mirror.present && mirror.inSync)) return null;
   return (
     <div className="banner warn" role="alert" data-testid="mirror-banner">
-      <span>Your save file is missing from Redis (a FLUSHALL, or a fresh volume). Your progress is safe in the progress file on your Mac.</span>
+      <span>
+        Your save file is missing from Redis (a FLUSHALL, or a fresh volume). Your progress is safe
+        in the progress file on your Mac.
+      </span>
       <button
         type="button"
         className="btn small"
@@ -78,14 +103,45 @@ function MirrorBanner() {
 
 function Screen({ route }: { route: Route }) {
   switch (route.name) {
-    case 'level': return <LevelScreen key={route.id} id={route.id} />;
-    case 'terminal': return <main className="page"><h1>Terminal</h1><p className="muted">The same Redis your app uses. Dangerous commands get a warning, they are not blocked.</p><TerminalPanel height={520} /></main>;
-    case 'editor': return <main className="page"><h1>Editor</h1><EditorPanel height={560} /></main>;
-    case 'logs': return <main className="page"><h1>Logs</h1><LogsPanel height={520} /></main>;
-    case 'metrics': return <main className="page"><h1>Metrics</h1><MetricsPanel /></main>;
-    case 'built': return <Built />;
-    case 'showme': return <ShowMeGallery />;
-    default: return <ChapterMap />;
+    case 'level':
+      return <LevelScreen key={route.id} id={route.id} />;
+    case 'terminal':
+      return (
+        <main className="page">
+          <h1>Terminal</h1>
+          <p className="muted">
+            The same Redis your app uses. Dangerous commands get a warning, they are not blocked.
+          </p>
+          <TerminalPanel height={520} />
+        </main>
+      );
+    case 'editor':
+      return (
+        <main className="page">
+          <h1>Editor</h1>
+          <EditorPanel height={560} />
+        </main>
+      );
+    case 'logs':
+      return (
+        <main className="page">
+          <h1>Logs</h1>
+          <LogsPanel height={520} />
+        </main>
+      );
+    case 'metrics':
+      return (
+        <main className="page">
+          <h1>Metrics</h1>
+          <MetricsPanel />
+        </main>
+      );
+    case 'built':
+      return <Built />;
+    case 'showme':
+      return <ShowMeGallery />;
+    default:
+      return <ChapterMap />;
   }
 }
 
@@ -108,14 +164,22 @@ export function App() {
     return () => clearInterval(t);
   }, [boot, init]);
 
-  if (boot === 'loading') return <main className="page narrow"><p className="muted">Starting...</p></main>;
+  if (boot === 'loading')
+    return (
+      <main className="page narrow">
+        <p className="muted">Starting...</p>
+      </main>
+    );
   if (boot === 'welcome') return <Welcome />;
   if (boot === 'offline')
     return (
       <main className="page narrow" data-testid="offline">
         <h1>The game engine is not answering</h1>
         <p>{bootError}</p>
-        <p>Start the stack from the repo folder with <code>./scripts/start</code>. This page keeps trying and will continue on its own.</p>
+        <p>
+          Start the stack from the repo folder with <code>./scripts/start</code>. This page keeps
+          trying and will continue on its own.
+        </p>
       </main>
     );
   if (boot === 'invalid')
@@ -123,17 +187,29 @@ export function App() {
       <main className="page narrow" data-testid="levels-invalid">
         <h1>The level files have errors</h1>
         <p>The engine refuses to run until they are fixed:</p>
-        <ul className="errors">{errors.map((e, i) => <li key={i}><code>{e}</code></li>)}</ul>
+        <ul className="errors">
+          {errors.map((e, i) => (
+            <li key={i}>
+              <code>{e}</code>
+            </li>
+          ))}
+        </ul>
       </main>
     );
   return (
     <>
-      <button type="button" className="skip" onClick={() => document.getElementById('main')?.focus()}>
+      <button
+        type="button"
+        className="skip"
+        onClick={() => document.getElementById('main')?.focus()}
+      >
         Skip to content
       </button>
       <Header route={route} />
       <MirrorBanner />
-      <div id="main" tabIndex={-1}><Screen route={route} /></div>
+      <div id="main" tabIndex={-1}>
+        <Screen route={route} />
+      </div>
     </>
   );
 }

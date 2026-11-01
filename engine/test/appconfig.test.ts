@@ -3,7 +3,11 @@ import { etagOf, matchesEtag, type AppConfig } from '../src/appconfig.js';
 import { MetricsStore, parsePush } from '../src/metrics.js';
 import { EventBus } from '../src/events.js';
 
-const cfg: AppConfig = { target: { redisUrl: 'redis://redis:6379' }, activeSlots: ['cache.getPlayerStats'], dbExtraLatencyMs: 0 };
+const cfg: AppConfig = {
+  target: { redisUrl: 'redis://redis:6379' },
+  activeSlots: ['cache.getPlayerStats'],
+  dbExtraLatencyMs: 0,
+};
 
 describe('app-config etag', () => {
   test('stable for the same config, changes with any field', () => {
@@ -45,7 +49,8 @@ describe('metrics store', () => {
 describe('event ring', () => {
   test('keeps the last 200 and filters by since', () => {
     const bus = new EventBus();
-    for (let i = 0; i < 250; i++) bus.emit('level.event', { kind: 'custom', name: `e${i}` }, new Date(1000 + i));
+    for (let i = 0; i < 250; i++)
+      bus.emit('level.event', { kind: 'custom', name: `e${i}` }, new Date(1000 + i));
     bus.emit('progress.changed', {});
     const all = bus.since();
     expect(all).toHaveLength(200);

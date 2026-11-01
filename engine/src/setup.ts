@@ -1,4 +1,9 @@
-import { commandKey, renderTemplates, SETUP_FORBIDDEN_COMMANDS, type TemplateContext } from '@quest/shared';
+import {
+  commandKey,
+  renderTemplates,
+  SETUP_FORBIDDEN_COMMANDS,
+  type TemplateContext,
+} from '@quest/shared';
 import type { LoadedLevel } from '@quest/shared';
 import type { RedisManager } from './redis.js';
 
@@ -14,10 +19,15 @@ export interface SetupResult {
 export function assertSetupCommandAllowed(cmd: readonly string[]): void {
   const name = (cmd[0] ?? '').toUpperCase();
   if (SETUP_FORBIDDEN_COMMANDS.has(name)) throw new SetupRefusedError(`setup may not run ${name}`);
-  if (cmd.some((a) => a.startsWith('game:'))) throw new SetupRefusedError(`setup may not touch game:* keys (${commandKey(cmd)})`);
+  if (cmd.some((a) => a.startsWith('game:')))
+    throw new SetupRefusedError(`setup may not touch game:* keys (${commandKey(cmd)})`);
 }
 
-export async function runSetup(level: LoadedLevel, ctx: TemplateContext, redis: RedisManager): Promise<SetupResult> {
+export async function runSetup(
+  level: LoadedLevel,
+  ctx: TemplateContext,
+  redis: RedisManager,
+): Promise<SetupResult> {
   const steps = level.level.setup ?? [];
   const result: SetupResult = { ran: 0, skipped: [] };
   const rendered = renderTemplates(steps, ctx);

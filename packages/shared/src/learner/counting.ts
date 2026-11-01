@@ -2,20 +2,55 @@ import type { LearnerCounters } from './types.js';
 
 // Redis client methods that do not send a command. They are never counted.
 const NOT_COMMANDS = new Set([
-  'on', 'once', 'off', 'emit', 'addListener', 'removeListener', 'removeAllListeners', 'listeners',
-  'rawListeners', 'listenerCount', 'eventNames', 'setMaxListeners', 'getMaxListeners',
-  'prependListener', 'prependOnceListener', 'ref', 'unref',
+  'on',
+  'once',
+  'off',
+  'emit',
+  'addListener',
+  'removeListener',
+  'removeAllListeners',
+  'listeners',
+  'rawListeners',
+  'listenerCount',
+  'eventNames',
+  'setMaxListeners',
+  'getMaxListeners',
+  'prependListener',
+  'prependOnceListener',
+  'ref',
+  'unref',
 ]);
 // Return a derived client/handle; not a command themselves, but the result must stay counted.
 const DERIVE = new Set([
-  'withAbortSignal', 'withCommandOptions', 'withTypeMapping', 'withFunctions', 'withScripts',
-  'withOptions', 'asap', 'isolated',
+  'withAbortSignal',
+  'withCommandOptions',
+  'withTypeMapping',
+  'withFunctions',
+  'withScripts',
+  'withOptions',
+  'asap',
+  'isolated',
 ]);
 // Lifecycle calls from learner code are swallowed so one module cannot close a shared client.
 const LIFECYCLE = new Set(['connect', 'close', 'quit', 'destroy', 'disconnect']);
 // Module namespaces on the client (client.json.set, client.ft.search, ...): their methods are commands.
 const NAMESPACES = new Set([
-  'json', 'ft', 'ts', 'bf', 'cf', 'cms', 'topK', 'tDigest', 'JSON', 'FT', 'TS', 'BF', 'CF', 'CMS', 'TOPK', 'TDIGEST',
+  'json',
+  'ft',
+  'ts',
+  'bf',
+  'cf',
+  'cms',
+  'topK',
+  'tDigest',
+  'JSON',
+  'FT',
+  'TS',
+  'BF',
+  'CF',
+  'CMS',
+  'TOPK',
+  'TDIGEST',
 ]);
 const MULTI_EXEC = new Set(['exec', 'EXEC', 'execAsPipeline']);
 const MULTI_RESET = new Set(['discard', 'DISCARD']);
@@ -33,7 +68,11 @@ export interface CountingOptions {
  * nothing, `exec()` / `execAsPipeline()` counts 1 if at least one command was queued; listener methods and
  * lifecycle methods count 0; `duplicate()` returns a counted clone.
  */
-export function countRedis<T extends object>(client: T, counters: LearnerCounters, opts: CountingOptions = {}): T {
+export function countRedis<T extends object>(
+  client: T,
+  counters: LearnerCounters,
+  opts: CountingOptions = {},
+): T {
   const cache = new WeakMap<object, object>();
 
   // Proxies wrap an empty shadow object and forward to `t`: node-redis exposes some namespaces as
@@ -49,16 +88,23 @@ export function countRedis<T extends object>(client: T, counters: LearnerCounter
       get(_s, prop) {
         const value = Reflect.get(t, prop, t) as unknown;
         if (typeof prop !== 'string') return value;
-        if (kind !== 'namespace' && NAMESPACES.has(prop) && typeof value === 'object' && value !== null) {
+        if (
+          kind !== 'namespace' &&
+          NAMESPACES.has(prop) &&
+          typeof value === 'object' &&
+          value !== null
+        ) {
           return wrap(value, 'namespace');
         }
         if (typeof value !== 'function') return value;
         const fn = value as (...a: unknown[]) => unknown;
         if (LIFECYCLE.has(prop)) {
-          if (swallow) return () => (prop === 'connect' ? Promise.resolve(proxy) : Promise.resolve());
+          if (swallow)
+            return () => (prop === 'connect' ? Promise.resolve(proxy) : Promise.resolve());
           return (...a: unknown[]) => keepWrapped(fn.apply(t, a), t, proxy); // a duplicate's own lifecycle, not counted
         }
-        if (NOT_COMMANDS.has(prop)) return (...a: unknown[]) => keepWrapped(fn.apply(t, a), t, proxy);
+        if (NOT_COMMANDS.has(prop))
+          return (...a: unknown[]) => keepWrapped(fn.apply(t, a), t, proxy);
         if (kind !== 'namespace' && prop === 'duplicate') {
           return (...a: unknown[]) => {
             const clone = fn.apply(t, a) as object;

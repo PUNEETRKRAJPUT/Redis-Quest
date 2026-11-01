@@ -21,7 +21,8 @@ afterAll(async () => {
   await rm(scratch, { recursive: true, force: true });
 });
 
-async function post(url: string, payload: unknown): Promise<{ status: number; body: any }> { // eslint-disable-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function post(url: string, payload: unknown): Promise<{ status: number; body: any }> {
   const res = await app.inject({ method: 'POST', url, payload: payload as object });
   return { status: res.statusCode, body: res.json() };
 }
@@ -33,19 +34,32 @@ describe('runner HTTP API', () => {
   });
 
   test('/load: ok, helpers, syntax error, no default, missing, bad path', async () => {
-    expect((await post('/load', { module: '_examples/ok.js' })).body).toEqual({ ok: true, exports: ['default'] });
-    expect((await post('/load', { module: '_examples/helpers.js' })).body.exports.sort()).toEqual(['default', 'double']);
+    expect((await post('/load', { module: '_examples/ok.js' })).body).toEqual({
+      ok: true,
+      exports: ['default'],
+    });
+    expect((await post('/load', { module: '_examples/helpers.js' })).body.exports.sort()).toEqual([
+      'default',
+      'double',
+    ]);
     const bad = (await post('/load', { module: '_examples/bad-syntax.js' })).body;
     expect(bad.ok).toBe(false);
     expect(bad.error.name).toBe('SyntaxError');
-    expect((await post('/load', { module: '_examples/no-default.js' })).body.error.message).toMatch(/no default export/);
-    expect((await post('/load', { module: '_examples/missing.js' })).body.error.message).toMatch(/not found/);
+    expect((await post('/load', { module: '_examples/no-default.js' })).body.error.message).toMatch(
+      /no default export/,
+    );
+    expect((await post('/load', { module: '_examples/missing.js' })).body.error.message).toMatch(
+      /not found/,
+    );
     const trav = await post('/load', { module: '../package.json' });
     expect(trav.status).toBe(400);
   });
 
   test('/run ok.js: value, 1 db query, 2 redis commands, logs', async () => {
-    const { body } = await post('/run', { module: '_examples/ok.js', calls: [{ args: ['quest'] }] });
+    const { body } = await post('/run', {
+      module: '_examples/ok.js',
+      calls: [{ args: ['quest'] }],
+    });
     expect(body.results).toHaveLength(1);
     expect(body.results[0]).toMatchObject({ ok: true, value: { greeting: 'hello quest', two: 2 } });
     expect(body.metrics).toMatchObject({ calls: 1, errors: 0, dbQueries: 1, redisCommands: 2 });
@@ -60,7 +74,10 @@ describe('runner HTTP API', () => {
 
   test('/run throws.js reports the error and the runner stays healthy', async () => {
     const { body } = await post('/run', { module: '_examples/throws.js', calls: [{}, {}] });
-    expect(body.results[0]).toMatchObject({ ok: false, error: { name: 'TypeError', message: expect.stringContaining('always throws') } });
+    expect(body.results[0]).toMatchObject({
+      ok: false,
+      error: { name: 'TypeError', message: expect.stringContaining('always throws') },
+    });
     expect(body.results[0].error.stack).toContain('throws.js');
     expect(body.metrics).toMatchObject({ calls: 2, errors: 2 });
     expect((await app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200);
@@ -106,10 +123,15 @@ describe('runner HTTP API', () => {
     const r = deps.redis;
     await r.del('runner:example:counter');
     const calls = Array.from({ length: 50 }, () => ({ args: [] }));
-    const { body } = await post('/run', { module: '_examples/concurrent-counter.js', calls, concurrency: 50 });
+    const { body } = await post('/run', {
+      module: '_examples/concurrent-counter.js',
+      calls,
+      concurrency: 50,
+    });
     expect(body.metrics).toMatchObject({ calls: 50, errors: 0, redisCommands: 50 });
     expect(await r.get('runner:example:counter')).toBe('50');
-    expect(body.results.map((x: any) => x.value).sort((a: number, b: number) => a - b)).toEqual( // eslint-disable-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(body.results.map((x: any) => x.value).sort((a: number, b: number) => a - b)).toEqual(
       Array.from({ length: 50 }, (_, i) => i + 1),
     );
     await r.del('runner:example:counter');
@@ -117,18 +139,28 @@ describe('runner HTTP API', () => {
   });
 
   test('an edited module returns the new value on the next run (no stale cache)', async () => {
-    const local = buildServer({ port: 0, workspaceDir: scratch, redisUrl, databaseUrl }, pino({ level: 'silent' }));
+    const local = buildServer(
+      { port: 0, workspaceDir: scratch, redisUrl, databaseUrl },
+      pino({ level: 'silent' }),
+    );
     const file = path.join(scratch, 'edit.js');
     await writeFile(file, 'export default async () => "v1";\n');
-    const a = (await local.inject({ method: 'POST', url: '/run', payload: { module: 'edit.js' } })).json();
+    const a = (
+      await local.inject({ method: 'POST', url: '/run', payload: { module: 'edit.js' } })
+    ).json();
     await writeFile(file, 'export default async () => "v2 and longer";\n');
-    const b = (await local.inject({ method: 'POST', url: '/run', payload: { module: 'edit.js' } })).json();
+    const b = (
+      await local.inject({ method: 'POST', url: '/run', payload: { module: 'edit.js' } })
+    ).json();
     expect([a.results[0].value, b.results[0].value]).toEqual(['v1', 'v2 and longer']);
     await local.close();
   });
 
   test('redisUrl override is honoured (dead port gives a clear error)', async () => {
-    const { body } = await post('/run', { module: '_examples/ok.js', redisUrl: 'redis://127.0.0.1:1' });
+    const { body } = await post('/run', {
+      module: '_examples/ok.js',
+      redisUrl: 'redis://127.0.0.1:1',
+    });
     expect(body.results[0].ok).toBe(false);
     expect(body.metrics.errors).toBe(1);
   });

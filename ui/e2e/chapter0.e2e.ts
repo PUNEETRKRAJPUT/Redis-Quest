@@ -28,7 +28,10 @@ const PLAYER_NAME = 'Asha Test';
 let shot = 0;
 async function snap(page: Page, name: string): Promise<void> {
   shot += 1;
-  await page.screenshot({ path: join(SHOTS, `${String(shot).padStart(2, '0')}-${name}.png`), fullPage: true });
+  await page.screenshot({
+    path: join(SHOTS, `${String(shot).padStart(2, '0')}-${name}.png`),
+    fullPage: true,
+  });
 }
 
 async function expectNoHorizontalScroll(page: Page, where: string): Promise<void> {
@@ -56,7 +59,9 @@ async function brainstorm(page: Page): Promise<void> {
   await openStage(page, 3);
   const first = page.locator('[data-testid^="brainstorm-option-"]').first();
   await first.check();
-  await page.getByTestId('brainstorm-text').fill('It is the simplest thing that works for a hostel app.');
+  await page
+    .getByTestId('brainstorm-text')
+    .fill('It is the simplest thing that works for a hostel app.');
   await page.getByTestId('brainstorm-submit').click();
   await expect(page.getByTestId('brainstorm-locked')).toBeVisible();
 }
@@ -71,14 +76,24 @@ async function verify(page: Page): Promise<string> {
 }
 
 /** Verify once with whatever is typed and wait until the engine has counted attempt number `n`. */
-async function verifyAttempt(page: Page, request: APIRequestContext, id: string, n: number): Promise<string> {
+async function verifyAttempt(
+  page: Page,
+  request: APIRequestContext,
+  id: string,
+  n: number,
+): Promise<string> {
   await openStage(page, 6);
   await page.getByTestId('verify-button').click();
   await expect
-    .poll(async () => {
-      const p = (await (await request.get('/api/progress')).json()) as { levels: Record<string, { attempts: number }> };
-      return p.levels[id]?.attempts ?? 0;
-    }, { timeout: 60_000 })
+    .poll(
+      async () => {
+        const p = (await (await request.get('/api/progress')).json()) as {
+          levels: Record<string, { attempts: number }>;
+        };
+        return p.levels[id]?.attempts ?? 0;
+      },
+      { timeout: 60_000 },
+    )
     .toBe(n);
   await expect(page.getByTestId('verify-button')).toBeEnabled();
   return (await page.getByTestId('verdict').getAttribute('data-verdict')) ?? 'missing';
@@ -88,7 +103,8 @@ async function passLevel(page: Page, request: APIRequestContext, id: string): Pr
   let verdict = await verify(page);
   await snap(page, `${id}-verify-${verdict}`);
   if (verdict === 'not_implemented') {
-    if (!ALLOW_DEV_COMPLETE_FALLBACK) throw new Error('verify answered not_implemented and the dev-complete fallback is off');
+    if (!ALLOW_DEV_COMPLETE_FALLBACK)
+      throw new Error('verify answered not_implemented and the dev-complete fallback is off');
     console.log(`NOTE: verify not implemented yet, used dev complete (${id})`);
     const res = await request.post(`/api/levels/${id}/complete`, { data: {} });
     expect(res.status(), 'POST /complete needs ENGINE_DEV=1 on the engine').toBe(200);
@@ -123,7 +139,9 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await page.getByRole('button', { name: /Read the chapter thread/ }).click();
   await expect(page.locator('.thread .msg').first()).toBeVisible();
   await snap(page, 'map-start');
-  const progress = (await (await request.get('/api/progress')).json()) as { player: { id: string; name: string } };
+  const progress = (await (await request.get('/api/progress')).json()) as {
+    player: { id: string; name: string };
+  };
   expect(progress.player.name).toBe(PLAYER_NAME);
   const playerId = progress.player.id;
 
@@ -144,7 +162,9 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await brainstorm(page);
   await snap(page, 'level1-brainstorm');
   await openStage(page, 4);
-  await expect(page.getByTestId('stage-4').locator('.codeblock, .inline-code').first()).toBeVisible();
+  await expect(
+    page.getByTestId('stage-4').locator('.codeblock, .inline-code').first(),
+  ).toBeVisible();
   const docLink = page.getByTestId('stage-4').locator('a[href^="https://redis.io/docs/"]').first();
   await expect(docLink).toHaveAttribute('target', '_blank');
   await openStage(page, 5);
@@ -187,7 +207,10 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await stage6.click();
   await page.waitForTimeout(300);
   const after = await page.evaluate(() => window.scrollY);
-  expect(Math.abs(after - before), `page scrollY moved from ${before} to ${after} when focus left the terminal`).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(after - before),
+    `page scrollY moved from ${before} to ${after} when focus left the terminal`,
+  ).toBeLessThanOrEqual(1);
   await passLevel(page, request, LEVELS[1]);
   await page.getByTestId('next-level').click();
 
@@ -208,21 +231,29 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await snap(page, 'level3-ideal-locked');
   await page.getByTestId('answer-1').fill('definitely not the name');
   for (const n of [1, 2, 3]) {
-    expect(await verifyAttempt(page, request, LEVELS[2], n), `wrong answer, attempt ${n}`).toBe('wrong');
+    expect(await verifyAttempt(page, request, LEVELS[2], n), `wrong answer, attempt ${n}`).toBe(
+      'wrong',
+    );
   }
   const ideal3 = page.getByTestId('stage-7').getByTestId('ideal');
   await openStage(page, 7);
   await expect(ideal3).toBeVisible();
   await expect(page.getByTestId('stage-7')).toContainText('unlocked');
-  await expect(ideal3.getByTestId('ideal-reference')).toContainText(`HGET game:player:${playerId} name`);
-  await expect(ideal3.getByTestId('ideal-wrong').first()).toContainText('03-wrong-get-on-a-hash.redis');
+  await expect(ideal3.getByTestId('ideal-reference')).toContainText(
+    `HGET game:player:${playerId} name`,
+  );
+  await expect(ideal3.getByTestId('ideal-wrong').first()).toContainText(
+    '03-wrong-get-on-a-hash.redis',
+  );
   await ideal3.getByTestId('ideal-wrong').first().locator('summary').click();
   await expect(ideal3.getByTestId('ideal-wrong').first()).toContainText('WRONGTYPE');
   await snap(page, 'level3-ideal-after-three-fails');
   await page.getByTestId('answer-1').fill(PLAYER_NAME);
   await snap(page, 'level3-terminal');
   await passLevel(page, request, LEVELS[2]);
-  await expect(page.getByTestId('passed-panel').getByTestId('hash-table')).toContainText(PLAYER_NAME);
+  await expect(page.getByTestId('passed-panel').getByTestId('hash-table')).toContainText(
+    PLAYER_NAME,
+  );
   await page.getByTestId('next-level').click();
 
   // ---- level 4: ops + answer box: read the TTL through the terminal ------------------------------------------
@@ -243,7 +274,9 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await expect(ideal4).toBeVisible();
   await expect(ideal4.getByTestId('ideal-revealed-note')).toBeVisible();
   await expect(ideal4.getByTestId('ideal-reference')).toBeVisible();
-  const lv4 = (await (await request.get(`/api/progress`)).json()) as { levels: Record<string, { status: string }> };
+  const lv4 = (await (await request.get(`/api/progress`)).json()) as {
+    levels: Record<string, { status: string }>;
+  };
   expect(lv4.levels[LEVELS[3]]?.status).not.toBe('passed');
   await snap(page, 'level4-ideal-revealed-anyway');
   await page.getByTestId('answer-0').fill(ttl);
@@ -267,10 +300,14 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   // ---- what you built -----------------------------------------------------------------------------------------
   await page.getByRole('link', { name: /What you built/ }).click();
   await expect(page.getByTestId('built')).toBeVisible();
-  for (const id of LEVELS) await expect(page.getByTestId(`built-${id}`).locator('[data-showme]')).toBeVisible();
+  for (const id of LEVELS)
+    await expect(page.getByTestId(`built-${id}`).locator('[data-showme]')).toBeVisible();
   await expect(page.getByTestId(`built-${LEVELS[2]}`)).toContainText(PLAYER_NAME);
   // F-09: the Insight link follows insightUrl from GET /health: the page hostname and the stack's INSIGHT_PORT.
-  await expect(page.getByTestId('insight-link')).toHaveAttribute('href', `http://${new URL(page.url()).hostname}:5543`);
+  await expect(page.getByTestId('insight-link')).toHaveAttribute(
+    'href',
+    `http://${new URL(page.url()).hostname}:5543`,
+  );
   await expectNoHorizontalScroll(page, 'built');
   await snap(page, 'built');
 
@@ -284,14 +321,19 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await page.getByRole('link', { name: 'Editor', exact: true }).click();
   await expect(page.locator('.monaco-editor').first()).toBeVisible({ timeout: 60_000 });
   await expect(page.locator('.filelist .file').first()).toBeVisible();
-  const openedPath = ((await page.locator('.editor-bar code').innerText()) ?? '').replace(/^workspace\//, '');
+  const openedPath = ((await page.locator('.editor-bar code').innerText()) ?? '').replace(
+    /^workspace\//,
+    '',
+  );
   await page.locator('.monaco-editor .view-lines').first().click();
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.type('\n// edited in the browser');
   await expect(page.getByRole('button', { name: 'Save' })).toBeEnabled();
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.locator('.editor-bar')).toContainText('Saved');
-  const saved = (await (await request.get(`/api/workspace/file?path=${encodeURIComponent(openedPath)}`)).json()) as { content: string };
+  const saved = (await (
+    await request.get(`/api/workspace/file?path=${encodeURIComponent(openedPath)}`)
+  ).json()) as { content: string };
   expect(saved.content).toContain('// edited in the browser');
   await snap(page, 'editor');
 

@@ -12,7 +12,14 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-const fresh = () => newProgress({ id: 'p-1', name: 'Asha', redisUrl: 'redis://redis:6379', activeSlots: [], now: new Date() });
+const fresh = () =>
+  newProgress({
+    id: 'p-1',
+    name: 'Asha',
+    redisUrl: 'redis://redis:6379',
+    activeSlots: [],
+    now: new Date(),
+  });
 const IDS = ['a-01-x', 'a-02-y', 'a-03-z'];
 
 describe('atomic writes', () => {

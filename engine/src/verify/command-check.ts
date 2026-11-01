@@ -67,7 +67,9 @@ export async function crossCheckReadOnly(send: SendCommand): Promise<CommandChec
   });
   try {
     const listed = new Set(names);
-    report.readonlyNotListed = readonlyNames(normalizeReply(await send(['COMMAND']))).filter((n) => !listed.has(n)).sort();
+    report.readonlyNotListed = readonlyNames(normalizeReply(await send(['COMMAND'])))
+      .filter((n) => !listed.has(n))
+      .sort();
   } catch {
     // informational only
   }

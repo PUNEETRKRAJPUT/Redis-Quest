@@ -21,7 +21,13 @@ import { MetricsTap } from '../load/metrics-tap.js';
 import { runLoad, type LoadRunner } from '../load/run.js';
 import type { MetricsStore } from '../metrics.js';
 import type { RedisManager } from '../redis.js';
-import { httpRunner, loadFixtureSteps, runAssertions, runFixtureSteps, type RunFn } from './behavior.js';
+import {
+  httpRunner,
+  loadFixtureSteps,
+  runAssertions,
+  runFixtureSteps,
+  type RunFn,
+} from './behavior.js';
 import { crossCheckReadOnly, type CommandCheckReport } from './command-check.js';
 import type { VerifyConfig } from './config.js';
 import { describeEvent, EventLog, waitForEvent } from './events.js';
@@ -38,7 +44,8 @@ export type Answers = Record<string, string | string[]>;
 export class VerifyBusyError extends Error {}
 
 export const NO_ANTIPATTERN = 'No antipattern found.';
-export const SKIPPED_TRAFFIC = 'Skipped: another check already failed, so the load test was not run (your code is only put into the app once it passes in the runner).';
+export const SKIPPED_TRAFFIC =
+  'Skipped: another check already failed, so the load test was not run (your code is only put into the app once it passes in the runner).';
 
 export interface VerifierDeps {
   cfg: VerifyConfig;
@@ -103,10 +110,31 @@ export class Verifier {
         (r) => {
           this.commandCheck = r;
           const log = this.d.log;
-          if (r.write.length) log.warn({ commands: r.write }, 'READ_ONLY_COMMANDS lists commands the server flags as write');
-          if (r.unknown.length) log.warn({ commands: r.unknown }, 'READ_ONLY_COMMANDS lists commands the server does not know');
-          if (r.neither.length) log.info({ commands: r.neither.map((x) => x.command) }, 'allowlisted commands without a readonly flag (no key access; expected for PING, INFO and similar)');
-          log.info({ total: r.total, readonlyFlagged: r.readonlyFlagged, write: r.write.length, unknown: r.unknown.length, readonlyNotListed: r.readonlyNotListed.length }, 'read-only allowlist cross-checked against COMMAND INFO');
+          if (r.write.length)
+            log.warn(
+              { commands: r.write },
+              'READ_ONLY_COMMANDS lists commands the server flags as write',
+            );
+          if (r.unknown.length)
+            log.warn(
+              { commands: r.unknown },
+              'READ_ONLY_COMMANDS lists commands the server does not know',
+            );
+          if (r.neither.length)
+            log.info(
+              { commands: r.neither.map((x) => x.command) },
+              'allowlisted commands without a readonly flag (no key access; expected for PING, INFO and similar)',
+            );
+          log.info(
+            {
+              total: r.total,
+              readonlyFlagged: r.readonlyFlagged,
+              write: r.write.length,
+              unknown: r.unknown.length,
+              readonlyNotListed: r.readonlyNotListed.length,
+            },
+            'read-only allowlist cross-checked against COMMAND INFO',
+          );
         },
         (err: Error) => {
           this.commandCheck = { error: err.message };
@@ -125,7 +153,8 @@ export class Verifier {
 
   /** One verification at a time per player (the route answers 409 otherwise). */
   begin(playerId: string): () => void {
-    if (this.running.has(playerId)) throw new VerifyBusyError('a verification is already running for this player');
+    if (this.running.has(playerId))
+      throw new VerifyBusyError('a verification is already running for this player');
     this.running.add(playerId);
     return () => this.running.delete(playerId);
   }
@@ -141,7 +170,9 @@ export class Verifier {
     // Traffic runs last: it activates the learner's slot inside the app, where a synchronous infinite
     // loop cannot be stopped, so the code must first pass its behavior verifiers in the runner (which
     // can kill it). Every other verifier keeps list order.
-    const order = [...specs.keys()].filter((i) => specs[i]?.type !== 'traffic').concat([...specs.keys()].filter((i) => specs[i]?.type === 'traffic'));
+    const order = [...specs.keys()]
+      .filter((i) => specs[i]?.type !== 'traffic')
+      .concat([...specs.keys()].filter((i) => specs[i]?.type === 'traffic'));
     for (const index of order) {
       const v = specs[index] as VerifySpec;
       const alreadyWrong = checks.some((c) => c.type !== 'antipattern' && !c.ok);
@@ -151,11 +182,21 @@ export class Verifier {
       try {
         r = await this.runOne(level, v, index, req, slots, alreadyWrong);
       } catch (err) {
-        r = { ok: false, message: `The engine could not run this check: ${(err as Error).message}`, details: { error: (err as Error).message } };
+        r = {
+          ok: false,
+          message: `The engine could not run this check: ${(err as Error).message}`,
+          details: { error: (err as Error).message },
+        };
       }
       const result: CheckResult = { index, type: v.type, ...r, durationMs: Date.now() - t0 };
       checks.push(result);
-      this.progress('verify_check_finished', { levelId, index, type: v.type, ok: result.ok, ...(result.skipped ? { skipped: true } : {}) });
+      this.progress('verify_check_finished', {
+        levelId,
+        index,
+        type: v.type,
+        ok: result.ok,
+        ...(result.skipped ? { skipped: true } : {}),
+      });
     }
     checks.sort((a, b) => a.index - b.index);
     const verdict = decide(checks.map((c) => ({ type: c.type, passed: c.ok })));
@@ -191,12 +232,28 @@ export class Verifier {
           const items = await runChecks(this.send, v.checks);
           return { ...summarize(items, NO_ANTIPATTERN), details: { items } };
         }
-        return this.behavior(level, { slot: v.slot, fixtures: v.fixtures, concurrency: v.concurrency, assertions: v.assertions }, req, NO_ANTIPATTERN);
+        return this.behavior(
+          level,
+          {
+            slot: v.slot,
+            fixtures: v.fixtures,
+            concurrency: v.concurrency,
+            assertions: v.assertions,
+          },
+          req,
+          NO_ANTIPATTERN,
+        );
       }
       case 'behavior':
         return this.behavior(level, v, req, undefined, v.message);
       case 'traffic': {
-        if (alreadyWrong) return { ok: false, skipped: true, message: SKIPPED_TRAFFIC, details: { scenario: v.scenario } };
+        if (alreadyWrong)
+          return {
+            ok: false,
+            skipped: true,
+            message: SKIPPED_TRAFFIC,
+            details: { scenario: v.scenario },
+          };
         return this.traffic.grade(v, slots);
       }
       case 'event':
@@ -210,7 +267,12 @@ export class Verifier {
 
   private async behavior(
     level: LoadedLevel,
-    v: { slot: string; fixtures: string; concurrency?: number; assertions: Parameters<typeof runAssertions>[0]['assertions'] },
+    v: {
+      slot: string;
+      fixtures: string;
+      concurrency?: number;
+      assertions: Parameters<typeof runAssertions>[0]['assertions'];
+    },
     req: VerifyRequest,
     passedText?: string,
     fallbackMessage?: string,
@@ -220,30 +282,59 @@ export class Verifier {
     const steps = await loadFixtureSteps(level, v.fixtures, req.templateCtx);
     const fixtureError = await runFixtureSteps(steps, this.send);
     if (fixtureError) {
-      return { ok: false, message: `The engine could not reset this level's state before calling your function (${fixtureError}).`, details };
+      return {
+        ok: false,
+        message: `The engine could not reset this level's state before calling your function (${fixtureError}).`,
+        details,
+      };
     }
     details.fixtures = { file: v.fixtures, steps: steps.length };
-    const assertions = fallbackMessage ? v.assertions.map((a) => ({ ...a, message: a.message ?? fallbackMessage })) : v.assertions;
-    const r = await runAssertions({ slot: v.slot, module, concurrency: v.concurrency, assertions }, { run: this.run, send: this.send, redisUrl: this.d.redis.url });
+    const assertions = fallbackMessage
+      ? v.assertions.map((a) => ({ ...a, message: a.message ?? fallbackMessage }))
+      : v.assertions;
+    const r = await runAssertions(
+      { slot: v.slot, module, concurrency: v.concurrency, assertions },
+      { run: this.run, send: this.send, redisUrl: this.d.redis.url },
+    );
     details.concurrency = r.concurrency;
     details.assertions = r.reports;
     return { ok: r.ok, message: r.ok && passedText ? passedText : r.message, details };
   }
 
-  private async event(v: EventVerifier, req: VerifyRequest, alreadyWrong: boolean): Promise<Omit<CheckResult, 'index' | 'type' | 'durationMs'>> {
+  private async event(
+    v: EventVerifier,
+    req: VerifyRequest,
+    alreadyWrong: boolean,
+  ): Promise<Omit<CheckResult, 'index' | 'type' | 'durationMs'>> {
     const cap = this.d.cfg.maxEventWaitMs;
     const waitMs = alreadyWrong ? 0 : Math.min(v.timeoutMs, cap ?? v.timeoutMs);
     const o = await waitForEvent(this.events, v, {
       ...(req.startedAt ? { sinceIso: req.startedAt } : {}),
       waitMs,
-      ...(v.kind === 'channel_message' || v.kind === 'key_expired' ? { subscribe: (fn) => this.subscribeRedis(v, fn) } : {}),
+      ...(v.kind === 'channel_message' || v.kind === 'key_expired'
+        ? { subscribe: (fn) => this.subscribeRedis(v, fn) }
+        : {}),
     });
-    const details: Record<string, unknown> = { kind: v.kind, match: v.match ?? {}, how: o.how, waitedMs: o.waitedMs, since: req.startedAt ?? null };
+    const details: Record<string, unknown> = {
+      kind: v.kind,
+      match: v.match ?? {},
+      how: o.how,
+      waitedMs: o.waitedMs,
+      since: req.startedAt ?? null,
+    };
     if (o.event) details.event = o.event;
     if (o.ok) {
-      return { ok: true, message: o.how === 'already_happened' ? `The game saw ${describeEvent(v)} at ${o.event?.at}.` : `The game saw ${describeEvent(v)} while it waited.`, details };
+      return {
+        ok: true,
+        message:
+          o.how === 'already_happened'
+            ? `The game saw ${describeEvent(v)} at ${o.event?.at}.`
+            : `The game saw ${describeEvent(v)} while it waited.`,
+        details,
+      };
     }
-    const base = v.message ?? `The game has not seen ${describeEvent(v)} since you started this level.`;
+    const base =
+      v.message ?? `The game has not seen ${describeEvent(v)} since you started this level.`;
     const why = alreadyWrong
       ? 'not waited for: an earlier check already failed'
       : `nothing since the level started, and nothing in ${Math.round(waitMs / 100) / 10} s of waiting`;
@@ -251,15 +342,22 @@ export class Verifier {
   }
 
   /** channel_message: SUBSCRIBE on a duplicated client; key_expired: keyspace notifications (if enabled). */
-  private async subscribeRedis(v: EventVerifier, fn: (d: LevelEventData) => void): Promise<() => Promise<void>> {
+  private async subscribeRedis(
+    v: EventVerifier,
+    fn: (d: LevelEventData) => void,
+  ): Promise<() => Promise<void>> {
     const sub = this.d.redis.client().duplicate();
     sub.on('error', () => undefined);
     await sub.connect();
     if (v.kind === 'channel_message') {
       const channel = String(v.match?.channel);
-      await sub.subscribe(channel, (message: string) => fn({ kind: 'channel_message', data: { channel, message } }));
+      await sub.subscribe(channel, (message: string) =>
+        fn({ kind: 'channel_message', data: { channel, message } }),
+      );
     } else {
-      await sub.pSubscribe('__keyevent@*__:expired', (key: string) => fn({ kind: 'key_expired', data: { key } }));
+      await sub.pSubscribe('__keyevent@*__:expired', (key: string) =>
+        fn({ kind: 'key_expired', data: { key } }),
+      );
     }
     return async () => {
       try {

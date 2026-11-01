@@ -1,9 +1,30 @@
 import type { ReactNode } from 'react';
 
 // Inline SVG only (no emoji as UI icons). All icons are 20x20, stroke follows currentColor.
-function Svg({ children, size = 18, title }: { children: ReactNode; size?: number; title?: string }) {
+function Svg({
+  children,
+  size = 18,
+  title,
+}: {
+  children: ReactNode;
+  size?: number;
+  title?: string;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" role={title ? 'img' : undefined} aria-label={title} aria-hidden={title ? undefined : true} focusable="false">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      role={title ? 'img' : undefined}
+      aria-label={title}
+      aria-hidden={title ? undefined : true}
+      focusable="false"
+    >
       {children}
     </svg>
   );
@@ -103,7 +124,18 @@ export const IconBall = (p: P) => (
   </Svg>
 );
 export const IconSpinner = (p: P) => (
-  <svg className="spin" width={p.size ?? 16} height={p.size ?? 16} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true" focusable="false">
+  <svg
+    className="spin"
+    width={p.size ?? 16}
+    height={p.size ?? 16}
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.2"
+    strokeLinecap="round"
+    aria-hidden="true"
+    focusable="false"
+  >
     <path d="M10 3a7 7 0 1 0 7 7" />
   </svg>
 );

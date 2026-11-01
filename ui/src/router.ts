@@ -10,7 +10,15 @@ export function parseHash(hash: string): Route {
   const parts = path.split('/').filter(Boolean);
   const [a, b] = parts;
   if (a === 'level' && b) return { name: 'level', id: decodeURIComponent(b) };
-  if (a === 'terminal' || a === 'editor' || a === 'logs' || a === 'metrics' || a === 'built' || a === 'showme') return { name: a };
+  if (
+    a === 'terminal' ||
+    a === 'editor' ||
+    a === 'logs' ||
+    a === 'metrics' ||
+    a === 'built' ||
+    a === 'showme'
+  )
+    return { name: a };
   return { name: 'home' };
 }
 

@@ -14,7 +14,8 @@ class BadRequest extends Error {
 
 function validModule(config: RunnerConfig, body: Record<string, unknown>): string {
   const mod = body.module;
-  if (typeof mod !== 'string' || mod === '') throw new BadRequest('"module" must be a path under the workspace, e.g. "_examples/ok.js"');
+  if (typeof mod !== 'string' || mod === '')
+    throw new BadRequest('"module" must be a path under the workspace, e.g. "_examples/ok.js"');
   try {
     resolveWorkspacePath(config.workspaceDir, mod);
   } catch (err) {
@@ -30,10 +31,17 @@ function optString(body: Record<string, unknown>, key: string): string | undefin
   return v;
 }
 
-function optInt(body: Record<string, unknown>, key: string, def: number, min: number, max: number): number {
+function optInt(
+  body: Record<string, unknown>,
+  key: string,
+  def: number,
+  min: number,
+  max: number,
+): number {
   const v = body[key];
   if (v === undefined) return def;
-  if (typeof v !== 'number' || !Number.isFinite(v)) throw new BadRequest(`"${key}" must be a number`);
+  if (typeof v !== 'number' || !Number.isFinite(v))
+    throw new BadRequest(`"${key}" must be a number`);
   return Math.min(max, Math.max(min, Math.trunc(v)));
 }
 
@@ -61,9 +69,17 @@ export function buildServer(config: RunnerConfig, log: FastifyBaseLogger): Fasti
     };
     const out = await runInChild(job, 6000);
     if (out.reply?.mode === 'load') {
-      return { ok: out.reply.ok, exports: out.reply.exports, ...(out.reply.error ? { error: out.reply.error } : {}) };
+      return {
+        ok: out.reply.ok,
+        exports: out.reply.exports,
+        ...(out.reply.error ? { error: out.reply.error } : {}),
+      };
     }
-    return { ok: false, exports: [], error: out.crash ?? { name: 'Error', message: 'no reply from child' } };
+    return {
+      ok: false,
+      exports: [],
+      error: out.crash ?? { name: 'Error', message: 'no reply from child' },
+    };
   });
 
   app.post('/run', async (req) => {
@@ -76,7 +92,8 @@ export function buildServer(config: RunnerConfig, log: FastifyBaseLogger): Fasti
       }
       calls = body.calls.map((c: unknown) => {
         const args = (c as { args?: unknown } | null)?.args;
-        if (args !== undefined && !Array.isArray(args)) throw new BadRequest('"calls[].args" must be an array');
+        if (args !== undefined && !Array.isArray(args))
+          throw new BadRequest('"calls[].args" must be an array');
         return { args: (args as unknown[] | undefined) ?? [] };
       });
     }

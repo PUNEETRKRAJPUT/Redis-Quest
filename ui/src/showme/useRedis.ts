@@ -17,7 +17,12 @@ export async function readRedis(argv: string[]): Promise<Reply> {
 }
 
 export function useRedis(argv: string[] | null, refreshMs = 2000): RedisRead {
-  const [state, setState] = useState<RedisRead>({ reply: null, error: null, loading: argv !== null, at: null });
+  const [state, setState] = useState<RedisRead>({
+    reply: null,
+    error: null,
+    loading: argv !== null,
+    at: null,
+  });
   const key = argv ? JSON.stringify(argv) : '';
   const alive = useRef(true);
   useEffect(() => {
@@ -33,9 +38,18 @@ export function useRedis(argv: string[] | null, refreshMs = 2000): RedisRead {
       try {
         const reply = await readRedis(argv);
         if (!alive.current) return;
-        setState(reply.kind === 'error' ? { reply: null, error: reply.v, loading: false, at: Date.now() } : { reply, error: null, loading: false, at: Date.now() });
+        setState(
+          reply.kind === 'error'
+            ? { reply: null, error: reply.v, loading: false, at: Date.now() }
+            : { reply, error: null, loading: false, at: Date.now() },
+        );
       } catch (e) {
-        if (alive.current) setState((s) => ({ ...s, error: e instanceof Error ? e.message : String(e), loading: false }));
+        if (alive.current)
+          setState((s) => ({
+            ...s,
+            error: e instanceof Error ? e.message : String(e),
+            loading: false,
+          }));
       }
       if (alive.current && refreshMs > 0) timer = setTimeout(() => void tick(), refreshMs);
     };

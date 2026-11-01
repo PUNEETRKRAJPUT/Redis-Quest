@@ -5,7 +5,8 @@ export function splitArgs(line: string): string[] | null {
   const out: string[] = [];
   let i = 0;
   const n = line.length;
-  const isSpace = (c: string) => c === ' ' || c === '\n' || c === '\r' || c === '\t' || c === '\0' || c === '\v' || c === '\f';
+  const isSpace = (c: string) =>
+    c === ' ' || c === '\n' || c === '\r' || c === '\t' || c === '\0' || c === '\v' || c === '\f';
   const isHex = (c: string | undefined) => !!c && /[0-9a-fA-F]/.test(c);
   while (i < n) {
     while (i < n && isSpace(line[i] as string)) i++;
@@ -23,7 +24,18 @@ export function splitArgs(line: string): string[] | null {
         } else if (c === '\\' && i + 1 < n) {
           i++;
           const e = line[i] as string;
-          cur += e === 'n' ? '\n' : e === 'r' ? '\r' : e === 't' ? '\t' : e === 'b' ? '\b' : e === 'a' ? '\x07' : e;
+          cur +=
+            e === 'n'
+              ? '\n'
+              : e === 'r'
+                ? '\r'
+                : e === 't'
+                  ? '\t'
+                  : e === 'b'
+                    ? '\b'
+                    : e === 'a'
+                      ? '\x07'
+                      : e;
         } else if (c === '"') {
           // closing quote must be followed by a space or the end
           if (i + 1 < n && !isSpace(line[i + 1] as string)) return null;
@@ -73,7 +85,11 @@ export function quote(buf: Buffer | string): string {
       out += escapeChar(ch);
     }
   } else {
-    for (const b of s) out += b >= 0x20 && b < 0x7f ? escapeChar(String.fromCharCode(b)) : `\\x${b.toString(16).padStart(2, '0')}`;
+    for (const b of s)
+      out +=
+        b >= 0x20 && b < 0x7f
+          ? escapeChar(String.fromCharCode(b))
+          : `\\x${b.toString(16).padStart(2, '0')}`;
   }
   return `${out}"`;
 }
@@ -104,7 +120,8 @@ export type ReplyType = 'integer' | 'bulk' | 'status' | 'nil' | 'array' | 'error
 /** Formats a RESP2 reply as redis-cli does on a terminal. Simple strings must arrive as Buffer. */
 export function formatReply(reply: unknown, indent = 0): { text: string; type: ReplyType } {
   if (reply === null || reply === undefined) return { text: '(nil)', type: 'nil' };
-  if (typeof reply === 'number' || typeof reply === 'bigint') return { text: `(integer) ${reply}`, type: 'integer' };
+  if (typeof reply === 'number' || typeof reply === 'bigint')
+    return { text: `(integer) ${reply}`, type: 'integer' };
   if (typeof reply === 'string') return { text: quote(reply), type: 'bulk' };
   if (reply instanceof Error) return { text: `(error) ${reply.message}`, type: 'error' };
   if (Buffer.isBuffer(reply)) return { text: reply.toString('utf8'), type: 'status' };
@@ -122,9 +139,22 @@ export function formatReply(reply: unknown, indent = 0): { text: string; type: R
   return { text: quote(String(reply)), type: 'bulk' };
 }
 
-export const DANGEROUS_COMMANDS: ReadonlySet<string> = new Set(['KEYS', 'FLUSHALL', 'FLUSHDB', 'MONITOR', 'DEBUG']);
+export const DANGEROUS_COMMANDS: ReadonlySet<string> = new Set([
+  'KEYS',
+  'FLUSHALL',
+  'FLUSHDB',
+  'MONITOR',
+  'DEBUG',
+]);
 /** After these the terminal connection is in a mode that would swallow later commands, so it is reset. */
-const MODE_COMMANDS: ReadonlySet<string> = new Set(['MONITOR', 'SUBSCRIBE', 'PSUBSCRIBE', 'SSUBSCRIBE', 'SYNC', 'PSYNC']);
+const MODE_COMMANDS: ReadonlySet<string> = new Set([
+  'MONITOR',
+  'SUBSCRIBE',
+  'PSUBSCRIBE',
+  'SSUBSCRIBE',
+  'SYNC',
+  'PSYNC',
+]);
 
 export interface CliResult {
   reply: string;
@@ -156,7 +186,8 @@ export async function runCli(redis: RedisManager, line: string): Promise<CliResu
   } catch (err) {
     if (isRedisErrorReply(err)) return done(`(error) ${err.message}`, 'error', argv);
     const msg = err instanceof Error ? err.message : String(err);
-    if (/no reply after/.test(msg)) return done(`(error) ${msg}; the terminal connection was reset`, 'error', argv);
+    if (/no reply after/.test(msg))
+      return done(`(error) ${msg}; the terminal connection was reset`, 'error', argv);
     return done(`Could not connect to Redis at ${hostPort(redis.url)}: ${msg}`, 'error', argv);
   }
 }

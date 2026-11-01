@@ -17,7 +17,13 @@ export interface EngineEvent<T = unknown> {
 
 /** `data` of a `level.event`. `kind` values match the level schema's EVENT_KINDS. */
 export interface LevelEventData {
-  kind: 'custom' | 'redis_disconnect' | 'redis_reconnect' | 'channel_message' | 'key_expired' | 'service_scaled';
+  kind:
+    | 'custom'
+    | 'redis_disconnect'
+    | 'redis_reconnect'
+    | 'channel_message'
+    | 'key_expired'
+    | 'service_scaled';
   name?: string;
   data?: unknown;
 }

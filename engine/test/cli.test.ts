@@ -8,7 +8,7 @@ describe('splitArgs (redis-cli rules)', () => {
     expect(splitArgs('SET k "hello world\\n"')).toEqual(['SET', 'k', 'hello world\n']);
     expect(splitArgs('SET k "\\x41\\"q\\""')).toEqual(['SET', 'k', 'A"q"']);
   });
-  test('single quotes are literal except \\\'', () => {
+  test("single quotes are literal except \\'", () => {
     expect(splitArgs("SET k 'a \\n b'")).toEqual(['SET', 'k', 'a \\n b']);
     expect(splitArgs("SET k 'it\\'s'")).toEqual(['SET', 'k', "it's"]);
   });
@@ -39,7 +39,8 @@ describe('formatReply (redis-cli on a terminal)', () => {
   test('nested arrays line up', () => {
     expect(formatReply([['a', 'b'], 'c']).text).toBe('1) 1) "a"\n   2) "b"\n2) "c"');
   });
-  test('error inside an array', () => expect(formatReply([new Error('ERR boom')]).text).toBe('1) (error) ERR boom'));
+  test('error inside an array', () =>
+    expect(formatReply([new Error('ERR boom')]).text).toBe('1) (error) ERR boom'));
 });
 
 describe('quote', () => {

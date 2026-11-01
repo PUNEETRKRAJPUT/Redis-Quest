@@ -17,7 +17,13 @@ export class LoopWatchdog implements LoopMarker {
   private beat?: NodeJS.Timeout;
   private worker?: Worker;
 
-  constructor(opts: { slotNames: string[]; thresholdMs: number; logFile?: string; instance: string; log: Logger }) {
+  constructor(opts: {
+    slotNames: string[];
+    thresholdMs: number;
+    logFile?: string;
+    instance: string;
+    log: Logger;
+  }) {
     const workerFile = fileURLToPath(new URL('./watchdog-worker.js', import.meta.url));
     if (!existsSync(workerFile)) {
       // Running from TypeScript sources (vitest): no compiled worker, no watchdog.

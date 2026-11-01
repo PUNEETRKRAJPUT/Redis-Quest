@@ -24,12 +24,7 @@ import { levelSlots, Verifier, VerifyBusyError } from './verify/index.js';
 import { ScenarioError } from './load/scenario.js';
 import { TrafficError } from './verify/traffic.js';
 import { buildIdeal, idealAccess } from './verify/ideal.js';
-import {
-  listTree,
-  readWorkspaceFile,
-  WorkspaceError,
-  writeWorkspaceFile,
-} from './workspace.js';
+import { listTree, readWorkspaceFile, WorkspaceError, writeWorkspaceFile } from './workspace.js';
 
 export interface Deps {
   cfg: Config;
@@ -103,7 +98,10 @@ function isObject(v: unknown): v is Record<string, unknown> {
 
 export async function buildServer(d: Deps): Promise<FastifyInstance> {
   const { cfg, log, bus, store, redis, mirror, levels, logtail, metrics, runtime } = d;
-  const app = Fastify({ loggerInstance: log as unknown as FastifyBaseLogger, disableRequestLogging: true });
+  const app = Fastify({
+    loggerInstance: log as unknown as FastifyBaseLogger,
+    disableRequestLogging: true,
+  });
 
   // An empty body with a JSON content type is `{}`, so `curl -X POST -H 'content-type: ...'` just works.
   app.removeAllContentTypeParsers();
@@ -122,7 +120,9 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
       return reply.code(err.status).send({ error: err.code, message: err.message, ...err.extra });
     }
     if (err instanceof WorkspaceError) {
-      return reply.code(STATUS_FOR_WORKSPACE[err.code]).send({ error: err.code, message: err.message });
+      return reply
+        .code(STATUS_FOR_WORKSPACE[err.code])
+        .send({ error: err.code, message: err.message });
     }
     if (err instanceof TemplateError) {
       return reply.code(500).send({ error: 'template', message: err.message });
@@ -141,11 +141,19 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
     }
     const status = err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
     if (status >= 500) log.error({ err }, 'request failed');
-    return reply.code(status).send({ error: status >= 500 ? 'internal' : 'bad_request', message: err.message });
+    return reply
+      .code(status)
+      .send({ error: status >= 500 ? 'internal' : 'bad_request', message: err.message });
   });
 
   // P0-09: the verifier engine (one per server); it taps app metric pushes and keeps its own event log.
-  const verifier = new Verifier({ cfg: loadVerifyConfig({ progressDir: cfg.progressDir, port: cfg.port }), log, bus, redis, metrics });
+  const verifier = new Verifier({
+    cfg: loadVerifyConfig({ progressDir: cfg.progressDir, port: cfg.port }),
+    log,
+    bus,
+    redis,
+    metrics,
+  });
   verifier.startCommandCheck();
 
   // ---- helpers -------------------------------------------------------------------------------
@@ -158,7 +166,8 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
   });
 
   function needPlayer(): ProgressFile {
-    if (!store.current) throw new HttpError(404, 'no_player', 'no player yet: POST /api/player { name } first');
+    if (!store.current)
+      throw new HttpError(404, 'no_player', 'no player yet: POST /api/player { name } first');
     return store.current;
   }
 
@@ -169,7 +178,11 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
   }
 
   /** Applies a change to progress.json (atomic), tells listeners, then mirrors to Redis (best effort). */
-  async function commit<T>(reason: string, levelId: string | undefined, fn: (draft: ProgressFile) => T): Promise<T> {
+  async function commit<T>(
+    reason: string,
+    levelId: string | undefined,
+    fn: (draft: ProgressFile) => T,
+  ): Promise<T> {
     const out = await store.update(fn);
     const p = store.current as ProgressFile;
     bus.emit('progress.changed', { reason, levelId: levelId ?? null, progress: p });
@@ -188,13 +201,21 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
     reconcileLevels(draft, levels.orderedIds);
   }
 
-  function activeEntry(id: string, allowStatuses: string[]): { entry: LevelIndexEntry; p: ProgressFile } {
+  function activeEntry(
+    id: string,
+    allowStatuses: string[],
+  ): { entry: LevelIndexEntry; p: ProgressFile } {
     const p = needPlayer();
     const entry = needLevel(id);
     const lp = p.levels[id];
-    if (!lp || lp.status === 'locked') throw new HttpError(409, 'level_locked', `${id} is locked: pass the level before it first`);
+    if (!lp || lp.status === 'locked')
+      throw new HttpError(409, 'level_locked', `${id} is locked: pass the level before it first`);
     if (!allowStatuses.includes(lp.status)) {
-      throw new HttpError(409, 'level_not_started', `${id} is ${lp.status}: POST /api/levels/${id}/start first`);
+      throw new HttpError(
+        409,
+        'level_not_started',
+        `${id} is ${lp.status}: POST /api/levels/${id}/start first`,
+      );
     }
     return { entry, p };
   }
@@ -205,7 +226,12 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
   app.get('/health', async (req) => {
     const [pg, boots] = await Promise.all([
       postgresUp(cfg.databaseUrl),
-      redis.isUp ? redis.send<string | null>(['GET', KEY_BOOTS]).then((v) => (v === null ? null : Number(v)), () => null) : Promise.resolve(null),
+      redis.isUp
+        ? redis.send<string | null>(['GET', KEY_BOOTS]).then(
+            (v) => (v === null ? null : Number(v)),
+            () => null,
+          )
+        : Promise.resolve(null),
     ]);
     return {
       ok: true,
@@ -254,13 +280,23 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
       // A broken level file stops the whole API rather than serving half a game.
       api.addHook('onRequest', async (_req, reply) => {
         if (levels.errors.length > 0) {
-          return send(reply, 503, { error: 'levels_invalid', message: 'level files have errors; fix them and restart the engine', errors: levels.errors });
+          return send(reply, 503, {
+            error: 'levels_invalid',
+            message: 'level files have errors; fix them and restart the engine',
+            errors: levels.errors,
+          });
         }
       });
 
       api.post('/player', async (req, reply) => {
-        if (store.current) throw new HttpError(409, 'player_exists', 'a player already exists; progress.json is the save file');
-        const name = isObject(req.body) && typeof req.body.name === 'string' ? req.body.name.trim() : '';
+        if (store.current)
+          throw new HttpError(
+            409,
+            'player_exists',
+            'a player already exists; progress.json is the save file',
+          );
+        const name =
+          isObject(req.body) && typeof req.body.name === 'string' ? req.body.name.trim() : '';
         // eslint-disable-next-line no-control-regex
         if (name.length < 1 || name.length > 40 || /[\u0000-\u001f]/.test(name)) {
           throw new HttpError(400, 'invalid_name', 'name must be 1 to 40 characters');
@@ -289,18 +325,25 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
 
       api.post('/progress/restore', async () => {
         const r = await store.reloadFromDisk();
-        if (r.kind === 'missing') throw new HttpError(404, 'no_player', 'there is no progress.json to restore from');
-        if (r.kind === 'invalid') throw new HttpError(500, 'progress_invalid', `progress.json ${r.reason}`);
+        if (r.kind === 'missing')
+          throw new HttpError(404, 'no_player', 'there is no progress.json to restore from');
+        if (r.kind === 'invalid')
+          throw new HttpError(500, 'progress_invalid', `progress.json ${r.reason}`);
         const p = r.progress;
         try {
           await mirror.writeStrict(p);
         } catch (err) {
-          throw new HttpError(503, 'redis_unavailable', `could not write the mirror: ${(err as Error).message}`);
+          throw new HttpError(
+            503,
+            'redis_unavailable',
+            `could not write the mirror: ${(err as Error).message}`,
+          );
         }
         // The gift always exists while the game runs: set again with a fresh 24 h TTL if missing.
         // The boot counter comes from this engine's memory.
         await mirror.setGift(p);
-        if (runtime.boots !== null) await redis.send(['SET', KEY_BOOTS, String(runtime.boots)]).catch(() => undefined);
+        if (runtime.boots !== null)
+          await redis.send(['SET', KEY_BOOTS, String(runtime.boots)]).catch(() => undefined);
         bus.emit('progress.changed', { reason: 'restored', levelId: null, progress: p });
         // Level 1.15 (FLUSHALL, then restore) verifies on this custom event.
         bus.emit('level.event', { kind: 'custom', name: 'progress_restored' });
@@ -336,7 +379,8 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const p = needPlayer();
         const entry = needLevel(req.params.id);
         const lp = p.levels[entry.level.level.id];
-        if (!lp || lp.status === 'locked') throw new HttpError(409, 'level_locked', `${req.params.id} is locked`);
+        if (!lp || lp.status === 'locked')
+          throw new HttpError(409, 'level_locked', `${req.params.id} is locked`);
         return {
           ...renderLevel(entry, templateContext(cfg, p, entry), lp),
           status: lp.status,
@@ -352,8 +396,18 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const entry = needLevel(req.params.id);
         const id = entry.level.level.id;
         const lp = p.levels[id];
-        if (!lp || lp.status === 'locked') throw new HttpError(409, 'level_locked', `${id} is locked: pass the level before it first`);
-        if (!redis.isUp) throw new HttpError(503, 'redis_unavailable', 'Redis is down, so the level setup cannot run');
+        if (!lp || lp.status === 'locked')
+          throw new HttpError(
+            409,
+            'level_locked',
+            `${id} is locked: pass the level before it first`,
+          );
+        if (!redis.isUp)
+          throw new HttpError(
+            503,
+            'redis_unavailable',
+            'Redis is down, so the level setup cannot run',
+          );
         const setup = await runSetup(entry.level, templateContext(cfg, p, entry), redis);
         const now = new Date().toISOString();
         const level = await commit('level_started', id, (draft) => {
@@ -372,25 +426,55 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const optionId = body.optionId;
         const text = typeof body.text === 'string' ? body.text.trim() : '';
         const option = entry.level.level.brainstorm.options.find((o) => o.id === optionId);
-        if (!option) throw new HttpError(400, 'unknown_option', 'optionId is not one of this level\'s brainstorm options');
-        if (text.length < 1 || text.length > 500) throw new HttpError(400, 'invalid_text', 'write one line (1 to 500 characters) about why');
+        if (!option)
+          throw new HttpError(
+            400,
+            'unknown_option',
+            "optionId is not one of this level's brainstorm options",
+          );
+        if (text.length < 1 || text.length > 500)
+          throw new HttpError(
+            400,
+            'invalid_text',
+            'write one line (1 to 500 characters) about why',
+          );
         const at = new Date().toISOString();
         await commit('brainstorm', entry.level.level.id, (draft) => {
-          (draft.levels[entry.level.level.id] as NonNullable<ProgressFile['levels'][string]>).brainstorm = { optionId: option.id, text, at };
+          (
+            draft.levels[entry.level.level.id] as NonNullable<ProgressFile['levels'][string]>
+          ).brainstorm = { optionId: option.id, text, at };
         });
-        return { brainstorm: { optionId: option.id, text, at }, isReasonable: option.is_reasonable };
+        return {
+          brainstorm: { optionId: option.id, text, at },
+          isReasonable: option.is_reasonable,
+        };
       });
 
       api.post<{ Params: { id: string } }>('/levels/:id/hint', async (req) => {
         const { entry, p } = activeEntry(req.params.id, ['in_progress', 'passed']);
         const id = entry.level.level.id;
-        const hints = renderTemplates(entry.level.level.hints ?? [], templateContext(cfg, p, entry));
+        const hints = renderTemplates(
+          entry.level.level.hints ?? [],
+          templateContext(cfg, p, entry),
+        );
         const revealed = p.levels[id]?.hintsRevealed ?? 0;
-        if (revealed >= hints.length) throw new HttpError(409, 'no_more_hints', 'all hints for this level are already revealed', { hintsTotal: hints.length });
+        if (revealed >= hints.length)
+          throw new HttpError(
+            409,
+            'no_more_hints',
+            'all hints for this level are already revealed',
+            { hintsTotal: hints.length },
+          );
         await commit('hint', id, (draft) => {
-          (draft.levels[id] as NonNullable<ProgressFile['levels'][string]>).hintsRevealed = revealed + 1;
+          (draft.levels[id] as NonNullable<ProgressFile['levels'][string]>).hintsRevealed =
+            revealed + 1;
         });
-        return { index: revealed, hint: hints[revealed], revealed: revealed + 1, hintsTotal: hints.length };
+        return {
+          index: revealed,
+          hint: hints[revealed],
+          revealed: revealed + 1,
+          hintsTotal: hints.length,
+        };
       });
 
       api.post<{ Params: { id: string } }>('/levels/:id/verify', async (req) => {
@@ -399,10 +483,21 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const body = isObject(req.body) ? req.body : {};
         const answers: Answers = {};
         if (body.answers !== undefined) {
-          if (!isObject(body.answers)) throw new HttpError(400, 'invalid_answers', 'answers must be an object { [verifyIndex]: string | string[] }');
+          if (!isObject(body.answers))
+            throw new HttpError(
+              400,
+              'invalid_answers',
+              'answers must be an object { [verifyIndex]: string | string[] }',
+            );
           for (const [k, v] of Object.entries(body.answers)) {
-            const ok = typeof v === 'string' || (Array.isArray(v) && v.every((x) => typeof x === 'string'));
-            if (!/^\d+$/.test(k) || !ok) throw new HttpError(400, 'invalid_answers', `answers[${k}] must be a string or a list of strings under a numeric key`);
+            const ok =
+              typeof v === 'string' || (Array.isArray(v) && v.every((x) => typeof x === 'string'));
+            if (!/^\d+$/.test(k) || !ok)
+              throw new HttpError(
+                400,
+                'invalid_answers',
+                `answers[${k}] must be a string or a list of strings under a numeric key`,
+              );
             answers[k] = v as string | string[];
           }
         }
@@ -410,14 +505,18 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const done = verifier.begin(p.player.id); // 409 verify_in_progress on overlap
         let outcome;
         try {
-          outcome = await runVerification(entry.level, {
-            templateCtx: templateContext(cfg, p, entry),
-            redis,
-            events: bus,
-            startedAt: lp.startedAt,
-            attempt: lp.attempts + 1,
-            verifier,
-          }, answers);
+          outcome = await runVerification(
+            entry.level,
+            {
+              templateCtx: templateContext(cfg, p, entry),
+              redis,
+              events: bus,
+              startedAt: lp.startedAt,
+              attempt: lp.attempts + 1,
+              verifier,
+            },
+            answers,
+          );
         } finally {
           done();
         }
@@ -427,12 +526,19 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           at: now,
           verdict: outcome.verdict,
           durationMs: outcome.durationMs,
-          checks: outcome.checks.map((c) => ({ index: c.index, type: c.type, ok: c.ok, ...(c.skipped ? { skipped: true } : {}) })),
+          checks: outcome.checks.map((c) => ({
+            index: c.index,
+            type: c.type,
+            ok: c.ok,
+            ...(c.skipped ? { skipped: true } : {}),
+          })),
         };
         // "The ideal way" rides along once allowed (passed, or 3 attempts); read before the commit.
         const ideal = await buildIdeal(entry.level, templateContext(cfg, p, entry));
         const result = await commit('verify', id, (draft) => {
-          const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]> & { idealRevealedAt?: string };
+          const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]> & {
+            idealRevealedAt?: string;
+          };
           l.attempts += 1;
           l.verdicts.push(record);
           if (outcome.verdict === 'right') markPassed(draft, entry, now);
@@ -440,7 +546,12 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           if (access.allowed) l.idealRevealedAt ??= now;
           return { attempts: l.attempts, status: l.status, allowed: access.allowed };
         });
-        return { ...outcome, attempts: result.attempts, status: result.status, ...(result.allowed ? { ideal } : {}) };
+        return {
+          ...outcome,
+          attempts: result.attempts,
+          status: result.status,
+          ...(result.allowed ? { ideal } : {}),
+        };
       });
 
       // The ideal way on request: always served, with whether it would have been shown anyway.
@@ -452,7 +563,9 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const ideal = await buildIdeal(entry.level, templateContext(cfg, p, entry));
         const now = new Date().toISOString();
         await commit('ideal', id, (draft) => {
-          const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]> & { idealRevealedAt?: string };
+          const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]> & {
+            idealRevealedAt?: string;
+          };
           l.idealRevealedAt ??= now;
         });
         return { ...access, ...ideal };
@@ -464,7 +577,8 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const p = needPlayer();
         const entry = needLevel(req.params.id);
         const id = entry.level.level.id;
-        if (!p.levels[id] || p.levels[id]?.status === 'locked') throw new HttpError(409, 'level_locked', `${id} is locked`);
+        if (!p.levels[id] || p.levels[id]?.status === 'locked')
+          throw new HttpError(409, 'level_locked', `${id} is locked`);
         const now = new Date().toISOString();
         return commit('completed', id, (draft) => {
           markPassed(draft, entry, now);
@@ -475,9 +589,11 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
       // ---- CLI --------------------------------------------------------------------------------
       api.post('/cli', async (req) => {
         const command = isObject(req.body) ? req.body.command : undefined;
-        if (typeof command !== 'string' || command.trim() === '') throw new HttpError(400, 'invalid_command', 'command must be a non-empty string');
+        if (typeof command !== 'string' || command.trim() === '')
+          throw new HttpError(400, 'invalid_command', 'command must be a non-empty string');
         const r = await runCli(redis, command);
-        if (DANGEROUS_COMMANDS.has(r.command)) bus.emit('cli.dangerous', { command: r.command, argv: r.argv });
+        if (DANGEROUS_COMMANDS.has(r.command))
+          bus.emit('cli.dangerous', { command: r.command, argv: r.argv });
         if (r.command === 'PING') bus.emit('level.event', { kind: 'custom', name: 'cli_ping' });
         return { reply: r.reply, type: r.type, ms: r.ms };
       });
@@ -494,48 +610,77 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
             ok = false;
           }
         }
-        if (!ok) throw new HttpError(400, 'invalid_url', 'redisUrl must look like redis://host:port');
+        if (!ok)
+          throw new HttpError(400, 'invalid_url', 'redisUrl must look like redis://host:port');
         await redis.connect(url as string);
         runtime.redisUrl = url as string;
-        if (store.current) await commit('target', undefined, (draft) => void (draft.target.redisUrl = url as string));
+        if (store.current)
+          await commit(
+            'target',
+            undefined,
+            (draft) => void (draft.target.redisUrl = url as string),
+          );
         return { redisUrl: url, state: redis.isUp ? 'up' : 'down' };
       });
 
       api.get('/slots', async () => ({ active: activeSlots() }));
       api.put('/slots', async (req) => {
         const active = isObject(req.body) ? req.body.active : undefined;
-        if (!Array.isArray(active) || active.length > 50 || !active.every((s) => typeof s === 'string' && SLOT_NAME.test(s))) {
-          throw new HttpError(400, 'invalid_slots', 'active must be a list of slot names like cache.getPlayerStats');
+        if (
+          !Array.isArray(active) ||
+          active.length > 50 ||
+          !active.every((s) => typeof s === 'string' && SLOT_NAME.test(s))
+        ) {
+          throw new HttpError(
+            400,
+            'invalid_slots',
+            'active must be a list of slot names like cache.getPlayerStats',
+          );
         }
         const unique = [...new Set(active as string[])];
         runtime.activeSlots = unique;
-        if (store.current) await commit('slots', undefined, (draft) => void (draft.activeSlots = unique));
+        if (store.current)
+          await commit('slots', undefined, (draft) => void (draft.activeSlots = unique));
         return { active: unique };
       });
 
       // Not in the P0-06 spec: the source of `dbExtraLatencyMs` in /internal/app-config (in memory, resets to 0 on restart).
       api.put('/db-latency', async (req) => {
         const ms = isObject(req.body) ? req.body.ms : undefined;
-        if (typeof ms !== 'number' || !Number.isInteger(ms) || ms < 0 || ms > 5000) throw new HttpError(400, 'invalid_ms', 'ms must be an integer from 0 to 5000');
+        if (typeof ms !== 'number' || !Number.isInteger(ms) || ms < 0 || ms > 5000)
+          throw new HttpError(400, 'invalid_ms', 'ms must be an integer from 0 to 5000');
         runtime.dbExtraLatencyMs = ms;
         return { dbExtraLatencyMs: ms };
       });
 
       // ---- workspace --------------------------------------------------------------------------
       api.get('/workspace/tree', async () => ({ entries: await listTree(cfg.workspaceDir) }));
-      api.get<{ Querystring: { path?: string } }>('/workspace/file', async (req) => readWorkspaceFile(cfg.workspaceDir, req.query.path));
+      api.get<{ Querystring: { path?: string } }>('/workspace/file', async (req) =>
+        readWorkspaceFile(cfg.workspaceDir, req.query.path),
+      );
       api.put<{ Querystring: { path?: string } }>('/workspace/file', async (req) => {
         const content = isObject(req.body) ? req.body.content : undefined;
         return writeWorkspaceFile(cfg.workspaceDir, req.query.path, content);
       });
 
       // ---- events, metrics, logs --------------------------------------------------------------
-      api.get<{ Querystring: { since?: string } }>('/events', async (req) => ({ events: bus.since(req.query.since) }));
+      api.get<{ Querystring: { since?: string } }>('/events', async (req) => ({
+        events: bus.since(req.query.since),
+      }));
       api.post('/events', async (req) => {
         const b = isObject(req.body) ? req.body : {};
         if (b.kind !== 'custom') throw new HttpError(400, 'invalid_kind', 'kind must be "custom"');
-        if (typeof b.name !== 'string' || !/^[A-Za-z0-9_.-]{1,64}$/.test(b.name)) throw new HttpError(400, 'invalid_name', 'name must be 1 to 64 characters of letters, digits, _ . -');
-        bus.emit('level.event', { kind: 'custom', name: b.name, ...(b.data !== undefined ? { data: b.data } : {}) });
+        if (typeof b.name !== 'string' || !/^[A-Za-z0-9_.-]{1,64}$/.test(b.name))
+          throw new HttpError(
+            400,
+            'invalid_name',
+            'name must be 1 to 64 characters of letters, digits, _ . -',
+          );
+        bus.emit('level.event', {
+          kind: 'custom',
+          name: b.name,
+          ...(b.data !== undefined ? { data: b.data } : {}),
+        });
         return { ok: true };
       });
 
@@ -563,14 +708,24 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         return metrics.summary(Number.isFinite(s) ? s : 60);
       });
 
-      api.get<{ Params: { service: string }; Querystring: { lines?: string } }>('/logs/:service', async (req) => {
-        const service = req.params.service as LogService;
-        if (!LOG_SERVICES.includes(service)) throw new HttpError(404, 'unknown_service', `service must be one of ${LOG_SERVICES.join(', ')}`);
-        const n = Number(req.query.lines ?? 500);
-        return { service, lines: logtail.lines(service, Number.isFinite(n) ? n : 500) };
-      });
+      api.get<{ Params: { service: string }; Querystring: { lines?: string } }>(
+        '/logs/:service',
+        async (req) => {
+          const service = req.params.service as LogService;
+          if (!LOG_SERVICES.includes(service))
+            throw new HttpError(
+              404,
+              'unknown_service',
+              `service must be one of ${LOG_SERVICES.join(', ')}`,
+            );
+          const n = Number(req.query.lines ?? 500);
+          return { service, lines: logtail.lines(service, Number.isFinite(n) ? n : 500) };
+        },
+      );
 
-      api.setNotFoundHandler((_req, reply) => send(reply, 404, { error: 'not_found', message: 'route not found' }));
+      api.setNotFoundHandler((_req, reply) =>
+        send(reply, 404, { error: 'not_found', message: 'route not found' }),
+      );
     },
     { prefix: '/api' },
   );
@@ -582,13 +737,13 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
   app.setNotFoundHandler((req, reply) => {
     const path = req.url.split('?')[0] ?? '/';
     const engineOwned = /^\/(api|ws|internal|health)(\/|$)/.test(path);
-    if (haveUi && !engineOwned && (req.method === 'GET' || req.method === 'HEAD')) return reply.type('text/html').sendFile('index.html');
+    if (haveUi && !engineOwned && (req.method === 'GET' || req.method === 'HEAD'))
+      return reply.type('text/html').sendFile('index.html');
     return reply.code(404).send({ error: 'not_found', message: 'route not found' });
   });
 
   return app;
 }
-
 
 /** Insight is published on its own host port, so the link keeps the host the learner reached the engine on. */
 export function insightUrlFor(hostHeader: string | undefined, port: string | undefined): string {

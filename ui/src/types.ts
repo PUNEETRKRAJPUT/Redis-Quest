@@ -35,7 +35,14 @@ export interface ChapterSummary {
   dirName: string;
   title: string;
   incident: ThreadMessage[];
-  levels: { id: string; title: string; mode: Mode; xp: number; status: LevelStatus; attempts: number }[];
+  levels: {
+    id: string;
+    title: string;
+    mode: Mode;
+    xp: number;
+    status: LevelStatus;
+    attempts: number;
+  }[];
 }
 
 export interface ChaptersResponse {
@@ -45,7 +52,13 @@ export interface ChaptersResponse {
 }
 
 export type VerifierInfo =
-  | { index: number; type: 'quiz'; question: string; options: { id: string; label: string }[]; multiple: boolean }
+  | {
+      index: number;
+      type: 'quiz';
+      question: string;
+      options: { id: string; label: string }[];
+      multiple: boolean;
+    }
   | { index: number; type: 'answer'; prompt: string }
   | { index: number; type: string };
 

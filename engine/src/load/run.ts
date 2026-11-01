@@ -37,7 +37,10 @@ export interface RunLoadOptions {
 
 export type LoadRunner = (o: RunLoadOptions) => Promise<LoadRunResult>;
 
-export function summarizeAutocannon(r: Result, connections: number): Omit<LoadRunResult, 'startedAt' | 'finishedAt'> {
+export function summarizeAutocannon(
+  r: Result,
+  connections: number,
+): Omit<LoadRunResult, 'startedAt' | 'finishedAt'> {
   const statusCodes: Record<string, number> = {};
   let status5xx = 0;
   let responses = 0;
@@ -63,7 +66,7 @@ export function summarizeAutocannon(r: Result, connections: number): Omit<LoadRu
     p50Ms: round(r.latency?.p50 ?? 0),
     p99Ms: round(r.latency?.p99 ?? 0),
     rps: round(responses / durationSec),
-    errorRate: attempts === 0 ? 1 : round((status5xx + connErrors) / attempts * 10000) / 10000,
+    errorRate: attempts === 0 ? 1 : round(((status5xx + connErrors) / attempts) * 10000) / 10000,
     statusCodes,
   };
 }

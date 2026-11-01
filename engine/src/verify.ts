@@ -20,6 +20,15 @@ export interface VerificationContext {
 export type VerificationOutcome = VerifyOutcome;
 
 /** Grades one attempt. The HTTP route owns locking (409), attempts and persistence. */
-export async function runVerification(level: LoadedLevel, ctx: VerificationContext, answers: Answers): Promise<VerificationOutcome> {
-  return ctx.verifier.verify(level, { templateCtx: ctx.templateCtx, startedAt: ctx.startedAt, attempt: ctx.attempt, answers });
+export async function runVerification(
+  level: LoadedLevel,
+  ctx: VerificationContext,
+  answers: Answers,
+): Promise<VerificationOutcome> {
+  return ctx.verifier.verify(level, {
+    templateCtx: ctx.templateCtx,
+    startedAt: ctx.startedAt,
+    attempt: ctx.attempt,
+    answers,
+  });
 }

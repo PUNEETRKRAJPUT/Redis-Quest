@@ -31,7 +31,9 @@ describe('redis counting proxy', () => {
     reset();
     await ctx.deps.redis.set('t8:a', '1');
     expect(await ctx.deps.redis.get('t8:a')).toBe('1');
-    await expect(ctx.deps.redis.incr('t8:a-not-int-xx').then(() => ctx.deps.redis.hGet('t8:a', 'f'))).rejects.toThrow();
+    await expect(
+      ctx.deps.redis.incr('t8:a-not-int-xx').then(() => ctx.deps.redis.hGet('t8:a', 'f')),
+    ).rejects.toThrow();
     expect(ctx.counters.redisCommands).toBe(4);
   });
 
@@ -98,7 +100,7 @@ describe('db counter and log', () => {
 
   test('log formats like console.log', () => {
     ctx.deps.log('a', 1, { b: 2 });
-    expect(lines.at(-1)).toBe("a 1 { b: 2 }");
+    expect(lines.at(-1)).toBe('a 1 { b: 2 }');
   });
 });
 
@@ -121,7 +123,15 @@ describe('metrics', () => {
       { redisCommands: 4, dbQueries: 1 },
       60,
     );
-    expect(m).toEqual({ calls: 3, errors: 1, p50Ms: 20, p99Ms: 30, dbQueries: 1, redisCommands: 4, totalMs: 60 });
+    expect(m).toEqual({
+      calls: 3,
+      errors: 1,
+      p50Ms: 20,
+      p99Ms: 30,
+      dbQueries: 1,
+      redisCommands: 4,
+      totalMs: 60,
+    });
   });
 });
 
@@ -133,13 +143,19 @@ describe('callLearner and runLearnerCalls', () => {
       throw new RangeError('boom');
     }, ctx.deps);
     expect(threw).toMatchObject({ ok: false, error: { name: 'RangeError', message: 'boom' } });
-    const slow = await callLearner(() => new Promise(() => undefined), ctx.deps, [], { timeoutMs: 100 });
+    const slow = await callLearner(() => new Promise(() => undefined), ctx.deps, [], {
+      timeoutMs: 100,
+    });
     expect(slow).toMatchObject({ ok: false, error: { name: 'TimeoutError' } });
     expect(slow.ms).toBeGreaterThanOrEqual(90);
   });
 
   test('args are passed after deps', async () => {
-    const r = await callLearner(async (_d, a, b) => (a as number) + (b as number), ctx.deps, [2, 3]);
+    const r = await callLearner(
+      async (_d, a, b) => (a as number) + (b as number),
+      ctx.deps,
+      [2, 3],
+    );
     expect(r.value).toBe(5);
   });
 
@@ -161,7 +177,10 @@ describe('callLearner and runLearnerCalls', () => {
 
   test('calls not started before the budget is spent fail with TimeoutError', async () => {
     const fn = (): Promise<void> => new Promise((r) => setTimeout(r, 80));
-    const results = await runLearnerCalls(fn as never, ctx.deps, [{}, {}, {}], { concurrency: 1, timeoutMs: 100 });
+    const results = await runLearnerCalls(fn as never, ctx.deps, [{}, {}, {}], {
+      concurrency: 1,
+      timeoutMs: 100,
+    });
     expect(results.map((r) => r.ok)).toEqual([true, false, false]);
   });
 });

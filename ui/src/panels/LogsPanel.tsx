@@ -14,7 +14,10 @@ export function LogsPanel({ height = 360 }: { height?: number }) {
 
   useEffect(() => {
     setErr(null);
-    api.logs(tab).then((r) => seed(tab, r.lines)).catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
+    api
+      .logs(tab)
+      .then((r) => seed(tab, r.lines))
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
   }, [tab, seed]);
 
   useEffect(() => {
@@ -26,7 +29,14 @@ export function LogsPanel({ height = 360 }: { height?: number }) {
     <div className="logs-panel">
       <div role="tablist" aria-label="Service logs" className="tabs small">
         {LOG_SERVICES.map((s) => (
-          <button key={s} role="tab" type="button" aria-selected={tab === s} className={tab === s ? 'tab active' : 'tab'} onClick={() => setTab(s)}>
+          <button
+            key={s}
+            role="tab"
+            type="button"
+            aria-selected={tab === s}
+            className={tab === s ? 'tab active' : 'tab'}
+            onClick={() => setTab(s)}
+          >
             {s}
           </button>
         ))}
@@ -42,7 +52,11 @@ export function LogsPanel({ height = 360 }: { height?: number }) {
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
         }}
       >
-        {err ? `Could not read the ${tab} log: ${err}` : lines.length ? lines.join('\n') : `No ${tab} log lines yet. They appear here as the service writes them.`}
+        {err
+          ? `Could not read the ${tab} log: ${err}`
+          : lines.length
+            ? lines.join('\n')
+            : `No ${tab} log lines yet. They appear here as the service writes them.`}
       </pre>
     </div>
   );
