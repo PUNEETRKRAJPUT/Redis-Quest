@@ -1,0 +1,5 @@
+# u-000010 has 100 points and no entries yet for contest 9001. Both keys carry the {wallet:u-000010} tag, so they share one slot,
+# and the engine can route every step of the fixture and every check below to the right master of the cluster.
+steps:
+  - cmd: [SET, "{wallet:u-000010}", 100]
+  - cmd: [DEL, "{wallet:u-000010}:joins:9001"]

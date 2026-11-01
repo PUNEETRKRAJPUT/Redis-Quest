@@ -1,0 +1,124 @@
+id: ch5-01-the-crash
+chapter: ch5
+title: "The crash"
+mode: ops
+
+story: |
+  `19:04  leaderboard: 0 teams  (was 40,112)`
+
+  Teja is holding the laptop with both hands, as if that helps. Redis printed a yellow warning in its log, so he restarted it to
+  make the warning go away. The warning went away. So did the leaderboard, the wallets, the live scores and every contest entry:
+  forty thousand teams' worth of points, gone in the time it takes to say "bhai".
+
+  Nothing was hacked and nothing was deleted. Redis simply started again, and a Redis that starts again starts empty unless
+  somebody asked it to remember. The stack you have been playing on does remember, which is the only reason your chapters
+  survived `docker compose down`. Tonight you will run the final's first over on a Redis that does not, kill it the way the
+  roommate did, and watch where every point went.
+
+brainstorm:
+  prompt: "Redis restarts in the middle of the final and comes back empty. What should have been true before it restarted?"
+  options:
+    - id: on-disk
+      label: "Redis had written its data to disk and read it back when it started"
+      is_reasonable: true
+    - id: never-restart
+      label: "Nobody ever restarts Redis, so the question never comes up"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: the points were also in Postgres, and the leaderboard could be rebuilt from there"
+      is_reasonable: true
+
+teach: |
+  Redis keeps its data in memory. Whether any of it is also written to disk is a choice, and the persistence page of the docs
+  lists the four: **RDB** snapshots, an **AOF** (append-only file: a log of every write), both, or neither. With neither, a
+  restart is a blank start. The data lived in the process, and the process is gone.
+
+  The practice stack has two Redis instances so that you can see the difference:
+
+  - `redis` is the one the game uses. Its compose command says `--save 60 1000 --appendonly yes --appendfsync everysec`: a
+    snapshot when 1000 keys changed within 60 seconds, plus a log written every second. That is why your save file came back in
+    Chapter 0.5.
+  - `redis-nopersist` (compose profile `crash`) runs `--save "" --appendonly no`: no snapshot, no log. It only exists when you
+    start it, from your own terminal, and you will point the game at it.
+
+  `docker compose kill` sends SIGKILL, so the process dies on the spot with no shutdown work. The roommate's restart ended the
+  same way for the data: with no snapshot and no log there was nothing to load.
+
+  **What happens to your save.** The truth is the progress file on your Mac (`.progress/progress.json`). The `game:*` keys in Redis
+  are a mirror, and the engine writes the mirror again every time it connects to a Redis, this one included. You cannot lose
+  your progress in this level.
+
+task: |
+  Docker commands go in your own terminal on your Mac, in the repo folder. Redis commands go in the game's Terminal panel.
+
+  1. Start the crash node: `docker compose --profile crash up -d redis-nopersist`.
+  2. In the Terminal panel's target select, pick `redis://redis-nopersist:6379` (or send `PUT /api/target` with that URL). The prompt
+     changes to `redis-nopersist:6379>`, and the app and the runner follow within about two seconds.
+  3. Play an over, six fours: `XADD match:final:balls * over 1 ball 1 runs 4`, then the same with `ball 2` up to `ball 6`, then
+     `SET score:final 24`. Confirm with `XLEN match:final:balls` and `GET score:final`. Run `INFO persistence` too and read
+     `aof_enabled` and `rdb_changes_since_last_save`: the changes pile up and nothing is ever going to write them down.
+  4. Crash it the way the roommate did, from your Mac: `docker compose kill redis-nopersist`, then bring it back with
+     `docker compose --profile crash up -d redis-nopersist`.
+  5. Back in the Terminal (the game reconnects by itself, give it a few seconds): `XLEN match:final:balls` and `GET score:final`.
+  6. Answer the question below and press Verify while the target is still the crash node.
+  7. **The way back.** Switch the target to `redis://redis:6379`. Leave `redis-nopersist` running: the next level uses it.
+
+  Before you start, make sure the target is `redis://redis:6379`: the level resets its keys on whatever Redis the game points at.
+
+hints:
+  - "Step 2 is the point of the level: if the prompt still says redis:6379 you are typing into the Redis that saves, and nothing will be lost."
+  - "docker compose kill takes the service name: docker compose kill redis-nopersist. Bring it back with the same --profile crash up -d command you started it with."
+  - "After the restart the game reconnects on its own. If XLEN says it could not connect, wait three seconds and run it again."
+
+verify:
+  - type: event
+    kind: custom
+    match: { name: redis_target_changed, to: "redis://redis-nopersist:6379" }
+    timeoutMs: 120000
+    message: "The game has not seen you point it at redis://redis-nopersist:6379 since you started this level. Start the crash profile, then pick that target in the Terminal panel's select."
+  - type: event
+    kind: redis_disconnect
+    timeoutMs: 60000
+    message: "The game has not seen the crash node go away. Run docker compose kill redis-nopersist in your own terminal while the game is pointed at it."
+  - type: event
+    kind: redis_reconnect
+    timeoutMs: 300000
+    message: "The game did not see the crash node come back within five minutes. Run docker compose --profile crash up -d redis-nopersist."
+  - type: redis
+    checks:
+      - cmd: [EXISTS, "match:final:balls"]
+        equals: 0
+        message: "match:final:balls is still there. After the crash the over should be gone: did the game point at the node you killed?"
+      - cmd: [EXISTS, "score:final"]
+        equals: 0
+        message: "score:final is still there. After the crash the score should be gone as well."
+  - type: quiz
+    question: "The crash node came back with no over and no score. Why?"
+    options:
+      - id: no-save-no-log
+        label: "It had no snapshot and no append-only file, so nothing was ever written to disk and the restart began from empty memory"
+      - id: kill-deletes-volume
+        label: "docker compose kill deletes the container's data volume, whatever Redis was configured to do"
+      - id: streams-not-stored
+        label: "Streams and strings are held until a client calls SAVE, and nobody did"
+      - id: no-replica
+        label: "It lost them because no replica was running to give them back"
+    correct: no-save-no-log
+    explanation: "With save disabled and appendonly off there is no file to load, so a restart is a blank start. A kill does not touch volumes. Redis never waits for a client to call SAVE; writes are in memory at once and on disk only if a snapshot or the log says so. A replica would help against losing a box, but a replica of a node with no persistence copies whatever that node holds."
+
+show_me:
+  component: stream_log
+  keys: ["match:final:balls"]
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+
+reward:
+  xp: 60
+  badge: "Felt the crash"
+
+solutions:
+  reference: solutions/01-reference.sh
+  wrong:
+    - path: solutions/01-wrong-restart-only.sh
+      expect: wrong
+      because: "This restarts the default `redis`, which saves to disk (a snapshot and a log), so it comes back with everything and nothing is lost. The game was never pointed at the crash node, so it never saw redis_target_changed to redis-nopersist, and there was no over on a Redis without persistence to lose."

@@ -1,0 +1,4 @@
+# Run before the behavior verifier, every time, so the first call for p-028 is always a miss in Redis. The delete also makes the
+# server invalidate whatever the app's client-side cache held for the key.
+steps:
+  - cmd: [DEL, "cache:player:p-028", "cache:player:p-999"]

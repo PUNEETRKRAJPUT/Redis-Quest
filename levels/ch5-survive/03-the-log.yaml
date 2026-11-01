@@ -1,0 +1,129 @@
+id: ch5-03-the-log
+chapter: ch5
+title: "The log"
+mode: cli
+
+story: |
+  `19:16  Teja: "one over of the final is six balls. a snapshot every 60 seconds is ten overs of nothing"`
+
+  Teja has done the sum and does not like it. Between two photographs Redis is on its own, and the final does not stop for a
+  photograph. Harry Bhaiya's answer is to take them more often. Yours is that photographing forty thousand teams every few seconds
+  is a different outage. The other way is to stop photographing and start keeping a diary: write every change down as it happens,
+  and replay the diary on restart.
+
+  Same crash node as before, which has no diary. Open one, and then find out what each line of it costs.
+
+brainstorm:
+  prompt: "Instead of photographs, Redis could write every change to a log. How often should the log be forced onto the disk?"
+  options:
+    - id: every-second
+      label: "Once a second: a crash loses at most about a second, and writes stay fast"
+      is_reasonable: true
+    - id: every-write
+      label: "After every single write: nothing acknowledged is ever lost, whatever it costs"
+      is_reasonable: true
+    - id: not-redis
+      label: "Not Redis: the score is also in Postgres, so a lost second can be replayed from there"
+      is_reasonable: true
+
+setup:
+  - cmd: [CONFIG, SET, appendfsync, everysec]
+
+teach: |
+  The **append-only file** (AOF) logs every write command. You turn it on with `appendonly yes`, and how hard Redis pushes the
+  log onto the disk is `appendfsync`, from the persistence page of the docs:
+
+  - `always`: very slow, very safe. `everysec`: the default and the suggested setting, and you may lose one second.
+    `no`: the operating system decides when to write, about every 30 seconds on Linux.
+  - Since Redis 7 the AOF is a directory (`appenddirname`): a base file, incremental files and a manifest. `BGREWRITEAOF` rewrites
+    the log in the background so it does not grow forever (`auto-aof-rewrite-percentage` does it automatically). An AOF is
+    generally larger than an RDB of the same data.
+  - The docs warn about one order of operations. To move a live server from RDB to AOF, turn it on with
+    `CONFIG SET appendonly yes` first, on the running server, and do not just edit the config and restart, or data may be lost.
+
+  Measured on this stack, on a throwaway `redis:8` with the crash node's flags: `CONFIG SET appendonly yes` made `aof_enabled`
+  1 and `aof_rewrites` 1 within about a second (Redis wrote the current dataset as the new log's base file), and
+  `/data/appendonlydir` held `appendonly.aof.<n>.base.rdb`, `appendonly.aof.<n>.incr.aof` and `appendonly.aof.manifest`.
+
+  Measured the same way, `redis-benchmark -t set -n 20000 -q` (3 runs each, the tool's default 50 clients, from inside the
+  container): `everysec` 273,972 to 285,714 SETs a second, `no` 259,740 to 281,690, and `always` 57,971 to 59,524, about a
+  fifth. Treat these as a ratio, not a promise: your numbers will differ, and you are about to measure your own.
+
+task: |
+  Docker commands go in your own terminal on your Mac. Redis commands go in the game's Terminal panel.
+
+  1. Start a fresh crash node (`docker compose --profile crash up -d redis-nopersist`) and pick the target
+     `redis://redis-nopersist:6379`. `CONFIG GET appendonly` answers `no`, and `INFO persistence` says `aof_enabled:0`.
+  2. Open the log **on the running server**: `CONFIG SET appendonly yes`. Then `CONFIG GET appendfsync` (`everysec`) and
+     `INFO persistence`: `aof_enabled:1`, `aof_rewrite_in_progress`, `aof_last_bgrewrite_status`. Run `BGREWRITEAOF` and look at
+     `aof_rewrites` once it has finished (if it answers that a rewrite is already running, the one `CONFIG SET` started is still going: wait a second).
+  3. Find the files: `docker compose exec redis-nopersist ls -l /data/appendonlydir`.
+  4. Measure. `docker compose exec redis-nopersist redis-benchmark -t set -n 20000 -q` with `everysec`; then `CONFIG SET appendfsync always`
+     and run it again; then **put it back**: `CONFIG SET appendfsync everysec`. Write down both numbers.
+  5. Answer the two questions below and press Verify **while the target is still the crash node**.
+  6. **The way back.** Switch the target to `redis://redis:6379`, and remove the crash node so the next time starts clean:
+     `docker compose --profile crash rm -sfv redis-nopersist`.
+
+hints:
+  - "CONFIG SET appendonly yes takes effect at once and starts a rewrite in the background. If INFO persistence already said aof_enabled:1 before you changed anything, you are on the default Redis, which has had the log on all along."
+  - "redis-benchmark prints one line per test with -q. The number you want is 'requests per second'. Run each setting twice and take the lower one."
+  - "The check wants appendfsync back at everysec. If you left it on always, writes are about five times slower for the rest of the chapter."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [CONFIG, GET, appendonly]
+        equals: [appendonly, "yes"]
+        message: "appendonly should be yes. Run CONFIG SET appendonly yes on the Redis the game points at."
+      - cmd: [INFO, persistence]
+        matches: "aof_enabled:1"
+        message: "INFO persistence does not say aof_enabled:1. Turn the log on with CONFIG SET appendonly yes."
+      - cmd: [INFO, persistence]
+        matches: "aof_last_bgrewrite_status:ok"
+        message: "The last background rewrite did not finish ok. Read aof_last_bgrewrite_status in INFO persistence."
+      - cmd: [CONFIG, GET, appendfsync]
+        equals: [appendfsync, everysec]
+        message: "appendfsync should be back at everysec, the setting the docs suggest. Run CONFIG SET appendfsync everysec."
+  - type: quiz
+    question: "What does each appendfsync setting risk, and which one do the docs suggest?"
+    options:
+      - id: fsync-trade
+        label: "always loses nothing that was acknowledged but is very slow; everysec may lose one second and is the suggested default; no leaves it to the operating system, about 30 seconds on Linux"
+      - id: fsync-reversed
+        label: "always may lose one second and is the default; everysec waits for the disk on every write; no loses nothing"
+      - id: fsync-same
+        label: "They only change how the file is named; every setting loses the same one second"
+      - id: fsync-always-fast
+        label: "always is the fastest, because it hands every write to the disk at once instead of collecting them"
+    correct: fsync-trade
+    explanation: "always syncs on every write, so it is the safest and the slowest (you measured about a fifth of the speed). everysec syncs once a second: you may lose up to a second, and the docs suggest it. no hands the decision to the operating system, around 30 seconds on Linux."
+  - type: quiz
+    question: "Your production Redis runs RDB only, and you want to add the log. What do the docs say to do first?"
+    options:
+      - id: config-set-first
+        label: "Turn it on with CONFIG SET appendonly yes on the running server first. Only editing the config and restarting can lose data"
+      - id: edit-and-restart
+        label: "Edit appendonly yes into the config file and restart: Redis builds the log from dump.rdb on the way up"
+      - id: delete-rdb
+        label: "Delete dump.rdb first so that the two persistence files cannot disagree"
+      - id: stop-writes
+        label: "Stop all writes for the length of a BGSAVE, then restart with the log on"
+    correct: config-set-first
+    explanation: "The persistence page's warning: enable it with CONFIG SET on the live server first. Redis then writes the dataset it holds into the new log (you saw aof_rewrites go to 1). A restart with only the config edited starts from a log that does not hold your data yet."
+
+show_me:
+  component: kv_card
+  keys: ["score:final"]
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+
+reward:
+  xp: 50
+  badge: "Keeps a diary"
+
+solutions:
+  reference: solutions/03-reference.redis
+  wrong:
+    - path: solutions/03-wrong-fsync-no.redis
+      expect: wrong
+      because: "This opens the log but leaves appendfsync at no, so the operating system decides when the log reaches the disk, about every 30 seconds on Linux. That window is chosen by accident rather than on purpose, and the check wants everysec, the setting the docs suggest."

@@ -1,0 +1,234 @@
+id: ch5-13-the-production-checklist
+chapter: ch5
+title: "The production checklist"
+mode: decision
+
+story: |
+  `20:14  Teja: "ok. nobody restarts anything. what is the list? I am taping it to the monitor before the toss"`
+
+  Fifteen minutes to the toss, and Teja has found a roll of tape. Every item he writes on it is something one of the five chapters made
+  you pay for: a key that never expired, a command that held the server, a lock nobody released, a restart that emptied a leaderboard.
+
+  There is no code here. It is the list an interviewer asks for as "what do you check before Redis goes to production", one question per
+  group. Answer each the way you would put it on the tape.
+
+brainstorm:
+  prompt: "Before Redis goes to production, you may check three things. Which three?"
+  options:
+    - id: three-things
+      label: "That nothing grows forever (TTLs and big keys), that a restart or a lost box costs only what you chose to lose, and that nothing outside can reach it"
+      is_reasonable: true
+    - id: only-speed
+      label: "That it is fast in a benchmark with the whole dataset in memory"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: ask first whether this data needs Redis at all, or whether the database it came from can serve it"
+      is_reasonable: true
+
+teach: |
+  Every group below was earned somewhere in the game. Read them as one list:
+
+  - **Keys.** Every key has a TTL or a written reason it must live for ever (levels 2.2 and 4b.4). Names follow a scheme, `object-type:id`, with a prefix per
+    feature, and a `{tag}` only where keys must change together (level 9).
+  - **Commands.** `SCAN` in pages, never `KEYS` (4b.3). `UNLINK`, not `DEL`, for big keys, and split the giant ones (4b.2, level 5).
+  - **Correctness.** A lock is `SET key token NX PX ttl`: it expires, and it is released only by its owner, with a script or `DELEX ... IFEQ` (Redis 8.4).
+    Money moves with an idempotency key, because at-least-once delivery means a retry happens (Chapter 4).
+  - **Alerts.** Memory against `maxmemory`, evictions, latency (the latency monitor, the slow log), and for streams the group's pending list and its
+    lag. An alert nobody reads is the same as no alert.
+  - **Persistence on purpose** (levels 1 to 4) and **a replica with a failover story** (7 and 8): who promotes, how long it takes, what it can lose.
+  - **Never public** (10): bound to a private interface, an ACL user per client with its own keys and commands.
+  - **Clients.** One shared client per process; `duplicate()` for blocking commands and subscriptions; a command timeout and a reconnect strategy that
+    gives up, so a dead Redis is an error and not a hang (Chapters 2 and 4b).
+
+task: |
+  Answer the ten questions and press Verify. There is nothing to type in the terminal.
+
+hints:
+  - "Each question is one line of the tape. The wrong answers are the habits that cost you something earlier in the game."
+  - "If two answers both sound safe, prefer the one that says what happens at the limit: the TTL is hit, the lock times out, the retry arrives, the box restarts."
+  - "Three of the answers name a command with a safer sibling: SCAN for KEYS, UNLINK for DEL, and a script or DELEX that checks the owner for a plain DEL."
+
+verify:
+  - type: quiz
+    question: "A new feature writes draft:<id> keys for every user, with no expiry, because 'drafts should be kept'. What does the checklist say?"
+    options:
+      - id: q1-ttl-or-reason
+        label: "Every key gets a TTL, or a written reason it must live for ever together with a plan for how big that pile can get"
+      - id: q1-memory-is-cheap
+        label: "Leave it: Redis memory is cheap and drafts are small"
+      - id: q1-flush-nightly
+        label: "Leave it, and FLUSHALL on Sundays when it gets big"
+      - id: q1-allkeys-lru
+        label: "Leave it, and set allkeys-lru so that Redis cleans up whatever it wants"
+    correct: q1-ttl-or-reason
+    explanation: "A key with no TTL is memory that grows by itself, which is how a Redis fills over weeks (4b.4). If the data really must stay, say so, and size for it. FLUSHALL and a blanket eviction policy delete things you did not choose to lose."
+  - type: quiz
+    question: "Which key naming is right for a growing app that may move to a cluster?"
+    options:
+      - id: q2-scheme
+        label: "object-type:id names with a prefix per feature (cache:player:p-028), and a {tag} only on keys that must change together ({wallet:u-1}:joins:9001)"
+      - id: q2-random
+        label: "Short random names, to save memory"
+      - id: q2-one-tag
+        label: "The same {app} tag on every key, so that any multi-key command will always work"
+      - id: q2-one-hash
+        label: "One giant hash per feature, with the id as the field"
+    correct: q2-scheme
+    explanation: "Names that say what they are can be found with SCAN, grouped by prefix and reasoned about. A tag is a promise that keys share a slot, so it belongs only where they must. One tag for everything puts all the keys in one slot, on one master, and one giant hash is a big key."
+  - type: quiz
+    question: "You need every cache key for one team removed, in production, with a final running. What do you run?"
+    options:
+      - id: q3-scan-unlink
+        label: "SCAN with MATCH and a small COUNT in pages, and UNLINK for each key found (and for any big key)"
+      - id: q3-keys-del
+        label: "KEYS cache:team:t-01:* and DEL each one"
+      - id: q3-flushall
+        label: "FLUSHALL, and let the cache refill"
+      - id: q3-monitor
+        label: "MONITOR, and delete what you see being read"
+    correct: q3-scan-unlink
+    explanation: "KEYS walks the whole keyspace in one command and blocks the server (4b.3); SCAN does the same walk a page at a time. DEL of a big key is a stall on the main thread, UNLINK frees it in the background (4b.2). FLUSHALL deletes everything, the game's own keys included."
+  - type: quiz
+    question: "Two requests must not run the same job at once. What does a correct Redis lock look like?"
+    options:
+      - id: q4-token-ttl
+        label: "SET lock:job <random token> NX PX <ttl>, and release it only if the value is still your token (a Lua script, or DELEX ... IFEQ on Redis 8.4)"
+      - id: q4-setnx-no-ttl
+        label: "SET lock:job 1 NX, and DEL it when done"
+      - id: q4-incr
+        label: "INCR lock:job and proceed if the answer is 1, then DECR when done"
+      - id: q4-ttl-then-del
+        label: "SET lock:job 1 NX PX <ttl>, and a plain DEL when done, since the TTL protects it"
+    correct: q4-token-ttl
+    explanation: "The lock must expire, or a crash holds it for ever. It must carry a token, or a client whose lock already expired can DEL somebody else's. The docs' lock page says plain DEL is unsafe for exactly that reason. Even then it is only a lock on one node: a failover can hand it to two clients, so use it for efficiency, not for safety of money."
+  - type: quiz
+    question: "A job that credits points can be delivered twice, because the queue guarantees at-least-once. How do you stop a double credit?"
+    options:
+      - id: q5-idempotency-key
+        label: "Give each credit an idempotency key and make the write conditional on it (a set or SET NX), so the second delivery does nothing"
+      - id: q5-hope
+        label: "Make the queue exactly-once by raising the visibility timeout"
+      - id: q5-retry-less
+        label: "Never retry: if a job fails, drop it"
+      - id: q5-sleep
+        label: "Add a sleep before the credit so that duplicates arrive one at a time"
+    correct: q5-idempotency-key
+    explanation: "At-least-once means a retry will happen, and the only safe consumer is one that does the same thing the second time. The job-queue page names idempotency keys for side effects like charges, and Chapter 4's idempotent credit is the same pattern."
+  - type: quiz
+    question: "Which alerts belong on the list for a Redis that serves a live final?"
+    options:
+      - id: q6-four-alerts
+        label: "Memory against maxmemory, evictions, latency (monitor and slow log), and for streams the pending list and lag of each consumer group"
+      - id: q6-uptime-only
+        label: "Uptime only: if the process is running, Redis is healthy"
+      - id: q6-keys-count
+        label: "The number of keys, since it tells you everything"
+      - id: q6-cpu-only
+        label: "CPU of the box only, because Redis is CPU bound"
+    correct: q6-four-alerts
+    explanation: "Redis can be up and useless: full, evicting what you needed, stalled by a slow command, or with a consumer group that has stopped acking. The FAQ says memory and the network are usually the limit, not the CPU."
+  - type: quiz
+    question: "What does 'persistence chosen on purpose' mean for a Redis that holds sessions and a cache?"
+    options:
+      - id: q7-chosen
+        label: "You decided how much loss is acceptable and set it (for example a snapshot plus the log with everysec), put maxmemory-policy noeviction where data must not be dropped, and tested a restart"
+      - id: q7-default
+        label: "You kept the defaults, which are safe for every use"
+      - id: q7-none
+        label: "You turned persistence off everywhere because Redis is a cache"
+      - id: q7-always
+        label: "You set appendfsync always everywhere, because safer is always better"
+    correct: q7-chosen
+    explanation: "Level 14's point: a number for the loss you accept, a policy that fits what lives there, and a restart you have actually tried. Defaults differ by image and package. always everywhere costs about four fifths of the write speed on this stack (level 3), and none loses everything on a restart (level 1)."
+  - type: quiz
+    question: "What is a failover story?"
+    options:
+      - id: q8-story
+        label: "A replica, and a written answer to: who promotes it, how long that takes, what the app does meanwhile, and which last writes may be lost"
+      - id: q8-replica-only
+        label: "Having a replica: it will take over by itself"
+      - id: q8-restart-fast
+        label: "Being able to restart the master quickly"
+      - id: q8-two-regions
+        label: "Running two copies in two cities, which cannot fail"
+    correct: q8-story
+    explanation: "A replica never promotes itself (level 8). Sentinel or the managed service decides, it takes seconds (about seven on this stack, in level 8), the app gets errors meanwhile, and replication is asynchronous, so the last writes can be missing."
+  - type: quiz
+    question: "Which statement about network exposure is right?"
+    options:
+      - id: q9-private-acl
+        label: "Redis is never reachable from the public internet: bind it to a private interface or localhost, firewall it, and give each client an ACL user with only its keys and commands"
+      - id: q9-password-enough
+        label: "A strong requirepass is enough to put it on the public internet"
+      - id: q9-obscure-port
+        label: "A non-standard port is a sufficient defence"
+      - id: q9-default-user
+        label: "Every app can share the default user, as long as the machine is private"
+    correct: q9-private-acl
+    explanation: "From the docs: by default Redis needs no authentication and listens on all interfaces, so it must not face the internet. Network reach first, ACL users second; a shared default user means a bug in one client can FLUSHALL for everybody."
+  - type: quiz
+    question: "How many Redis clients should a Node process normally hold?"
+    options:
+      - id: q10-one-shared
+        label: "One shared client per process (node-redis multiplexes commands on one connection), plus duplicate() for a blocking command or a subscription, with a command timeout and a reconnect strategy that gives up"
+      - id: q10-per-request
+        label: "One new client per request, closed afterwards"
+      - id: q10-per-command
+        label: "One per command type, so that slow ones do not block fast ones"
+      - id: q10-subscribe-shared
+        label: "One shared client for everything, including SUBSCRIBE and BLPOP"
+    correct: q10-one-shared
+    explanation: "A client per request leaked 200 connections in Chapter 4b. A subscribing connection cannot run other commands and a blocking command holds its connection, so those get their own through duplicate(). Without a timeout a dead Redis becomes a hang instead of an error."
+
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/admin/
+  - https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+
+reward:
+  xp: 60
+  badge: "The list on the monitor"
+
+solutions:
+  reference:
+    - q1-ttl-or-reason
+    - q2-scheme
+    - q3-scan-unlink
+    - q4-token-ttl
+    - q5-idempotency-key
+    - q6-four-alerts
+    - q7-chosen
+    - q8-story
+    - q9-private-acl
+    - q10-one-shared
+  wrong:
+    - option: q1-memory-is-cheap
+      expect: wrong
+      because: "A key with no TTL is memory that grows by itself until the box is full, which is what happened to the views in Chapter 4b. Give it a TTL, or write down why it must live for ever and how big it may get."
+    - option: q2-one-tag
+      expect: wrong
+      because: "The slot is computed from the tag only, so one tag on every key means one slot and one master serving everything. A tag is for keys that must change together."
+    - option: q3-keys-del
+      expect: wrong
+      because: "KEYS walks the whole keyspace in one command and blocks the server, and DEL frees each key on the main thread. SCAN in pages and UNLINK do the same job without the stall."
+    - option: q4-ttl-then-del
+      expect: wrong
+      because: "The TTL stops a crash from holding the lock for ever, but a plain DEL can remove somebody else's lock if yours had already expired. Release only when the value is still your token."
+    - option: q5-hope
+      expect: wrong
+      because: "A longer visibility timeout only delays a redelivery, it does not remove it. The consumer has to be safe to run twice, which is what an idempotency key gives."
+    - option: q6-uptime-only
+      expect: wrong
+      because: "Redis can be up and useless: full, evicting, stalled by one slow command or with a consumer group that has stopped acknowledging. Alert on those."
+    - option: q7-default
+      expect: wrong
+      because: "Defaults are somebody else's decision and differ by package and image. Persistence chosen on purpose is a number for the loss you accept, tested with a restart."
+    - option: q8-replica-only
+      expect: wrong
+      because: "A replica never promotes itself and a restart of the master can empty it. Somebody has to decide, quickly, and the app must live through the seconds in between."
+    - option: q9-password-enough
+      expect: wrong
+      because: "The docs say Redis should not face the internet at all. A password on a public port invites guessing and gives every client the default user's reach; network first, ACL users second."
+    - option: q10-per-request
+      expect: wrong
+      because: "A client per request opens a connection per request and, if it is never closed, leaks them: Chapter 4b went from 9 to 208 connections. Share one client and duplicate() only for blocking commands and subscriptions."

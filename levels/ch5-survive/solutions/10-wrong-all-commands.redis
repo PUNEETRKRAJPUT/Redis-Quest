@@ -1,0 +1,3 @@
+# Wrong: +@all and no -@dangerous. The worker may run every command, FLUSHALL included, so the NOPERM the level is about never happens.
+ACL SETUSER worker on >hostelpass ~queue:* +@all
+ACL GETUSER worker

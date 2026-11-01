@@ -1,0 +1,16 @@
+# Reference: a snapshot point, something worth saving, one snapshot taken now, and a look at the dashboard.
+# (Run on the crash node, target redis://redis-nopersist:6379. After Verify: kill and up the node to watch score:final come back.)
+CONFIG GET save
+CONFIG GET dir
+# snapshot when 1000 keys changed within 60 seconds; this is live only, a restart forgets it
+CONFIG SET save "60 1000"
+SET score:final 24
+INFO persistence
+# a snapshot now, in a child process, so the server keeps answering
+BGSAVE
+# the snapshot is written by a child process: BLPOP on a key that does not exist just waits half a second so that it has finished (you can simply look again a second later)
+BLPOP wait:half:a:second 0.5
+LASTSAVE
+CONFIG GET save
+INFO persistence
+LASTSAVE

@@ -1,0 +1,174 @@
+id: ch5-14-blank-rebuild
+chapter: ch5
+title: "Blank rebuild"
+mode: cli
+
+story: |
+  `20:19  Harry Bhaiya: "toss in ten minutes. the sponsor's cousin has given us a fresh box for tomorrow's matches. here is what it must do. you decide how"`
+
+  The last level of the night has no steps to follow. Harry Bhaiya hands you a box with nothing configured and a sentence of requirements
+  that sound easy until you try to turn them into settings: *we can lose a minute, writes must never silently vanish, and the sessions and the
+  cache will share it tonight.* Nobody has told you which setting does what. You have spent a whole chapter finding out.
+
+  The game has made the practice box blank, the way a fresh install is: nothing saved, no log, and a policy that is wrong for what
+  lives here. Choose, set, and be ready to say why.
+
+brainstorm:
+  prompt: "A fresh Redis and three requirements: lose at most a minute, never drop a write silently, sessions and cache on the same box. What do you settle first?"
+  options:
+    - id: loss-and-policy-first
+      label: "What may be lost and what may be dropped: those decide the persistence setting, the log's sync mode and the memory policy, and everything else follows"
+      is_reasonable: true
+    - id: copy-defaults
+      label: "Copy the settings from the last project, since it ran fine"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: sessions that cannot be lost belong in a database, and Redis keeps only the cache"
+      is_reasonable: true
+
+setup:
+  - cmd: [CONFIG, SET, save, ""]
+  - cmd: [CONFIG, SET, appendonly, "no"]
+  - cmd: [CONFIG, SET, appendfsync, "no"]
+  - cmd: [CONFIG, SET, maxmemory-policy, allkeys-lru]
+  - cmd: [CONFIG, SET, latency-monitor-threshold, "0"]
+
+teach: |
+  No new commands: this is the chapter put together. The settings, and the level where each one was earned:
+
+  - `save` (levels 1 and 2): the snapshot points. A snapshot is the compact file you back up and restart from. `save 300 10` means: after 300
+    seconds, if at least 10 keys changed. With the log doing the fine-grained work, a snapshot every few minutes is plenty.
+  - `appendonly` and `appendfsync` (3 and 4): the log, and how hard it is pushed to disk. `everysec` loses at most about a second and is the setting
+    the docs suggest; `always` was about a fifth of the speed on this stack; `no` leaves it to the operating system, about 30 seconds on Linux. The docs'
+    advice for safety comparable to a database is both files.
+  - `maxmemory-policy` (2.9): what Redis does at the memory limit. `noeviction` makes writes that add data fail with an error and keeps serving reads: nothing is
+    dropped silently. `allkeys-lru` drops the least recently used key, whatever it is, which for sessions is a user logged out. The eviction
+    page's advice for mixing a cache and data you cannot lose is to consider two separate instances.
+  - `latency-monitor-threshold` (11): milliseconds above which a stall is recorded. At 0 the monitor is off.
+  - A `CONFIG SET` is live only (level 2): after a restart the config file or command line wins. Written for real, these belong in the compose `command:`.
+
+  Which of the five does a *minute of acceptable loss* decide, and which does *never silently vanish* decide? That is the justification the quiz asks for.
+
+task: |
+  In the game's Terminal panel, on the single node `redis://redis:6379`:
+
+  1. Read the blank box: `CONFIG GET save`, `CONFIG GET appendonly`, `CONFIG GET appendfsync`, `CONFIG GET maxmemory-policy` and
+     `CONFIG GET latency-monitor-threshold`. Nothing saved, no log, `appendfsync no`, `allkeys-lru`, monitor off.
+  2. Set what the requirements ask for: a snapshot with `CONFIG SET save "300 10"`, the log on with `CONFIG SET appendonly yes` and
+     `CONFIG SET appendfsync everysec`, the policy that never drops silently with `CONFIG SET maxmemory-policy noeviction`, and the monitor with
+     `CONFIG SET latency-monitor-threshold 100`.
+  3. Read them back, and `INFO persistence` for `aof_enabled:1`.
+  4. Answer the five questions below and press Verify.
+  5. **Afterwards**, put the stack's own snapshot setting back so that the rest of the game runs as before: `CONFIG SET save "60 1000"`. The other four
+     values already match the stack's defaults (the monitor at 100 is harmless). The check reads `300 10`, so do this after Verify, not before.
+
+hints:
+  - "Each CONFIG SET is one parameter and one value. save takes a quoted string with both numbers: CONFIG SET save \"300 10\"."
+  - "A minute of acceptable loss is decided by the log (everysec), not by the snapshot. The snapshot is for restarts and backups."
+  - "noeviction is the policy that fails loudly. If CONFIG GET maxmemory-policy still says allkeys-lru, nothing is being protected."
+  - "If appendonly stays no after the CONFIG SET, check the spelling: it takes yes or no, not on or off."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [CONFIG, GET, save]
+        equals: [save, "300 10"]
+        message: "save should be exactly \"300 10\": a snapshot after 300 seconds if at least 10 keys changed. Run CONFIG SET save \"300 10\"."
+      - cmd: [CONFIG, GET, appendonly]
+        equals: [appendonly, "yes"]
+        message: "appendonly should be yes: a minute of loss is acceptable, but the snapshot alone can lose several. Run CONFIG SET appendonly yes."
+      - cmd: [INFO, persistence]
+        matches: "aof_enabled:1"
+        message: "INFO persistence does not say aof_enabled:1: the log is not on."
+      - cmd: [CONFIG, GET, appendfsync]
+        equals: [appendfsync, everysec]
+        message: "appendfsync should be everysec: at most about a second lost, at a speed you can live with. Run CONFIG SET appendfsync everysec."
+      - cmd: [CONFIG, GET, maxmemory-policy]
+        equals: [maxmemory-policy, noeviction]
+        message: "maxmemory-policy should be noeviction: sessions share this box, and writes must fail loudly instead of evicting somebody's login. Run CONFIG SET maxmemory-policy noeviction."
+      - cmd: [CONFIG, GET, latency-monitor-threshold]
+        equals: [latency-monitor-threshold, "100"]
+        message: "latency-monitor-threshold should be 100 so that stalls over a tenth of a second are recorded. Run CONFIG SET latency-monitor-threshold 100."
+  - type: quiz
+    question: "Why save 300 10, with the log on as well?"
+    options:
+      - id: q1-snapshot-for-restart
+        label: "The snapshot is the compact file for backups and quick restarts, and the log already limits the loss, so a snapshot every few minutes (when at least 10 keys changed) is enough and keeps the fork pauses rare"
+      - id: q1-replaces-log
+        label: "Because with a snapshot every five minutes the log is not needed"
+      - id: q1-meaning
+        label: "Because save 300 10 means 300 changes within 10 seconds, which is the rate of the final"
+      - id: q1-needs-save
+        label: "Because Redis refuses to run the log unless a snapshot point is configured"
+    correct: q1-snapshot-for-restart
+    explanation: "The docs' advice for Postgres-like safety is both files. The log keeps the loss small, the snapshot is what you copy for a backup and load fast. save 300 10 is 300 seconds with at least 10 changed keys, which is cheap to take."
+  - type: quiz
+    question: "Why appendonly yes with appendfsync everysec, and not always or no?"
+    options:
+      - id: q2-everysec
+        label: "A minute of loss is acceptable, and everysec loses at most about a second at nearly full speed. always costs most of the write speed (about a fifth on this stack) for a loss nobody asked to avoid, and no leaves it to the operating system, about 30 seconds on Linux"
+      - id: q2-always
+        label: "always, because writes must never vanish, whatever it costs"
+      - id: q2-no
+        label: "no, because the operating system's cache is faster than Redis's own"
+      - id: q2-snapshot-only
+        label: "No log at all: a snapshot every five minutes already meets a one-minute loss"
+    correct: q2-everysec
+    explanation: "everysec is the setting the docs suggest and the one that matches the requirement: lose at most a second or so. always is for when not even a second is acceptable, and you measured what it costs. A snapshot every five minutes can lose five."
+  - type: quiz
+    question: "Sessions and the cache share the box and 'writes must never silently vanish'. Which maxmemory-policy, and why?"
+    options:
+      - id: q3-noeviction
+        label: "noeviction: when memory is full, writes that add data fail with an error while reads still work, so nothing is dropped silently. (The docs' better answer for mixing a cache with data you cannot lose is two separate instances)"
+      - id: q3-allkeys-lru
+        label: "allkeys-lru, which makes room for new writes by dropping the least recently used keys, whatever they are"
+      - id: q3-volatile-lru
+        label: "volatile-lru: only keys with a TTL are dropped, and sessions are safe because sessions have no TTL"
+      - id: q3-allkeys-random
+        label: "allkeys-random, because it treats every key fairly"
+    correct: q3-noeviction
+    explanation: "allkeys-lru evicts any key, a session included, silently: a user is logged out and nothing tells you. volatile-lru only drops keys with an expiry, and a session has one, so it is a candidate too. noeviction turns a full box into errors you can see and alert on. The eviction page also suggests two instances for this mix."
+  - type: quiz
+    question: "Why latency-monitor-threshold 100?"
+    options:
+      - id: q4-record-before
+        label: "So that stalls longer than 100 ms are recorded before an incident, ready for LATENCY LATEST and LATENCY DOCTOR. At 0 the monitor records nothing"
+      - id: q4-faster
+        label: "Because a higher threshold makes Redis answer faster"
+      - id: q4-slowlog
+        label: "Because it is the same setting as the slow log's threshold"
+      - id: q4-kill
+        label: "Because Redis kills any command that takes longer than 100 ms"
+    correct: q4-record-before
+    explanation: "The monitor only knows what happened after it was switched on, and at 0 it is off. You measured a 250 ms stall appear at 100 and not at 0. The slow log is a separate setting, and nothing is killed: it only records."
+  - type: quiz
+    question: "You set all five with CONFIG SET and the box restarts tonight. What do you find?"
+    options:
+      - id: q5-live-only
+        label: "The settings revert to what the config file or command line says, because CONFIG SET only changes the running server. To keep them, put them in the config file or the compose command"
+      - id: q5-kept
+        label: "They are kept: Redis writes every CONFIG SET to its config file at once"
+      - id: q5-snapshot-kept
+        label: "They are stored in dump.rdb and reloaded with the data"
+      - id: q5-kept-aof
+        label: "They are replayed from the append-only file"
+    correct: q5-live-only
+    explanation: "You measured it in level 2: after a restart CONFIG GET save was empty again, though the data came back from the snapshot. Settings that must last live in the config file or on the command line, which is the compose file's command: for this stack."
+
+show_me:
+  component: kv_card
+  keys: []
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+  - https://redis.io/docs/latest/develop/reference/eviction/
+
+reward:
+  xp: 80
+  badge: "Built it blank"
+
+solutions:
+  reference: solutions/14-reference.redis
+  wrong:
+    - path: solutions/14-wrong-allkeys-lru.redis
+      expect: wrong
+      because: "allkeys-lru lets Redis evict any key to make room, a session included, without a word: a user is logged out and nothing tells you. The requirement was that writes must never silently vanish, which is noeviction."

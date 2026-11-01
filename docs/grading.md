@@ -50,7 +50,7 @@ Then it fills the other verifiers:
 - `event`: `cli_ping` comes from a `PING` in the solution; `ui_connected` is posted as the UI would; `progress_restored` is
   produced by the harness calling `POST /api/progress/restore` (what accepting the restore offer does), and **only the
   restore**, so an engine that never emits the event is a mismatch, not hidden.
-- After any solution file that contains `CONFIG SET` (ops levels such as ch2-09) the tool re-applies the stack's defaults through `/api/cli` (`CONFIG SET maxmemory 536870912`, `CONFIG SET maxmemory-policy noeviction`) and prints one line, so a wrong solution that set `noeviction` at 64mb cannot poison later levels with OOM errors.
+- After any solution file that contains `CONFIG SET` (ops levels such as ch2-09) the tool re-applies the stack's defaults through `/api/cli` (`maxmemory 536870912`, `maxmemory-policy noeviction`, `save "60 1000"`, `appendonly yes`, `appendfsync everysec`, `latency-monitor-threshold 0`) and prints one line, so a wrong solution that set `noeviction` at 64mb cannot poison later levels with OOM errors.
 - A solution that ran `FLUSHALL`/`FLUSHDB` is followed by a restore, so the game's own mirror is back for the next one.
 
 Traffic levels print progress (`load baseline`, `load run`, `still verifying`) from the engine's WebSocket events.

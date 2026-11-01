@@ -1,0 +1,19 @@
+# Reference: look at the open door, make a worker that may read and write queue:* keys and nothing dangerous, sign in as it to prove both
+# halves (its own key works, another key and FLUSHALL are NOPERM), and come back as the default user.
+CONFIG GET protected-mode
+CONFIG GET bind
+ACL LIST
+ACL WHOAMI
+# rules apply left to right: add read and write, then take the dangerous ones away again
+ACL SETUSER worker on >hostelpass ~queue:* +@read +@write -@dangerous
+ACL GETUSER worker
+AUTH worker hostelpass
+# refused for the worker, and the error names it: this is how you know who you are before the next lines
+ACL WHOAMI
+SET queue:x 1
+GET queue:x
+SET other 1
+FLUSHALL
+# the default user has no password, so any value is accepted
+AUTH default anything
+ACL WHOAMI

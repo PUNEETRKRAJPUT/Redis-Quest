@@ -1,0 +1,189 @@
+id: ch5-04-both-and-backups
+chapter: ch5
+title: "Both, and backups"
+mode: decision
+
+story: |
+  `19:20  Harry Bhaiya: "ok but which one do I tell the sponsors? snapshot or diary?"`
+
+  Two good ideas are on the table, and Harry Bhaiya needs one sentence he can say in front of a sponsor without it turning into a
+  lecture. You have just seen both on the crash node: a snapshot that is cheap and can be a minute stale, a log that is nearly
+  current and costs disk and writes.
+
+  There is no code in this level. It is the meeting: given what each one is, which do you run, and how do you take a backup of it
+  without making the backup the thing that breaks.
+
+brainstorm:
+  prompt: "Redis can keep a snapshot file, a log, or both. For the leaderboard of the final, which would you run?"
+  options:
+    - id: both
+      label: "Both: the log keeps the loss small, and the snapshot is the easy file to back up and restart from"
+      is_reasonable: true
+    - id: snapshot-only
+      label: "A snapshot only: losing a minute or two of a leaderboard is fine, and it is the cheapest"
+      is_reasonable: true
+    - id: not-redis
+      label: "Not Redis: the leaderboard is rebuilt from Postgres after any crash, so no Redis persistence is needed"
+      is_reasonable: true
+
+teach: |
+  From the persistence page of the docs, the advice in one list:
+
+  - **Both** RDB and AOF, if you want a degree of data safety comparable to what Postgres can provide.
+  - **RDB alone** if a few minutes of lost data is acceptable.
+  - **AOF alone** is discouraged. The RDB is the compact file you back up and restart from quickly.
+  - If both are on, **on restart the AOF is used**: it is the more complete record.
+  - Neither runs a rewrite while the other is saving: no `BGREWRITEAOF` during a `BGSAVE`, and the other way round.
+
+  Backups, from the same page:
+
+  - An RDB file is safe to copy while Redis is running: snapshots are written to a temporary file and renamed into place, so a
+    copy is always a whole snapshot. A schedule the docs suggest: hourly snapshots kept for 48 hours, daily snapshots for one or
+    two months, and a copy off the machine every day.
+  - An AOF copied during a rewrite can be invalid. To back it up: `CONFIG SET auto-aof-rewrite-percentage 0`, check that
+    `aof_rewrite_in_progress` is 0 in `INFO persistence`, copy the files, then switch the automatic rewrite back on.
+  - Not from the docs, plain sense: a copy on the same disk is not a backup. A backup is a copy that survives the loss of the machine.
+
+  Nothing in this level is run on your Redis. The Redis 8.10 line also has a `BACKUP` command family for online backups; the
+  docs mention it, and you will not need it tonight.
+
+task: |
+  Answer the seven questions and press Verify. There is nothing to type in the terminal. Read each as the sponsor's sentence you
+  would have to say out loud.
+
+hints:
+  - "The docs' wording is the answer key: both for Postgres-like safety, RDB alone for a few minutes of loss, AOF alone discouraged."
+  - "An RDB file is replaced by a rename, so a copy of it is always whole. An AOF is a directory of files that a rewrite changes while you copy."
+  - "When both files exist, the more complete record wins at startup."
+
+verify:
+  - type: quiz
+    question: "The sponsors want data safety comparable to what Postgres gives. Which persistence setup do the docs point to?"
+    options:
+      - id: q1-both
+        label: "Both RDB snapshots and the append-only file"
+      - id: q1-rdb-only
+        label: "RDB alone, with snapshots taken as often as the box can bear"
+      - id: q1-no-persistence-replicas
+        label: "No persistence at all, but two replicas, since three copies cannot all die at once"
+      - id: q1-aof-no
+        label: "The append-only file with appendfsync no, because the operating system is reliable"
+    correct: q1-both
+    explanation: "The persistence page says to use both if you want a degree of data safety comparable to what PostgreSQL can provide. The log keeps the loss small and the snapshot is the file you back up and restart from. Replicas of a node with no persistence are the trap you will meet in level 7: if that node restarts empty, its replicas copy the emptiness."
+  - type: quiz
+    question: "A dashboard of view counts can lose a few minutes without anybody minding, and restarts should be quick. What is enough?"
+    options:
+      - id: q2-rdb-alone
+        label: "RDB alone"
+      - id: q2-aof-always
+        label: "The append-only file with appendfsync always, so that not a single view is lost"
+      - id: q2-both-always
+        label: "Both, with appendfsync always, to be safe"
+      - id: q2-nothing
+        label: "Nothing: a dashboard that restarts empty is the same as one that restarts a few minutes behind"
+    correct: q2-rdb-alone
+    explanation: "The docs say RDB alone is fine when a few minutes of loss is acceptable, and a snapshot is also the fast file to restart from. always would cost you about four fifths of your write speed on this stack to protect numbers nobody minds losing. And empty is not the same as a few minutes behind: it is everything."
+  - type: quiz
+    question: "A teammate suggests the append-only file alone and no RDB at all. What do the docs say?"
+    options:
+      - id: q3-discouraged
+        label: "It is discouraged: the RDB is the compact point-in-time file for backups and quick restarts, which the log alone does not give you"
+      - id: q3-recommended
+        label: "It is the recommended setup: a log is always more current than a snapshot, so a snapshot adds nothing"
+      - id: q3-impossible
+        label: "It is not possible: Redis refuses to start the log unless a save point is configured"
+      - id: q3-only-with-replicas
+        label: "It is fine as long as at least one replica exists"
+    correct: q3-discouraged
+    explanation: "The docs discourage AOF alone. The log is more current, but the snapshot is what you back up and what loads quickly, and the two together are what the docs recommend for safety. Redis does not require a save point to run the log."
+  - type: quiz
+    question: "You want to copy dump.rdb for a backup while Redis is serving the final. Is a plain copy safe?"
+    options:
+      - id: q4-rdb-safe
+        label: "Yes. The file is written to a temporary name and renamed into place, so a copy is always a whole snapshot"
+      - id: q4-stop-first
+        label: "No. Stop Redis first, or the copy can be half written"
+      - id: q4-save-first
+        label: "Only after SAVE, which blocks the server until the copy is finished"
+      - id: q4-never
+        label: "Never: backups of Redis must be taken with a replica and MONITOR"
+    correct: q4-rdb-safe
+    explanation: "The docs say RDB files are safe to copy while the server is running, because the snapshot is atomically renamed into place. A running copy of an RDB file is the cheap, normal backup."
+  - type: quiz
+    question: "Now the append-only files. What can go wrong with a copy while a rewrite is running, and what do the docs do about it?"
+    options:
+      - id: q5-pause-rewrite
+        label: "The copy can be invalid. Set auto-aof-rewrite-percentage to 0, check aof_rewrite_in_progress is 0 in INFO persistence, copy the files, then switch the rewrite back on"
+      - id: q5-just-copy
+        label: "Nothing: the log is only ever appended to, so a copy is always whole"
+      - id: q5-stop-aof
+        label: "Turn appendonly off for the length of the copy and on again afterwards"
+      - id: q5-rdb-instead
+        label: "Nothing can be done: back up the RDB file and never the AOF"
+    correct: q5-pause-rewrite
+    explanation: "A rewrite replaces the files you are copying, so a copy taken during one can be invalid. The docs' procedure is to stop automatic rewrites, check that none is running, copy, and turn them back on. Turning appendonly off would stop logging writes while you copy."
+  - type: quiz
+    question: "Redis starts with both persistence options on, and both dump.rdb and the append-only files exist. What does it load?"
+    options:
+      - id: q6-aof-used
+        label: "The append-only file, which is the more complete record"
+      - id: q6-rdb-used
+        label: "dump.rdb, because it is smaller and loads faster, and then the log is replayed on top"
+      - id: q6-both-merged
+        label: "Both files, merged, with the newer value winning"
+      - id: q6-refuses
+        label: "Neither: it refuses to start until one of the two is moved away"
+    correct: q6-aof-used
+    explanation: "The docs: if both are enabled, on restart the AOF is used, because it is the more complete record."
+  - type: quiz
+    question: "What backup schedule for RDB files do the docs suggest?"
+    options:
+      - id: q7-hourly-daily-offsite
+        label: "Hourly snapshots kept for 48 hours, daily snapshots for a month or two, and a copy moved off the machine every day"
+      - id: q7-latest-only
+        label: "Only the latest snapshot, overwritten each time: older ones are only clutter"
+      - id: q7-weekly-same-disk
+        label: "One weekly copy on the same disk, because that is the disk Redis already trusts"
+      - id: q7-every-second
+        label: "A copy after every BGSAVE to the same folder, and nothing older than an hour"
+    correct: q7-hourly-daily-offsite
+    explanation: "The docs' suggestion is layered: hourly for 48 hours, daily for one or two months, and one copy off the machine each day. A backup that lives on the disk that died is not a backup, and keeping only the latest file means a bad snapshot silently replaces the good one."
+
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+
+reward:
+  xp: 40
+  badge: "Chose on purpose"
+
+solutions:
+  reference:
+    - q1-both
+    - q2-rdb-alone
+    - q3-discouraged
+    - q4-rdb-safe
+    - q5-pause-rewrite
+    - q6-aof-used
+    - q7-hourly-daily-offsite
+  wrong:
+    - option: q1-no-persistence-replicas
+      expect: wrong
+      because: "Replicas copy whatever their master holds. If a master with no persistence restarts empty, it empties its replicas as well, so three copies of nothing is what you get. The docs say to use both RDB and AOF for Postgres-like safety."
+    - option: q2-aof-always
+      expect: wrong
+      because: "always protects every single write at a price of most of your write speed. For view counts that can lose a few minutes, the docs say RDB alone is enough."
+    - option: q3-recommended
+      expect: wrong
+      because: "The docs discourage the append-only file alone. The snapshot is the compact file you back up and restart from, and the safe setup is both."
+    - option: q4-stop-first
+      expect: wrong
+      because: "An RDB file is replaced by a rename, so a copy of it is always a whole snapshot and Redis does not need to stop."
+    - option: q5-just-copy
+      expect: wrong
+      because: "A rewrite replaces the log files while you copy them, so a copy during one can be invalid. Stop the automatic rewrite, check none is running, copy, and turn it back on."
+    - option: q6-rdb-used
+      expect: wrong
+      because: "With both enabled the docs say the AOF is used on restart. It is the more complete record."
+    - option: q7-latest-only
+      expect: wrong
+      because: "One overwritten file means a bad snapshot silently replaces the last good one, and a copy on the same machine does not survive losing the machine. The docs suggest layers: hourly, daily and an off-machine copy."

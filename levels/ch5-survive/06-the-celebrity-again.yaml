@@ -1,0 +1,180 @@
+id: ch5-06-the-celebrity-again
+chapter: ch5
+title: "The celebrity, again"
+mode: code
+
+story: |
+  `19:27  stats page: p-028  (every phone, again)`
+
+  Chengappa is walking out to bat in the final, and every phone in the country opens his page at once, the way they did in the
+  semi-final. Last time you answered with a memo of your own in the app: a `Map` you had to write, bound and empty yourself.
+  Mukul's script has noticed too, and is refreshing the same page as fast as it can.
+
+  Redis can do better than being asked fast. It can tell the app when the answer changed. If the app keeps a copy of the hash and
+  Redis promises to say so the moment that key is written, expires or is evicted, the app does not need a timer, and a hundred
+  thousand reads of an unchanged key never reach the server. That is client-side caching, and node-redis has it built in.
+
+scenario: celebrity-100   # drives the live pain panel and the "Run traffic" button
+
+brainstorm:
+  prompt: "Every phone wants the same hash, and the hash changes only now and then. How could the app keep a copy and still never show a stale one?"
+  options:
+    - id: server-tells-client
+      label: "The server remembers which keys the client has read and sends a message when one of them changes, so the client drops its copy"
+      is_reasonable: true
+    - id: short-timer
+      label: "Keep the copy for a very short time, as in Chapter 4b, and accept that it can be a second out of date"
+      is_reasonable: true
+    - id: not-redis
+      label: "Not Redis: a CDN in front of the stats page, with the page cached for a few seconds"
+      is_reasonable: true
+
+teach: |
+  The client-side caching pages of the docs describe **tracking**. In the default mode the server remembers the keys each connection
+  has read, and when one of them is modified, expires or is evicted it sends an invalidation to that connection. The cost is on the
+  server: an invalidation table with a maximum size. With RESP3 the invalidation arrives as a push message on the same connection.
+
+  In node-redis (5.1.0 or newer):
+
+  ```js
+  createClient({ RESP: 3, clientSideCache: { ttl: 0, maxEntries: 5000, evictPolicy: 'LRU' } })
+  ```
+
+  The game builds that client for you and hands it to your code as `deps.redisCached`, next to `deps.redis`. Use it for **reads**:
+
+  - A read the client has seen is answered from the app's memory, and Redis is not asked. A write from anywhere, including your
+    own `deps.redis`, makes the server send an invalidation, and the next read goes to the server again.
+  - If the connection drops, the client flushes its whole cache. Every key is a miss until it has been read again.
+  - Some commands are never cached: random or cursor commands (`HRANDFIELD`, `HSCAN`, `ZRANDMEMBER`), the search commands
+    and the probabilistic and time series reads. `hGetAll` is cached.
+  - Two connections can race: the docs name that as a risk of tracking, and the client's rule is to bound its memory and evict (here
+    LRU, 5,000 entries).
+  - Its calls are not counted in the Metrics panel's Redis commands, because a hit never reaches the server. The truth is on the
+    server: `INFO commandstats`, where `cmdstat_hgetall` counts the reads Redis actually answered. The stack's own test measured it: three reads
+    of one key with a write in between made `cmdstat_hgetall` go up by exactly 2.
+
+task: |
+  The slot is `getPlayerStats(deps, playerId)` in `workspace/ch2/cache.js`, the same cache-aside as Chapter 2. Start from this version
+  (key `cache:player:<id>`, a hash, 30 seconds), which reads through the ordinary client:
+
+  ```js
+  export default async function getPlayerStats({ redis, db }, playerId) {
+    const key = `cache:player:${playerId}`;
+    const cached = await redis.hGetAll(key);
+    if (Object.keys(cached).length > 0) return cached;
+    const { rows } = await db.query('SELECT * FROM player_stats($1)', [playerId]);
+    if (!rows[0]) return null;
+    const fields = Object.fromEntries(Object.entries(rows[0]).map(([k, v]) => [k, v === null ? '' : String(v)]));
+    await redis.multi().hSet(key, fields).expire(key, 30).exec();
+    return rows[0];
+  }
+  ```
+
+  1. **See the plain version.** Tick "Run my code in the app". In the game terminal run `CONFIG RESETSTAT`, press "Run traffic"
+     (`celebrity-100`: 100 connections for 10 seconds on `GET /app/players/p-028/stats`), and when it finishes read `INFO commandstats`:
+     `cmdstat_hgetall` has about one call per request.
+  2. **Change the read.** Take `redisCached` from the deps too, and read through it: `await redisCached.hGetAll(key)`. Leave every write on
+     `redis` (`hSet`, `expire`, `multi`). Do not call `duplicate()` on it: it refuses.
+  3. Run `CONFIG RESETSTAT`, press "Run traffic" again and read `INFO commandstats`: `cmdstat_hgetall` should be a handful of calls,
+     not thousands. The Metrics panel's Redis line is near zero too.
+  4. Answer the three questions and press Verify.
+
+  Verify checks that the function still caches p-028 in a Redis hash with a TTL, returns `null` for p-999 and leaves no key for it, then runs the same traffic
+  itself: at most 0.05 Redis commands per request, no errors, p99 under 100 ms.
+
+hints:
+  - "Destructure it from the deps like the others: getPlayerStats({ redis, redisCached, db }, playerId). It has the same methods as redis, so redisCached.hGetAll(key) is a drop-in for the read."
+  - "Only the read moves. A write through redisCached is not what the cache is for: keep hSet and expire on redis, and let the server's invalidation tell redisCached about them."
+  - "If INFO commandstats still shows thousands of hgetall calls, check that 'Run my code in the app' is ticked and that you changed the file the slot uses: workspace/ch2/cache.js."
+  - "The first request after a miss writes the hash through redis. The invalidation that write causes arrives by itself a moment later, so a read in the same instant can still see the old empty copy and miss once more: harmless, and it settles as soon as the push arrives."
+
+verify:
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/06-cold.yaml
+    assertions:
+      - call: { args: ["p-028"] }
+        repeat: 2
+        message: "Calling getPlayerStats for p-028 twice should leave the player's stats in the Redis hash cache:player:p-028 and return the same player both times."
+        sideEffect:
+          - cmd: [TYPE, "cache:player:p-028"]
+            equals: hash
+            message: "cache:player:p-028 should be a hash: the client-side cache sits in front of Redis, it does not replace the Redis copy."
+          - cmd: [HGET, "cache:player:p-028", player_id]
+            equals: "p-028"
+            message: "The cached hash for p-028 should hold p-028's own stats, with a player_id field of p-028."
+          - cmd: [TTL, "cache:player:p-028"]
+            between: [1, 300]
+            message: "The cached hash for p-028 should expire: give it a TTL of a few minutes at most."
+      - call: { args: ["p-999"] }
+        expect: null
+        message: "p-999 is not a player. getPlayerStats should return null for it."
+        sideEffect:
+          - cmd: [EXISTS, "cache:player:p-999"]
+            equals: 0
+            message: "An id that is not a player should not leave a cache:player key behind."
+  - type: quiz
+    question: "Your code reads cache:player:p-028 through deps.redisCached, then a write to that key arrives from another connection (or the key expires). What happens to the app's copy?"
+    options:
+      - id: server-invalidates
+        label: "The server, which remembered that this client read the key, sends an invalidation, the client drops its copy, and the next read goes to Redis"
+      - id: copy-stays-until-ttl
+        label: "The copy stays until its own timer runs out: the client cannot know the key changed"
+      - id: client-polls
+        label: "The client asks Redis whether the key changed before every read, which is still one round trip"
+      - id: write-updates-copy
+        label: "The write is sent to every client with the new value, which replaces the copy in place"
+    correct: server-invalidates
+    explanation: "That is tracking: the server keeps a table of the keys each connection read and, when one is modified, expires or is evicted, sends an invalidation. The client only drops its copy; the next read fetches the new value. With ttl 0 the copy has no timer of its own."
+  - type: quiz
+    question: "The app's connection to Redis drops for a moment and comes back. What does the client-side cache do?"
+    options:
+      - id: flush-all
+        label: "It flushes the whole cache: while the connection was down it could have missed an invalidation, so every key must be read again"
+      - id: keep-all
+        label: "It keeps every copy: the data has not changed just because the network blinked"
+      - id: keep-until-ttl
+        label: "It keeps each copy until its TTL, because the invalidations are queued and replayed"
+      - id: flush-hot
+        label: "It drops only the keys that were read in the last second"
+    correct: flush-all
+    explanation: "The docs: if any connection is disconnected the client flushes all keys from its cache. It cannot know what it missed. That is also why a flapping connection turns a cached page back into one Redis command per request."
+  - type: quiz
+    question: "Which of these is true about using client-side caching with node-redis?"
+    options:
+      - id: resp3-and-version
+        label: "It needs node-redis 5.1.0 or newer with RESP: 3; reads like hGetAll are cached, random and cursor commands such as HRANDFIELD and HSCAN are not, and writes go through the ordinary client"
+      - id: any-version
+        label: "It works on any node-redis with a clientSideCache option, on RESP 2, and every read command is cached"
+      - id: writes-too
+        label: "It caches writes as well: a hSet through the cached client is held until the next read"
+      - id: server-memory-free
+        label: "It costs the server nothing, because the copies live in the app"
+    correct: resp3-and-version
+    explanation: "The docs list node-redis 5.1.0 as the first supported version, with RESP 3 for the push invalidations. Random and cursor commands (HRANDFIELD, HSCAN, ZRANDMEMBER) and the search and probabilistic reads are never cached. In default tracking mode the server pays with an invalidation table, which has a maximum size."
+  - type: traffic
+    scenario: celebrity-100
+    baseline: false
+    assertions:
+      redis_per_request_lte: 0.05
+      error_rate_lte: 0
+      p99_ms_lte: 100
+    message: "Under the celebrity traffic Redis is still being asked too often (more than 0.05 commands per request), or the page is slow or failing. Is every read going through deps.redisCached, and does the write still go through deps.redis?"
+
+show_me:
+  component: cache_stats
+  keys: []
+docs:
+  - https://redis.io/docs/latest/develop/clients/client-side-caching/
+  - https://redis.io/docs/latest/develop/reference/client-side-caching/
+
+reward:
+  xp: 70
+  badge: "Redis tells the app"
+
+solutions:
+  reference: solutions/06-reference.js
+  wrong:
+    - path: solutions/06-wrong-plain-client.js
+      expect: wrong
+      because: "This is Chapter 2's cache with every read through the ordinary client, so every request is one HGETALL on the same key. Correct for one request at a time, and about one Redis command per request under the celebrity traffic, far over the limit of 0.05, which only the traffic run can see."

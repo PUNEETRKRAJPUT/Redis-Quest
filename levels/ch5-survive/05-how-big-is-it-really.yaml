@@ -1,0 +1,184 @@
+id: ch5-05-how-big-is-it-really
+chapter: ch5
+title: "How big is it, really"
+mode: cli
+
+story: |
+  `19:25  Harry Bhaiya: "sponsor says fifty million players next season. one box or three? how big is one player, bhai?"`
+
+  Harry Bhaiya has a way of asking the question that decides the budget as if it were a favour. You do not know how big one player
+  is. Nobody does, until somebody asks Redis, and the answer is never "the length of the text".
+
+  The game has put two things in Redis for this: `player:p-028`, Chengappa as a hash of twelve small fields, and `big:hash`, a hash
+  with six hundred fields that somebody built without thinking. Measure both, do the napkin sum, and clean up the big one the
+  way you would on a night with a final running.
+
+brainstorm:
+  prompt: "One player is a hash of twelve short text fields. How would you find out how much memory a million of them take?"
+  options:
+    - id: ask-redis
+      label: "Write a few into Redis and ask it: MEMORY USAGE on one, then multiply"
+      is_reasonable: true
+    - id: add-up-text
+      label: "Add up the characters of the names and values, since that is the data"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: look at the Postgres row size and assume Redis is about the same"
+      is_reasonable: false
+
+setup:
+  - cmd: [DEL, "player:p-028", "big:hash"]
+  - cmd:
+      - HSET
+      - "player:p-028"
+      - player_id
+      - p-028
+      - name
+      - "Ganapathi Chengappa"
+      - team_id
+      - t-02
+      - team
+      - "Chennai Lighthouse"
+      - role
+      - batter
+      - batting_hand
+      - left
+      - age
+      - "31"
+      - bat_avg
+      - "50.5"
+      - strike_rate
+      - "167.6"
+      - nickname
+      - "Anna Express"
+      - fame
+      - "99"
+      - home_ground
+      - "Marina Lantern Ground"
+  - cmd:
+      - EVAL
+      - "for i = 1, 600 do redis.call('HSET', 'big:hash', 'field-' .. i, 'value-' .. i) end return 600"
+      - 0
+  - cmd: [CONFIG, RESETSTAT]
+
+teach: |
+  The memory-optimization page of the docs has the rules you need for the napkin:
+
+  - Small hashes, lists, integer-only sets and sorted sets are stored in a compact encoding (a **listpack**) while they stay under
+    limits, which the docs say can use up to ten times less memory, five on average. The limits are settings: `hash-max-listpack-entries`
+    (512 by default) and `hash-max-listpack-value` (64 bytes). Past either, Redis converts the key to the normal encoding by
+    itself. Raising a limit trades CPU for memory, so benchmark before you do.
+  - The **hash trick**: instead of millions of small keys like `object:12345`, keep about a hundred fields per hash, key `object:123`,
+    field `45`. Each hash stays a listpack. The docs' own test showed 1.7 MB against 11 MB (on Redis 2.2: a ratio, not a promise).
+  - Redis may not give memory back to the operating system after a peak, and the resident size is a poor guide after one, so
+    **provision for the peak**, not the average.
+  - The FAQ's examples (64-bit): an empty instance is about 3 MB, a million small String keys about 85 MB, a million Hash keys of five
+    fields about 160 MB. Its advice is to use `redis-benchmark`, then look at `INFO memory`.
+
+  Your tools: `MEMORY USAGE <key>` (bytes for the key and its value), `OBJECT ENCODING <key>`, and `HLEN`. Measured on this stack with the
+  game's fixed values: `player:p-028` is 268 bytes, as a `listpack`. `big:hash` is 32,059 bytes as a `hashtable`; the same 600 fields,
+  with the limit raised to 1024 for the experiment so that it stayed a listpack, were 13,018 bytes. Deleting a big key has its own
+  cost: Chapter 4b measured `DEL` of a 300,000-field hash at about 10 ms on this stack against 7 to 30 microseconds for `UNLINK`.
+
+task: |
+  1. `MEMORY USAGE player:p-028`. Write the number down: you type it into the box below. Then `OBJECT ENCODING player:p-028`, `HLEN player:p-028`
+     and the two limits, `CONFIG GET hash-max-listpack-entries` and `CONFIG GET hash-max-listpack-value`.
+  2. The same three for the big one: `HLEN big:hash`, `OBJECT ENCODING big:hash` and `MEMORY USAGE big:hash`. Which limit did it cross?
+  3. The napkin: the bytes per player times 50,000,000 players. Compare that with the game's own `CONFIG GET maxmemory` (512 MB here).
+  4. Remove the big key without stalling the server: `UNLINK big:hash`. Check with `EXISTS big:hash`.
+  5. Answer the four questions below and press Verify.
+
+hints:
+  - "MEMORY USAGE prints just a number of bytes. Type that number into the box, with no unit."
+  - "OBJECT ENCODING answers listpack for the small hash and hashtable for the big one. If the player says hashtable, did an earlier command add fields to it?"
+  - "UNLINK and DEL both remove the key. The check looks at INFO commandstats for cmdstat_unlink, so use the one that hands the work to a background thread."
+
+verify:
+  - type: answer
+    prompt: "What did MEMORY USAGE player:p-028 print for you, in bytes?"
+    expected:
+      cmd: [MEMORY, USAGE, "player:p-028"]
+      transform: number
+    compare: equals
+    message: "That is not the number MEMORY USAGE gives for player:p-028 right now. Run MEMORY USAGE player:p-028 and type just the number."
+  - type: redis
+    checks:
+      - cmd: [OBJECT, ENCODING, "player:p-028"]
+        equals: listpack
+        message: "player:p-028 should still be a listpack. Did a command add fields to it, or change hash-max-listpack-entries?"
+      - cmd: [EXISTS, "big:hash"]
+        equals: 0
+        message: "big:hash is still there. Remove it with UNLINK big:hash."
+      - cmd: [INFO, commandstats]
+        matches: "cmdstat_unlink:calls=[1-9]"
+        message: "The server has not run UNLINK since this level started. DEL removes a key too, but it frees the memory on the main thread; UNLINK hands that to a background thread."
+  - type: quiz
+    question: "player:p-028 has 12 fields and OBJECT ENCODING says listpack. big:hash has 600 and says hashtable. hash-max-listpack-entries is 512. Why?"
+    options:
+      - id: converts-past-limit
+        label: "A hash stays in the compact listpack while it is under the limits, and Redis converts it to the normal hashtable by itself once it goes past one (here, 512 entries)"
+      - id: type-decides
+        label: "The encoding is chosen when the key is created and never changes, and big:hash was simply created with HSET and a bigger argument list"
+      - id: size-in-bytes
+        label: "A hash becomes a hashtable when its total size passes 512 kilobytes"
+      - id: encoding-per-field
+        label: "Each field has its own encoding, and OBJECT ENCODING reports the one used by the first field"
+    correct: converts-past-limit
+    explanation: "The compact encoding is for small aggregates. The limits are hash-max-listpack-entries (512) and hash-max-listpack-value (64 bytes). Cross either and Redis converts the key to the normal encoding automatically, which is faster for big hashes and costs more memory: you measured 32,059 bytes against 13,018 for the same 600 fields."
+  - type: quiz
+    question: "Memory peaked at 3 GB for an hour during the final, and the dataset is 1 GB now. How much should the box be sized for?"
+    options:
+      - id: provision-peak
+        label: "The peak. Redis may not return freed memory to the operating system, so size for the most it will need, not for the average"
+      - id: provision-average
+        label: "The average: Redis hands memory back as soon as keys are deleted, so the peak is gone"
+      - id: provision-dataset
+        label: "The dataset size, 1 GB, plus 10 percent"
+      - id: provision-rss
+        label: "Whatever the resident size says right now, which is the true number after a peak"
+    correct: provision-peak
+    explanation: "The docs say Redis may not return memory to the OS, that the resident size is a poor guide after a peak, and to provision for peak memory. The admin page adds that a snapshot or log rewrite in a write-heavy app can need up to twice the dataset."
+  - type: quiz
+    question: "You must store twenty million tiny key-value pairs like object:12345 = 6. What does the docs' hash trick suggest?"
+    options:
+      - id: hash-trick
+        label: "Group them into hashes of about a hundred fields (key object:123, field 45), so each hash stays a compact listpack"
+      - id: one-giant-hash
+        label: "Put them all in one hash, since a hash is more compact than separate keys"
+      - id: raise-limits
+        label: "Raise hash-max-listpack-entries to a million so that one hash stays compact"
+      - id: strings-with-ttl
+        label: "Keep them as strings with a short TTL, which is cheaper than a hash"
+    correct: hash-trick
+    explanation: "Bucket the small values into hashes of roughly a hundred fields. Each stays under the listpack limits, and the docs' test showed 1.7 MB against 11 MB. One giant hash would cross the limit, become a hashtable, and be a big key; raising the limit trades CPU for memory."
+  - type: quiz
+    question: "About how much memory do a million small String keys take, and a million five-field Hash keys, according to the FAQ's 64-bit examples?"
+    options:
+      - id: faq-figures
+        label: "About 85 MB for the strings and about 160 MB for the hashes"
+      - id: faq-tiny
+        label: "About 8.5 MB and about 16 MB: Redis stores keys in a few bytes each"
+      - id: faq-gigabyte
+        label: "About 850 MB and about 1.6 GB: every key carries a large fixed overhead"
+      - id: faq-equal
+        label: "The same for both, since both are one key"
+    correct: faq-figures
+    explanation: "The FAQ gives roughly 85 MB for a million small String keys and 160 MB for a million Hash keys with five fields, with the advice to measure your own data with redis-benchmark and INFO memory. Your 268 bytes for twelve fields fits that scale; times fifty million it is 13.4 GB, many times what one of the game's boxes holds."
+
+show_me:
+  component: hash_card
+  keys: ["player:p-028"]
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/memory-optimization/
+  - https://redis.io/docs/latest/develop/get-started/faq/
+
+reward:
+  xp: 50
+  badge: "Did the napkin"
+
+solutions:
+  reference: solutions/05-reference.redis
+  wrong:
+    - path: solutions/05-wrong-del.redis
+      expect: wrong
+      because: "DEL removes big:hash too, so EXISTS says 0, but it frees the memory on the main thread and the check looks for UNLINK in INFO commandstats. On a key this size the difference is small; on a 300,000-field hash Chapter 4b measured about 10 ms of stall against microseconds."

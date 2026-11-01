@@ -1,0 +1,8 @@
+# Wrong: everything right except the memory policy. allkeys-lru evicts any key to make room, a session included, silently.
+CONFIG SET save "300 10"
+CONFIG SET appendonly yes
+CONFIG SET appendfsync everysec
+CONFIG SET maxmemory-policy allkeys-lru
+CONFIG SET latency-monitor-threshold 100
+CONFIG GET maxmemory-policy
+INFO persistence

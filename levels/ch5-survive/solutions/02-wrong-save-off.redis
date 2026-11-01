@@ -1,0 +1,8 @@
+# Wrong: save points switched off. A snapshot is taken by hand and the score is written, but no save point is configured,
+# so nothing would be saved again after this, and the check for "60 1000" fails.
+CONFIG SET save ""
+SET score:final 24
+BGSAVE
+BLPOP wait:half:a:second 0.5
+LASTSAVE
+INFO persistence

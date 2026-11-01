@@ -1,0 +1,13 @@
+# Reference: measure one player and the big hash, read the limits, do the napkin from the number, then remove the big key
+# with UNLINK (the memory is freed on a background thread). The number you type in the answer box is the first reply.
+MEMORY USAGE player:p-028
+OBJECT ENCODING player:p-028
+HLEN player:p-028
+CONFIG GET hash-max-listpack-entries
+CONFIG GET hash-max-listpack-value
+HLEN big:hash
+OBJECT ENCODING big:hash
+MEMORY USAGE big:hash
+CONFIG GET maxmemory
+UNLINK big:hash
+EXISTS big:hash

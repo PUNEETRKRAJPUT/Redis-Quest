@@ -1,0 +1,134 @@
+id: ch5-02-snapshots
+chapter: ch5
+title: "Snapshots"
+mode: cli
+
+story: |
+  `19:11  Harry Bhaiya: "just keep a backup na"`
+
+  Harry Bhaiya has the cheapest idea in the building, and it is not a bad one: take a photograph of Redis every so often, keep the
+  photograph on disk, and when Redis starts again, look at the photograph. That is an RDB snapshot. Teja wants to know how often to
+  take it. You want to know what is in the frame, and what falls between two frames.
+
+  You are back on the crash node, the one that saves nothing. Make it save.
+
+brainstorm:
+  prompt: "You may photograph Redis to disk every so often. What do you lose in a crash, and what does taking the photograph cost?"
+  options:
+    - id: lose-since-last
+      label: "Everything written since the last photograph, and some work and memory while the photograph is taken"
+      is_reasonable: true
+    - id: lose-nothing
+      label: "Nothing: a photograph is taken of every write as it happens"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: Postgres already keeps the points, so do not photograph Redis at all"
+      is_reasonable: true
+
+setup:
+  - cmd: [DEL, "score:final"]
+  - cmd: [CONFIG, SET, save, "60 1000"]
+
+teach: |
+  An **RDB** snapshot is a point-in-time copy of the whole dataset in one compact file, `dump.rdb` in the server's `dir` (`/data`
+  in this image). The docs make the trade plain: great for backups and fast restarts, but you can lose minutes of data, and
+  taking the snapshot forks the process, which can pause serving for milliseconds, up to about a second on a huge dataset.
+  The admin page adds that during a save in a write-heavy app memory can reach up to twice the dataset.
+
+  - `save 60 1000` means: snapshot when at least 1000 keys changed within 60 seconds. `CONFIG SET save "60 1000"` turns it on
+    for the running server. `BGSAVE` takes one now, in a child process; `SAVE` does the same but blocks the server, so you will
+    not use it. A snapshot is written to a temporary file and renamed, so `dump.rdb` is always a whole file.
+  - `INFO persistence` is the dashboard: `rdb_changes_since_last_save` (writes at risk right now), `rdb_last_bgsave_status`
+    (`ok` or `err`) and `rdb_saves` (snapshots started since this server started). `LASTSAVE` is the time of the last good one, in
+    Unix seconds.
+
+  Measured on this stack, with a throwaway `redis:8` started with the crash node's flags (`--save "" --appendonly no`): after
+  `CONFIG SET save "60 1000"`, a `SET` and a `BGSAVE`, `dump.rdb` appeared in `/data`. After a `kill -9` and a restart with the same
+  flags, the key was back, because Redis reads `dump.rdb` at startup whether or not `save` is on. A key written after the
+  snapshot was gone, and `CONFIG GET save` was empty again: `CONFIG SET` changes the running server only. What the next start
+  does comes from the config file or the command line, which is the compose file's `command:` here.
+
+task: |
+  Docker commands go in your own terminal on your Mac. Redis commands go in the game's Terminal panel.
+
+  1. Make sure the crash node is up (`docker compose --profile crash up -d redis-nopersist`) and pick the target
+     `redis://redis-nopersist:6379`. `CONFIG GET save` answers an empty string, and `CONFIG GET dir` answers `/data`.
+  2. Turn snapshots on and write something worth saving: `CONFIG SET save "60 1000"`, then `SET score:final 24`.
+  3. Read `INFO persistence`: note `rdb_changes_since_last_save` and `rdb_saves`. Take a snapshot with `BGSAVE`, then run `LASTSAVE`
+     and `INFO persistence` again: `rdb_last_bgsave_status` is `ok`, the changes counter is back near zero and `rdb_saves` is 1.
+  4. Find the file: `docker compose exec redis-nopersist ls -l /data` shows `dump.rdb`.
+  5. Answer the two questions below and press Verify, **while the target is still the crash node**: the checks read whatever Redis the
+     game points at.
+  6. Now see it come back. Write one more key, `SET after:snapshot 1`, then `docker compose kill redis-nopersist` and
+     `docker compose --profile crash up -d redis-nopersist`. Run `GET score:final` (24 is back), `GET after:snapshot` (nil: it fell
+     between two photographs) and `CONFIG GET save` (empty again).
+  7. **The way back.** Switch the target to `redis://redis:6379`, and remove the crash node so the next level starts from a clean one:
+     `docker compose --profile crash rm -sfv redis-nopersist`.
+
+hints:
+  - "CONFIG SET save takes one quoted string holding the pair: CONFIG SET save \"60 1000\". The first number is seconds, the second is changed keys."
+  - "BGSAVE answers 'Background saving started' at once. Give it a second, then read INFO persistence: rdb_bgsave_in_progress is 0 again, rdb_last_bgsave_status says ok and rdb_saves is 1."
+  - "If CONFIG GET save already says 60 1000 you are on the default Redis, which has saved all along. The prompt should read redis-nopersist:6379>."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [CONFIG, GET, save]
+        contains: "60 1000"
+        message: "save should be \"60 1000\". Run CONFIG SET save \"60 1000\" (the quotes keep it one value)."
+      - cmd: [GET, "score:final"]
+        equals: "24"
+        message: "score:final should be 24: write it with SET score:final 24 on the Redis the game points at."
+      - cmd: [INFO, persistence]
+        matches: "rdb_saves:[1-9]"
+        message: "This Redis has not taken a snapshot yet (rdb_saves is 0). Run BGSAVE and give it a second."
+      - cmd: [INFO, persistence]
+        matches: "rdb_last_bgsave_status:ok"
+        message: "The last background save did not finish ok. Read rdb_last_bgsave_status in INFO persistence."
+      - cmd: [LASTSAVE]
+        gte: 1
+        message: "LASTSAVE should answer the time of a snapshot, in Unix seconds."
+  - type: quiz
+    question: "With save 60 1000 and nothing else, Redis is killed at the worst moment. What can you lose, and what did taking the snapshots cost?"
+    options:
+      - id: since-last-snapshot
+        label: "Everything written since the last snapshot, which can be minutes. Each snapshot forks the process, which can pause serving briefly (up to about a second on a very large dataset)"
+      - id: one-second
+        label: "At most one second of writes, the same as an append-only file with everysec"
+      - id: nothing-lost
+        label: "Nothing: BGSAVE writes each command to dump.rdb as it happens"
+      - id: every-write-waits
+        label: "Nothing, but every write waits for the snapshot file to be synced to disk before it is acknowledged"
+    correct: since-last-snapshot
+    explanation: "A snapshot is a photograph, and a crash loses whatever happened after the last one: minutes when changes are few, because save 60 1000 only fires after 1000 changes. Taking it forks the process, which the docs say can pause serving for milliseconds, up to about a second on huge datasets. The one-second figure belongs to the append-only file, which is the next level."
+  - type: quiz
+    question: "After the restart, GET score:final gave 24 but CONFIG GET save was empty again. Why?"
+    options:
+      - id: config-set-is-memory
+        label: "CONFIG SET changes the running server only. The next start reads the config file or command line, which still says save off, but it still loads dump.rdb if it is there"
+      - id: bgsave-reset-it
+        label: "BGSAVE resets the save setting once the snapshot is written"
+      - id: rdb-stores-config
+        label: "The save setting is stored inside dump.rdb, and the file was damaged by the kill"
+      - id: not-loaded
+        label: "Redis did not load the snapshot: the 24 came from the game's mirror in the progress file"
+    correct: config-set-is-memory
+    explanation: "CONFIG SET is a live change and nothing writes it down, so the next start uses the command line (here the compose file's command: with --save \"\"). The snapshot is loaded at startup if the file exists, whatever save says. To make a setting last you change the config file or command line."
+
+show_me:
+  component: kv_card
+  keys: ["score:final"]
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/admin/
+
+reward:
+  xp: 50
+  badge: "Took the photograph"
+
+solutions:
+  reference: solutions/02-reference.redis
+  wrong:
+    - path: solutions/02-wrong-save-off.redis
+      expect: wrong
+      because: "CONFIG SET save \"\" switches the save points off, so no snapshot will ever be taken, and the check for \"60 1000\" fails. It is also the setting the crash node already had, which is how the whole of the last level's over was lost."

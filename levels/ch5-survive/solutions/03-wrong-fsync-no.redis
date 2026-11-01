@@ -1,0 +1,6 @@
+# Wrong: the log is on, but appendfsync is left at no, so the operating system decides when the log reaches the disk.
+CONFIG SET appendonly yes
+BGREWRITEAOF
+INFO persistence
+CONFIG SET appendfsync no
+CONFIG GET appendfsync

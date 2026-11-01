@@ -1,0 +1,9 @@
+# Wrong: the doctors are asked and the pause is run, but the latency monitor's threshold is set to 0, which switches it off.
+CONFIG SET latency-monitor-threshold 0
+CONFIG GET latency-monitor-threshold
+LATENCY DOCTOR
+MEMORY DOCTOR
+LATENCY LATEST
+SLOWLOG GET 5
+CLIENT PAUSE 1000 WRITE
+CLIENT UNPAUSE

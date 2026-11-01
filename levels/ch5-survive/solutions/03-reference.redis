@@ -1,0 +1,13 @@
+# Reference: open the log on the running server first, rewrite it once, look at the dashboard, and keep everysec.
+# (Run on the crash node, target redis://redis-nopersist:6379. The benchmark in the task runs in your own terminal:
+#  docker compose exec redis-nopersist redis-benchmark -t set -n 20000 -q, once per appendfsync setting.)
+CONFIG GET appendonly
+CONFIG SET appendonly yes
+CONFIG GET appendfsync
+INFO persistence
+BGREWRITEAOF
+INFO persistence
+# measured with redis-benchmark: always is about a fifth of everysec on this stack, so it goes back
+CONFIG SET appendfsync always
+CONFIG SET appendfsync everysec
+CONFIG GET appendfsync

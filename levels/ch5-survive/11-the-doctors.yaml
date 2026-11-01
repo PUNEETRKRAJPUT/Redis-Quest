@@ -1,0 +1,154 @@
+id: ch5-11-the-doctors
+chapter: ch5
+title: "The doctors"
+mode: cli
+
+story: |
+  `20:02  Warden Sir: "Is Redis well? I have been told to ask. The sponsors are in the front row."`
+
+  The warden has been handed a clipboard by somebody important, and one line on it says "is the database healthy". You do not want to answer
+  with a feeling. Redis keeps its own medical notes, and two of its commands read them out loud like a doctor on a ward round, in complete
+  sentences, with advice.
+
+  Harry Bhaiya, meanwhile, wants to move to a bigger box tonight without anybody noticing, during the interval. That can be done, in a
+  careful order, and one of its steps is to make Redis hold its breath for a moment on purpose.
+
+brainstorm:
+  prompt: "Redis was fine at 8 pm and slow at 8:20, and by 8:25 it is fine again. What do you want to exist when you come looking at 8:30?"
+  options:
+    - id: recorded-history
+      label: "A record Redis kept itself: which events were slow, how slow and when, and which commands were slow"
+      is_reasonable: true
+    - id: watch-live
+      label: "A person watching MONITOR live, so that nothing is missed"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: the app's own traces and logs, which show the slow request from the outside"
+      is_reasonable: true
+
+setup:
+  - cmd: [CLIENT, UNPAUSE]
+  - cmd: [CONFIG, SET, latency-monitor-threshold, "0"]
+  - cmd: [LATENCY, RESET]
+  - cmd: [SLOWLOG, RESET]
+  - cmd: [CONFIG, RESETSTAT]
+
+teach: |
+  The admin page of the docs names two doctors: `LATENCY DOCTOR` and `MEMORY DOCTOR`. You met their sources in Chapter 4b.
+
+  - The **latency monitor** records an event only when it is slower than `latency-monitor-threshold` milliseconds. At **0 it records nothing**
+    (measured: a 250 ms stall left `LATENCY LATEST` empty at 0 and showed a `command` event of 250 ms at 100). Set it before the incident,
+    not during. `LATENCY LATEST` lists events, `LATENCY DOCTOR` explains them in words, and says what to check.
+  - `MEMORY DOCTOR` reads the memory report. On an almost empty instance it answers that it cannot say anything yet (measured on an empty
+    `redis:8`); on a loaded one it may point at fragmentation or big keys.
+  - `SLOWLOG GET <n>` lists the last slow commands: an id, a time, the microseconds it took, the command, the client. Slow here means over
+    `slowlog-log-slower-than` (10,000 microseconds here) and the log keeps `slowlog-max-len` entries (128 here), both measured on this stack.
+  - The doctors tell you what happened. `CLIENT PAUSE <ms> WRITE` is for what you do next. It holds client **write** commands for that long and
+    lets reads through (measured here: a `GET` answered at once and a `SET` came back after the whole pause); `CLIENT UNPAUSE` ends it early.
+    The game's own writes wait too.
+  - **The zero-downtime switch** from the docs, in order: start the new instance as a replica of the old one; wait until it has synced and compare the
+    key counts in `INFO`; let the replica accept writes if clients will use it; switch the clients over, using `CLIENT PAUSE` for the moment of the
+    switch; check that the old one has no traffic; promote the new one with `REPLICAOF NO ONE`; shut the old one down. With Sentinel or Cluster, upgrade
+    replicas one at a time, then fail over by hand.
+
+task: |
+  In the game's Terminal panel, on the single node `redis://redis:6379`:
+
+  1. Turn the monitor on: `CONFIG SET latency-monitor-threshold 100`, and `CONFIG GET latency-monitor-threshold` to read it back.
+  2. Ask the doctors while all is calm: `LATENCY DOCTOR` and `MEMORY DOCTOR`.
+  3. Cause a small illness on purpose, a quarter of a second of a server doing nothing else:
+     `EVAL "local t = os.clock() while os.clock() - t < 0.25 do end return 1" 0`. Then `LATENCY LATEST`, `LATENCY DOCTOR` again, and `SLOWLOG GET 5`: your
+     script is in there, with about 250,000 microseconds. (A quarter of a second is well under the 5 seconds after which Redis answers BUSY.)
+  4. Hold your breath: `CLIENT PAUSE 4000 WRITE`, then straight away `GET score:final` (it answers) and `SET paused:write 1` (it waits for the pause to end;
+     if it came back at once you were too slow, so pause again). Run `CLIENT UNPAUSE` if the pause is still on.
+  5. Answer the four questions below and press Verify.
+
+hints:
+  - "The threshold is in milliseconds: 100 means record anything slower than a tenth of a second. 0 turns the monitor off."
+  - "LATENCY LATEST is empty until something slower than the threshold has happened. Run the EVAL after the CONFIG SET, not before."
+  - "CLIENT PAUSE 4000 WRITE gives you four seconds. Type the SET first as a line in the terminal, press Enter on the PAUSE, then recall it with the up arrow."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [CONFIG, GET, latency-monitor-threshold]
+        equals: [latency-monitor-threshold, "100"]
+        message: "latency-monitor-threshold should be 100 (milliseconds). Run CONFIG SET latency-monitor-threshold 100: at 0 the monitor records nothing."
+      - cmd: [INFO, commandstats]
+        matches: "cmdstat_latency\\|doctor:calls=[1-9]"
+        message: "The server has not run LATENCY DOCTOR since this level started. Ask it."
+      - cmd: [INFO, commandstats]
+        matches: "cmdstat_memory\\|doctor:calls=[1-9]"
+        message: "The server has not run MEMORY DOCTOR since this level started. Ask it."
+      - cmd: [INFO, commandstats]
+        matches: "cmdstat_client\\|pause:calls=[1-9]"
+        message: "The server has not run CLIENT PAUSE since this level started. Try CLIENT PAUSE 4000 WRITE."
+  - type: quiz
+    question: "Harry Bhaiya wants to move to a bigger box during the interval, with no downtime. In which order, from the admin page?"
+    options:
+      - id: order-replica-first
+        label: "Start the new box as a replica; wait for it to sync and compare key counts; switch the clients over with CLIENT PAUSE covering the moment of the switch; promote it with REPLICAOF NO ONE; shut the old one down"
+      - id: order-promote-first
+        label: "Promote the new box with REPLICAOF NO ONE; point the clients at it; then copy the data across"
+      - id: order-stop-first
+        label: "Stop the old box; start the new one from the old dump.rdb; point the clients at it"
+      - id: order-pause-all
+        label: "CLIENT PAUSE ALL on the old box for ten minutes while the files are copied by hand, then unpause"
+    correct: order-replica-first
+    explanation: "A replica is the only way to have the data on the new box while the old one keeps serving. The pause covers the instant clients are moved so that no write lands on the old box after the copy has been compared, and the promotion happens last. Anything that starts with promotion or a stop gives you either an empty new box or a gap."
+  - type: quiz
+    question: "You ran CLIENT PAUSE 4000 WRITE. Right after it, GET answered at once and SET waited about four seconds. What does the command do?"
+    options:
+      - id: pause-write-holds-writes
+        label: "It holds write commands from clients for that many milliseconds and lets reads through; when the time is up the held writes run"
+      - id: pause-write-errors
+        label: "It makes every write fail with an error until the time is up"
+      - id: pause-write-everything
+        label: "It stops the server from answering any command, reads included, for that long"
+      - id: pause-write-replication
+        label: "It pauses replication to the replicas and keeps answering clients normally"
+    correct: pause-write-holds-writes
+    explanation: "WRITE holds the writes (you measured the SET waiting for the pause) and keeps serving reads. It delays clients instead of failing them, which is why it is useful at the moment of a switch: nothing is rejected and nothing is lost, it is only late."
+  - type: quiz
+    question: "At latency-monitor-threshold 0, LATENCY DOCTOR says no latency spike was observed. What does that tell you?"
+    options:
+      - id: threshold-zero-off
+        label: "Almost nothing: at 0 the monitor records no events at all, so a clean report proves nothing. It has to be on (here 100 ms) before the incident"
+      - id: threshold-zero-all
+        label: "That the server really never stalled: at 0 it records every event, however small"
+      - id: threshold-zero-clean
+        label: "That the slow log is empty too, since they use the same threshold"
+      - id: threshold-zero-seconds
+        label: "That nothing took longer than 0 seconds, which is always true"
+    correct: threshold-zero-off
+    explanation: "You saw it: a 250 ms stall left LATENCY LATEST empty at threshold 0 and was recorded at 100. The slow log has its own setting (slowlog-log-slower-than, 10 ms here). A doctor that only has notes from the time it was switched on cannot tell you what happened before."
+  - type: quiz
+    question: "What does SLOWLOG GET 5 show you that LATENCY DOCTOR does not?"
+    options:
+      - id: slowlog-commands
+        label: "The actual commands: for each of the last slow ones, when it ran, how many microseconds it took, its arguments and the client. The latency doctor names event types and gives advice"
+      - id: slowlog-nothing-more
+        label: "Nothing: they are two views of the same list"
+      - id: slowlog-memory
+        label: "The memory each command used, so you can find the biggest keys"
+      - id: slowlog-network
+        label: "The network time of each command between your app and Redis"
+    correct: slowlog-commands
+    explanation: "SLOWLOG records commands whose server time passed slowlog-log-slower-than, with their arguments. The latency monitor records events by type (command, fork, expire cycle and so on) and the doctor explains them. The slow log does not count network time: it is the time inside Redis."
+
+show_me:
+  component: cache_stats
+  keys: []
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/admin/
+
+reward:
+  xp: 50
+  badge: "Read the chart"
+
+solutions:
+  reference: solutions/11-reference.redis
+  wrong:
+    - path: solutions/11-wrong-threshold-off.redis
+      expect: wrong
+      because: "A threshold of 0 switches the latency monitor off: it records no events, so the doctor has nothing to report and the check wants 100. The doctors were asked, the pause was run, and the monitor was still off."

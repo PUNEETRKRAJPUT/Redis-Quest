@@ -1,0 +1,4 @@
+# u-000011 has 5 points: a join with fee 10 must be refused and change nothing.
+steps:
+  - cmd: [SET, "{wallet:u-000011}", 5]
+  - cmd: [DEL, "{wallet:u-000011}:joins:9001"]

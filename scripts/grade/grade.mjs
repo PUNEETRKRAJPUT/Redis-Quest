@@ -895,8 +895,13 @@ async function gradeLevel(lv) {
     if (/CONFIG\s+SET/i.test(readFileSync(file, 'utf8'))) {
       await cli('CONFIG SET maxmemory 536870912');
       await cli('CONFIG SET maxmemory-policy noeviction');
+      // Chapter 5 levels change persistence and latency settings; put the stack's defaults back too.
+      await cli('CONFIG SET save "60 1000"');
+      await cli('CONFIG SET appendonly yes');
+      await cli('CONFIG SET appendfsync everysec');
+      await cli('CONFIG SET latency-monitor-threshold 0');
       log(
-        `      reset maxmemory 536870912 and maxmemory-policy noeviction after ${label} (it contains CONFIG SET)`,
+        `      reset maxmemory, maxmemory-policy, save, appendonly, appendfsync and latency-monitor-threshold to the stack's defaults after ${label} (it contains CONFIG SET)`,
       );
     }
     // A solution that wiped Redis leaves the game's own mirror missing: put it back before the next one.

@@ -1,0 +1,152 @@
+id: ch5-07-a-second-box
+chapter: ch5
+title: "A second box"
+mode: ops
+
+story: |
+  `19:34  Harry Bhaiya: "one box can die. two boxes cannot both die. add a second, na"`
+
+  Harry Bhaiya has been saying "add a second one" since the stats page, and tonight he is right about something. Persistence
+  gets your data back after a restart, but a restart takes time, and the final is on. A second Redis that already holds every
+  write, ready to take over, is a different thing from a file on a disk.
+
+  You will start the second box and look at what it holds and what it will not do. Then you will meet the trap from the
+  docs: the replica that faithfully copies a master which has just restarted empty.
+
+brainstorm:
+  prompt: "A second Redis keeps a live copy of the first. What can you do with it, and what can you not?"
+  options:
+    - id: read-and-take-over
+      label: "Read from it, and promote it if the first dies; but a write on it is refused while it is a copy"
+      is_reasonable: true
+    - id: write-both
+      label: "Write to either box: both stay the same, because they copy each other"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: keep the points in Postgres with a standby, and let Redis stay a cache that may be rebuilt"
+      is_reasonable: true
+
+setup:
+  - cmd: [DEL, "score:final"]
+
+teach: |
+  From the replication page of the docs: Redis replication is leader-follower and **asynchronous by default**. The replica opens a
+  connection to its master, receives the command stream, and acknowledges asynchronously. After a broken link it tries a partial
+  resync from the master's backlog, and only falls back to a full resync (a `BGSAVE` of the master and a transfer) when it must.
+
+  - A replica is **read-only** by default (`replica-read-only yes`; the docs discourage a writable one). `SET` on it answers
+    `READONLY You can't write against a read only replica.` That is the exact text on this stack, and also what an app slot
+    that writes will say when the game's target is the replica.
+  - `INFO replication` tells both sides: on the master `role:master`, `connected_slaves`, one `slaveN:` line per replica
+    (`ip`, `port`, `state`, `offset`, `lag`); on the replica `role:slave`, `master_host`, `master_link_status` (`up` or `down`).
+  - `WAIT <replicas> <timeout-ms>` blocks until that many replicas acknowledged your writes and answers how many did. It does **not** make
+    Redis consistent: the docs say acknowledged writes can still be lost in a failover.
+  - `min-replicas-to-write` with `min-replicas-max-lag` makes the master refuse writes unless enough replicas are connected and recent.
+    That bounds the loss window; it is off at 0 by default. Behind Docker or NAT the replica must announce its address
+    (`replica-announce-ip`); the compose file does that for you.
+  - **The trap.** The docs warn: a master with persistence off that restarts by itself comes back empty, and its replicas
+    dutifully synchronise from it, so now the replicas are empty too. Either give the master persistence or turn off the automatic
+    restart. The warning applies with Sentinel as well.
+
+task: |
+  Docker commands go in your own terminal on your Mac. Redis commands go in the game's Terminal panel. Start with the target on
+  `redis://redis:6379`.
+
+  1. Start the second box: `docker compose --profile replica up -d redis-replica`. It is a Redis started with `--replicaof redis 6379`.
+  2. In the Terminal, on the single node: `INFO replication`. Read `role:master`, `connected_slaves:1` and the `slave0:` line (the state
+     should say `online`). Then write something: `SET score:final 30`.
+  3. Switch the target to `redis://redis-replica:6379`. The prompt changes. Run `GET score:final` (30: it is a copy), then
+     `SET score:final 31` and read the error. Run `INFO replication` and read `role:slave`, `master_host`, `master_link_status`.
+     Do not leave the game here: the app and the runner follow the target, so anything of yours that writes gets the same error until you go back.
+  4. **The way back.** Switch the target to `redis://redis:6379`. Run `WAIT 1 1000` (the answer is the number of replicas that acknowledged) and
+     `CONFIG GET min-replicas-to-write` and `CONFIG GET min-replicas-max-lag`.
+  5. Answer the four questions below and press Verify. Leave `redis-replica` running: the next level builds on it.
+
+hints:
+  - "The replica profile only starts the replica. If INFO replication on the single node says connected_slaves:0, wait a few seconds for the sync, then run it again."
+  - "The target select is in the Terminal panel's header. Pick the replica preset, redis://redis-replica:6379, and check that the prompt changed to redis-replica:6379>."
+  - "The check runs where the game points when you press Verify, and it wants the master with its replica attached: switch back to redis://redis:6379 first."
+
+verify:
+  - type: event
+    kind: custom
+    match: { name: redis_target_changed, to: "redis://redis-replica:6379" }
+    timeoutMs: 120000
+    message: "The game has not seen you point it at redis://redis-replica:6379 since you started this level. Start the replica profile, then pick that target in the Terminal panel's select."
+  - type: redis
+    checks:
+      - cmd: [INFO, replication]
+        matches: "connected_slaves:[1-9]"
+        message: "This Redis has no replica attached. Start it with docker compose --profile replica up -d redis-replica, wait a few seconds, and point the game back at redis://redis:6379."
+      - cmd: [GET, "score:final"]
+        equals: "30"
+        message: "score:final should be 30, the value you wrote on the master. If it is 31 you wrote on the wrong box; a replica refuses writes, so check where the game pointed."
+  - type: quiz
+    question: "On the replica, SET score:final 31 answered an error. What and why?"
+    options:
+      - id: readonly-by-default
+        label: "READONLY: a replica is read-only by default (replica-read-only yes), because it is a copy and writes belong on its master"
+      - id: wrongtype
+        label: "WRONGTYPE: score:final is a different type on the replica"
+      - id: oom
+        label: "OOM: the replica was started with a smaller memory limit than the master"
+      - id: noperm
+        label: "NOPERM: the replica has a different ACL, and the default user may not write there"
+    correct: readonly-by-default
+    explanation: "The error text is READONLY You can't write against a read only replica. The docs describe replica-read-only as on by default and writable replicas as discouraged: two writers would make the copy stop being a copy."
+  - type: quiz
+    question: "You run WAIT 1 1000 after a write and it answers 1. What does that prove?"
+    options:
+      - id: wait-not-consistency
+        label: "That one replica had acknowledged the write when WAIT returned. It does not make Redis consistent: the docs say acknowledged writes can still be lost in a failover"
+      - id: wait-consistent
+        label: "That the write is now on two boxes for good, so a failover cannot lose it"
+      - id: wait-persisted
+        label: "That the write has been fsynced to disk on the master and on the replica"
+      - id: wait-reads-fresh
+        label: "That any read from the replica from now on will see every write the master has taken"
+    correct: wait-not-consistency
+    explanation: "WAIT asks the replicas to acknowledge up to a point. It narrows the window but replication stays asynchronous, so the docs say it does not make Redis CP and acknowledged writes can still be lost during a failover. It says nothing about the disk, and later writes can still be behind on the replica."
+  - type: quiz
+    question: "min-replicas-to-write is 0 here. What would setting it to 1, with min-replicas-max-lag 10, do?"
+    options:
+      - id: refuse-when-alone
+        label: "The master would refuse writes unless at least one replica is connected with a lag of 10 seconds or less: it bounds how much a failover can lose"
+      - id: copy-twice
+        label: "Every write would be sent to the replica twice, to be safe"
+      - id: wait-always
+        label: "Every write would behave as if it were followed by WAIT 1 and never be lost"
+      - id: promote-after-ten
+        label: "The replica would promote itself after 10 seconds without the master"
+    correct: refuse-when-alone
+    explanation: "From the replication page: min-replicas-to-write together with min-replicas-max-lag makes the master refuse writes when not enough replicas are connected and recent, which bounds the data-loss window. It is a trade: with the replica down you stop taking writes. It does not promote anything; that is Sentinel's job, next level."
+  - type: quiz
+    question: "The master has no persistence and is restarted automatically after a crash. It has one replica. What happens, and what do the docs say to do?"
+    options:
+      - id: trap-empties-replica
+        label: "The master comes back empty and the replica synchronises from it, so both are empty. Give the master persistence, or turn off its automatic restart"
+      - id: replica-keeps-data
+        label: "The replica keeps its copy and gives the data back to the master when it returns"
+      - id: replica-promotes
+        label: "The replica promotes itself during the restart and the empty master becomes its replica"
+      - id: nothing-happens
+        label: "Nothing: replicas ignore a master that comes back with an empty dataset"
+    correct: trap-empties-replica
+    explanation: "This is the warning in the replication page: a master with persistence off that auto-restarts can wipe all its replicas, because they resynchronise from it. The same holds with Sentinel. A replica protects you from losing a box, not from losing the data on a master that restarts blank."
+
+show_me:
+  component: kv_card
+  keys: ["score:final"]
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/replication/
+
+reward:
+  xp: 60
+  badge: "Has a second box"
+
+solutions:
+  reference: solutions/07-reference.sh
+  wrong:
+    - path: solutions/07-wrong-no-replica.sh
+      expect: wrong
+      because: "The replica profile is never started, so there is nothing at redis://redis-replica:6379 for the game to switch to (the switch is refused), the game never sees redis_target_changed, and INFO replication on the master says connected_slaves:0."

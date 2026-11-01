@@ -1,0 +1,197 @@
+id: ch5-09-the-cluster-migration
+chapter: ch5
+title: "The cluster migration"
+mode: code
+
+story: |
+  `19:49  Harry Bhaiya: "sponsor wants fifty million players by March. one box will not hold that. three boxes, na? six?"`
+
+  He is right again, and this time the answer is not a replica. A replica holds the same data as its master. To hold more than one
+  box can, the data itself has to be cut into pieces, with each box owning some of them, and every key has to know which piece it
+  belongs to. That is Redis Cluster, and the company will ask for it the day the box is full.
+
+  You will form a cluster from the six spare nodes, point the game at it, and carry the app across. Most of the app will not notice.
+  One piece will: the contest join from Chapter 3, which takes a fee from the wallet and counts the entry as one step. It was
+  written for a single node and it will not survive the move.
+
+brainstorm:
+  prompt: "Data is spread over three masters, and one operation needs a wallet and a contest counter to change together. What has to be true of those two keys?"
+  options:
+    - id: same-slot
+      label: "They must live in the same slot, which means on the same master, so one step can touch both"
+      is_reasonable: true
+    - id: any-keys
+      label: "Nothing: Redis finds the masters and runs the step across them atomically"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: take the fee in Postgres inside a transaction, and let Redis only count"
+      is_reasonable: true
+
+teach: |
+  From the scaling page of the docs: Redis Cluster splits the keyspace into **16384 hash slots**. A key's slot is
+  CRC16(key) mod 16384, and every master owns a range of slots (`redis-cli --cluster create` cuts them in thirds: A-05's check saw
+  0-5460, 5461-10922 and 10923-16383 on this stack). A cluster needs at least three masters and is not strongly consistent.
+  The cluster bus listens on the data port plus 10000.
+
+  - **Hash tags.** If a key has `{...}`, only the text inside is hashed, so `{user:1}:cart` and `{user:1}:profile` share a slot. A
+    multi-key command, a `MULTI`/`EXEC` or a Lua script is only allowed when every key is in the same slot.
+  - The errors, exact on this stack (A-05, E-03): `CROSSSLOT Keys in request don't hash to the same slot` when the keys are on one master
+    in different slots; `MOVED <slot> <host>:6379` when a transaction's key lives on another master.
+  - node-redis's cluster client picks a node per command, so it has **no WATCH** (Chapter 3's WATCH join fails with
+    `conn.watch is not a function`). A Lua script with every key in `KEYS[]` runs where that slot lives.
+  - In the game's terminal, keyless commands (`DBSIZE`, `KEYS`, `INFO`, `CLUSTER INFO`) go to the master that owns slot 0 only: `DBSIZE` sees one
+    node of three. Name the keys you check.
+  - **Pub/sub.** Plain `PUBLISH` reaches subscribers on every node, and its reply counts receivers on the node it went to, so `0` is normal
+    (A-05's ticker still heard it). The docs' sharded form, `SPUBLISH` and `SSUBSCRIBE`, hashes the channel to a slot and keeps messages in the shard.
+    The ticker would use it at scale.
+  - The wallet and the contest counter had different slots: `CLUSTER KEYSLOT` answers 10458 for `wallet:u-000010` (CRC16, computed by the author,
+    and the same function that gave A-05's measured 7573 for `contest:9001:entries`). With a tag, `{wallet:u-000010}` and
+    `{wallet:u-000010}:joins:9001` share slot 10458. The price: the per-contest count is now a per-user record.
+
+task: |
+  Docker commands go in your own terminal on your Mac. Start with the Sentinels and the replica stopped (level 8's last step).
+
+  1. Start the six nodes: `docker compose --profile cluster up -d redis-c1 redis-c2 redis-c3 redis-c4 redis-c5 redis-c6`, wait about five seconds, then
+     form the cluster: `docker compose exec redis-c1 redis-cli --cluster create redis-c1:6379 redis-c2:6379 redis-c3:6379 redis-c4:6379 redis-c5:6379 redis-c6:6379 --cluster-replicas 1 --cluster-yes`.
+     It ends with `[OK] All 16384 slots covered` (about two seconds here).
+  2. Switch the target to `cluster://redis-c1:6379,redis-c2:6379,redis-c3:6379`. In the Terminal: `CLUSTER INFO` (`cluster_state:ok`),
+     `CLUSTER KEYSLOT wallet:u-000010` and `CLUSTER KEYSLOT contest:9001:entries` (two different slots), `MSET a 1 b 2` (CROSSSLOT), and
+     `MSET {u:1}:a 1 {u:1}:b 2` (OK).
+  3. **Break it.** Put Chapter 3's join in `workspace/ch3/contest-join.js` (your WATCH version), tick "Run my code in the app", and run
+     `SET wallet:u-000010 100`, then `curl -s -X POST localhost:3000/app/contests/9001/join -H 'content-type: application/json' -d '{"userId":"u-000010","fee":10}'`.
+     Read the error: `conn.watch is not a function`. (Had you written it as a script or a `MULTI` over those two keys, the answer would be CROSSSLOT or MOVED.)
+  4. **Fix it.** Rewrite `join(deps, userId, contestId, fee)` so every key it touches shares one slot: the wallet is `{wallet:<userId>}` and the entry
+     count is `{wallet:<userId>}:joins:<contestId>` (a count per user per contest, not per contest). One Lua script, both keys in `KEYS[]`, no WATCH. It still
+     returns exactly `true` (fee taken, entry counted) or `false` (balance too low, nothing changed).
+  5. Answer the five questions and press Verify with the target still on the cluster. The check sends fifty joins at once on a wallet of 100, fee 10:
+     ten may succeed, `{wallet:u-000010}` ends at 0 and its joins at 10.
+  6. **The way back.** Switch the target to `redis://redis:6379` and `docker compose --profile cluster stop`.
+
+hints:
+  - "KEYS[1] is the wallet, KEYS[2] the joins counter, ARGV[1] the fee. redis.eval(script, { keys: [wallet, joins], arguments: [String(fee)] }). Both keys carry the same {wallet:...} tag."
+  - "In the script: read the balance with GET, return 0 if it is missing or below the fee, otherwise DECRBY the wallet, INCR the counter and return 1. Turn the 0 or 1 into false or true in JavaScript."
+  - "If the first call after the fix says MOVED or CROSSSLOT, one of your two key names lost its braces. The part inside { } must be identical in both."
+  - "The game's terminal needs the same names: GET {wallet:u-000010} reads it; GET wallet:u-000010 is a different key in a different slot."
+
+verify:
+  - type: event
+    kind: custom
+    match: { name: redis_target_changed, kind: cluster }
+    timeoutMs: 120000
+    message: "The game has not seen you point it at the cluster since you started this level. Form the cluster, then pick cluster://redis-c1:6379,redis-c2:6379,redis-c3:6379 in the Terminal panel's select."
+  - type: redis
+    checks:
+      - cmd: [CLUSTER, INFO]
+        contains: "cluster_state:ok"
+        message: "The Redis the game points at is not a healthy cluster. Form it with redis-cli --cluster create (step 1) and check CLUSTER INFO says cluster_state:ok."
+  - type: behavior
+    slot: contest.join
+    fixtures: fixtures/09-wallet-100.yaml
+    concurrency: 50
+    assertions:
+      - call: { args: ["u-000010", 9001, 10] }
+        repeat: 50
+        expectCount: { value: true, equals: 10 }
+        message: "Fifty joins at once on a wallet of 100 with a fee of 10: exactly 10 should succeed. Fewer (or an error) usually means a key lost its {wallet:...} tag and the cluster refused it; more means the check and the debit are not one step."
+        sideEffect:
+          - cmd: [GET, "{wallet:u-000010}"]
+            equals: "0"
+            message: "The wallet {wallet:u-000010} should end at exactly 0 after ten fees of 10."
+          - cmd: [GET, "{wallet:u-000010}:joins:9001"]
+            equals: "10"
+            message: "{wallet:u-000010}:joins:9001 should read 10: one count for every fee taken."
+  - type: behavior
+    slot: contest.join
+    fixtures: fixtures/09-wallet-5.yaml
+    assertions:
+      - call: { args: ["u-000011", 9001, 10] }
+        expect: false
+        message: "u-000011 has 5 points and the fee is 10. contest.join should return false."
+        sideEffect:
+          - cmd: [GET, "{wallet:u-000011}"]
+            equals: "5"
+            message: "A refused join must leave the wallet alone: {wallet:u-000011} should still have 5 points."
+  - type: quiz
+    question: "How does a Redis Cluster decide which master a key lives on?"
+    options:
+      - id: crc16-slots
+        label: "slot = CRC16(key) mod 16384; each master owns ranges of the 16384 slots, and if the key has {...} only the text inside is hashed"
+      - id: consistent-ring
+        label: "A consistent-hash ring over the master names, so adding a node moves only a few keys"
+      - id: first-letter
+        label: "By the first character of the key name, spread over the masters in alphabetical ranges"
+      - id: random-node
+        label: "The client picks a random master for each write and a directory remembers where it went"
+    correct: crc16-slots
+    explanation: "The scaling page: 16384 hash slots, slot = CRC16(key) mod 16384 (not consistent hashing), and hash tags: with {...} in the key, only the text between the braces is hashed."
+  - type: quiz
+    question: "A MULTI touches wallet:u-000010 (slot 10458) and contest:9001:entries (slot 7573), both on the same master. What does the cluster answer?"
+    options:
+      - id: crossslot-same-master
+        label: "CROSSSLOT: the unit is the slot, not the machine, so keys in different slots cannot be in one transaction even on one master (MOVED instead, if the second key is on another master)"
+      - id: works-same-master
+        label: "It works: both keys are on one machine, and the master runs the transaction as it always did"
+      - id: works-not-atomic
+        label: "It works, but each key is changed separately, so it is no longer atomic"
+      - id: moved-always
+        label: "MOVED, always: the client must reconnect to the master that owns the first key"
+    correct: crossslot-same-master
+    explanation: "A-05 measured it: CROSSSLOT when both slots sit on one master, MOVED when the other key is on another master. Multi-key commands, transactions and Lua scripts need every key in one slot."
+  - type: quiz
+    question: "The new key {wallet:u-000010}:joins:9001 replaces contest:9001:entries. What did the hash tag cost you?"
+    options:
+      - id: per-user-count
+        label: "The per-contest count is no longer one key. It is now a count per user, and a contest-wide total has to be derived in a second step (summing them, or a separate counter updated afterwards), not in the same atomic transaction"
+      - id: nothing-lost
+        label: "Nothing: the contest count is still one key, it just has a longer name"
+      - id: slower-reads
+        label: "Every read now needs two round trips, because the tag splits the key in two"
+      - id: atomicity-lost
+        label: "The fee and the entry are no longer atomic, because they are different keys now"
+    correct: per-user-count
+    explanation: "A hash tag puts keys that must change together into one slot, which means keys that cannot share the tag live elsewhere. A contest-wide total across many users' slots can only be built in a second step. The fee and the user's own entry stay atomic, which is the point of the tag."
+  - type: quiz
+    question: "A teammate fixes every CROSSSLOT by putting the same tag, {app}, on every key in the game. What happens?"
+    options:
+      - id: one-slot-one-master
+        label: "Every key lands in one slot, so one master holds and serves all of it and the other masters idle: the cluster adds no capacity"
+      - id: perfectly-balanced
+        label: "The keys are spread evenly, because the tag only changes the order in which slots are filled"
+      - id: refused
+        label: "Redis refuses a tag that is used by more than a hundred keys"
+      - id: faster-everything
+        label: "All multi-key commands become cheaper, and nothing else changes"
+    correct: one-slot-one-master
+    explanation: "The slot is computed from the tag only, so one tag means one slot, which means one master. Use a tag for the keys that must change together (one user's wallet and joins), not for everything."
+  - type: quiz
+    question: "On the cluster, PUBLISH answered (integer) 0, yet the ticker's subscriber received the ball. What explains it, and what is the cluster's sharded form?"
+    options:
+      - id: global-publish
+        label: "Plain PUBLISH reaches subscribers on every node, and its reply counts receivers on the node it was sent to. The sharded form, SPUBLISH and SSUBSCRIBE, hashes the channel to a slot and keeps messages in that shard"
+      - id: lost-message
+        label: "The 0 means nobody received it: the subscriber heard a message from the previous publish"
+      - id: spublish-same
+        label: "PUBLISH and SPUBLISH are the same command under two names, and the 0 is a bug in the cluster client"
+      - id: only-masters
+        label: "PUBLISH only reaches the master that owns slot 0, and a subscriber on any other node cannot hear it"
+    correct: global-publish
+    explanation: "From the pub/sub docs: global Pub/Sub broadcasts to every node; sharded Pub/Sub (7.0) hashes channels to slots and keeps messages within the shard, which scales better. A-05's check saw the receiver count 0 and the subscriber hearing the message anyway."
+
+show_me:
+  component: kv_card
+  keys: ["{wallet:u-000010}"]
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/scaling/
+  - https://redis.io/docs/latest/develop/pubsub/
+  - https://redis.io/docs/latest/develop/programmability/eval-intro/
+
+reward:
+  xp: 80
+  badge: "Moved to the cluster"
+
+solutions:
+  reference: solutions/09-reference.js
+  wrong:
+    - path: solutions/09-wrong-two-slots.js
+      expect: wrong
+      because: "This is Chapter 3's join: WATCH on a duplicate connection, then a MULTI over wallet:<user> and contest:<id>:entries. On a cluster it fails before it gets that far, with conn.watch is not a function (the cluster client has no WATCH). Even without WATCH, a MULTI over those two keys is refused: CROSSSLOT when they are on one master, MOVED when they are not, because they hash to different slots."

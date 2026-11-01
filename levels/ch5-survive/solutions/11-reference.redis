@@ -1,0 +1,15 @@
+# Reference: switch the latency monitor on (milliseconds; 0 is off), ask both doctors while calm, cause a quarter-second stall on purpose and
+# read it back three ways, then hold client writes for four seconds and watch a read pass and a write wait.
+CONFIG SET latency-monitor-threshold 100
+CONFIG GET latency-monitor-threshold
+LATENCY DOCTOR
+MEMORY DOCTOR
+EVAL "local t = os.clock() while os.clock() - t < 0.25 do end return 1" 0
+LATENCY LATEST
+LATENCY DOCTOR
+SLOWLOG GET 5
+# the zero-downtime switch pauses writes for the instant clients are moved; a read goes through, a write waits for the pause
+CLIENT PAUSE 4000 WRITE
+GET score:final
+SET paused:write 1
+CLIENT UNPAUSE

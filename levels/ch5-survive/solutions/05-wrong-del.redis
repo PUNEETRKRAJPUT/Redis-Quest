@@ -1,0 +1,7 @@
+# Wrong: DEL where UNLINK was wanted. The key is gone, but the memory is freed on the main thread and the server never ran UNLINK.
+MEMORY USAGE player:p-028
+OBJECT ENCODING player:p-028
+OBJECT ENCODING big:hash
+MEMORY USAGE big:hash
+DEL big:hash
+EXISTS big:hash

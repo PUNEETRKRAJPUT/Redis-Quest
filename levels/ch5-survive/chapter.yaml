@@ -1,0 +1,42 @@
+id: ch5
+title: "Survive and scale"
+incident:
+  - from: roommate
+    time: "19:00"
+    text: "bhai. do not panic. there was a yellow warning in the Redis log so I restarted Redis to fix it. the warning is gone. the leaderboard is also gone. is that normal"
+  - from: you
+    time: "19:02"
+    text: "how many teams were on it?"
+  - from: roommate
+    time: "19:03"
+    text: "forty thousand. were. WERE 😭"
+  - from: senior
+    time: "19:09"
+    text: "Scene kya hai? The final is at eight. Whatever it is, just add a second Redis, and a third. Fest ka budget hai"
+  - from: you
+    time: "19:14"
+    text: "three things, in order. it has to survive a restart. then it has to survive losing a whole box. then it has to hold more than one box can. and nobody restarts anything to fix a warning, ever again"
+  - from: rival-college
+    time: "19:21"
+    text: "Evening, bhai. Funny thing: port 6379 on your fest server answers me from the hostel wifi. No password. I only said hello 😏"
+  - from: roommate
+    time: "19:24"
+    text: "he is not just saying hello. why is he IN our Redis"
+  - from: senior
+    time: "19:30"
+    text: "Match starts at eight, bhai. Tell me when it is safe. I will tell the sponsors it already is."
+levels:
+  - ch5-01-the-crash
+  - ch5-02-snapshots
+  - ch5-03-the-log
+  - ch5-04-both-and-backups
+  - ch5-05-how-big-is-it-really
+  - ch5-06-the-celebrity-again
+  - ch5-07-a-second-box
+  - ch5-08-who-decides-who-is-master
+  - ch5-09-the-cluster-migration
+  - ch5-10-port-6379-is-on-the-internet
+  - ch5-11-the-doctors
+  - ch5-12-managed-redis
+  - ch5-13-the-production-checklist
+  - ch5-14-blank-rebuild

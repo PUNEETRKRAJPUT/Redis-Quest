@@ -1,0 +1,156 @@
+id: ch5-08-who-decides-who-is-master
+chapter: ch5
+title: "Who decides who is master"
+mode: ops
+
+story: |
+  `19:41  Teja: "ok the second box is up. if the first one dies, who tells the second one to take over? me? at 8:15 pm? during the over?"`
+
+  It is a fair question, and the honest answer is that a replica never promotes itself. Somebody has to notice the master is gone,
+  agree that it is really gone and not just unreachable from one place, choose a replica, tell it to take over, and tell every client
+  where the master is now. A human at a keyboard is the slowest and most error-prone way of doing that.
+
+  Redis ships a watcher for the job. Three of them, so that no single one decides alone. You will start them, kill the master
+  on purpose, watch the final's scoreboard keep working on the other side, and then put everything back in the right order.
+
+brainstorm:
+  prompt: "The master dies. Two boxes cannot both be sure which of them is right. Who should decide, and how?"
+  options:
+    - id: several-watchers-vote
+      label: "Several independent watchers, which agree the master is down by a vote, and then one of them runs the switch"
+      is_reasonable: true
+    - id: replica-decides
+      label: "The replica decides for itself: if it cannot reach the master for a few seconds it promotes itself"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: put the points in a managed database that does its own failover"
+      is_reasonable: true
+
+teach: |
+  **Sentinel** (the sentinel page of the docs) does four jobs: monitoring, notification, automatic failover, and being the
+  configuration provider that clients ask for the master's address. The stack's `docker/sentinel/sentinel.conf` says:
+
+  `sentinel monitor mymaster redis 6379 2`, `down-after-milliseconds 5000`, `failover-timeout 10000`, `parallel-syncs 1`.
+
+  - A Sentinel that cannot reach the master marks it **subjectively down** (SDOWN). When enough Sentinels agree, it is **objectively down**
+    (ODOWN). The **quorum** (the `2`) only decides how many must agree for ODOWN. To actually run the failover a Sentinel has to be
+    elected leader by a **majority of all the Sentinels**, so there is no failover in the minority side of a partition.
+  - Deploy **at least three** Sentinels on machines that fail independently. Replicas are discovered by themselves. Asynchronous
+    replication still applies: acknowledged writes can be lost in a failover.
+  - Clients ask a Sentinel: `SENTINEL get-master-addr-by-name mymaster`. Others: `SENTINEL masters`, `SENTINEL replicas mymaster`,
+    `SENTINEL sentinels mymaster`. The game's `sentinel://mymaster@sentinel-1:26379,sentinel-2:26379,sentinel-3:26379` target uses a Sentinel-aware client.
+  - Docs warning: Sentinel with Docker or any NAT or port mapping must be mixed with care, because addresses are announced to clients.
+    That is why the compose file gives the master and the replica `--replica-announce-ip`.
+
+  **Measured by the stack's own checks (E-03 for the engine, A-05 for the app), on this stack:** after `docker compose stop redis`, the engine sees
+  the master down at 3.5 s; Sentinel logs `+sdown`, `+odown` and `+switch-master` at about 5 s, 6 s and 6.2 s; a terminal `SET` works again at
+  6.6 s; the game's `sentinel_failover` event comes at 7.3 s and `/api/target` shows `redis-replica:6379` at 7.5 s. The app's learner writes were stable again
+  at 5.2 s and `/app/target` named the new master at 7.3 s. Then `docker compose start redis` returns it as a replica after about 11 s.
+  To fail back, wait at least 10 s after that, or Sentinel aborts with `no-good-slave` and retries only 20 s later; the failback event came 7.7 s after the stop.
+
+task: |
+  Docker commands go in your own terminal on your Mac, in the repo folder. Redis commands go in the game's Terminal panel. Start with
+  the replica from the last level running and the target on `redis://redis:6379`.
+
+  1. Start the three Sentinels: `docker compose --profile sentinel up -d sentinel-1 sentinel-2 sentinel-3`. Give them five seconds.
+     Ask one who the master is: `docker compose exec sentinel-1 redis-cli -p 26379 SENTINEL get-master-addr-by-name mymaster`
+     (`redis` and `6379`), and `... SENTINEL replicas mymaster` (it lists `redis-replica`).
+  2. Switch the target to `sentinel://mymaster@sentinel-1:26379,sentinel-2:26379,sentinel-3:26379` (the Terminal select has a preset). The prompt
+     reads `mymaster@redis:6379>`. `INFO replication` says `role:master`. `SET score:final 31`.
+  3. **Kill the master.** `docker compose stop redis`, and watch the Terminal panel: the dot goes down, then the game follows the new master by
+     itself. Within about ten seconds `SET score:final 32` works again. Then `curl localhost:3000/app/target` (the app's view) and
+     `SENTINEL get-master-addr-by-name mymaster` again: it names `redis-replica`. Run `SENTINEL masters` on a Sentinel to read the rest.
+  4. **Bring the old master back.** `docker compose start redis`. It returns as a replica: `docker compose exec redis redis-cli INFO replication`
+     says `role:master` for a few seconds and then `role:slave`. `SENTINEL replicas mymaster` should list `redis:6379`.
+  5. **The way back, in this order.** Wait at least 10 seconds after `redis` shows as a replica. Then `docker compose stop redis-replica`: the master
+     moves back to `redis` within about 8 seconds. Then `docker compose start redis-replica`, and switch the target to `redis://redis:6379`.
+  6. Answer the four questions below and press Verify, with the target back on `redis://redis:6379`.
+  7. You are done with the watchers: `docker compose --profile sentinel stop sentinel-1 sentinel-2 sentinel-3`, then
+     `docker compose --profile replica stop redis-replica`. The cluster needs the memory.
+
+hints:
+  - "The failover is not instant: Sentinel waits for down-after-milliseconds (5 seconds here) before it even thinks the master is dead. Watch the Terminal panel for about ten seconds before deciding it did not work."
+  - "If the game shows the target as down and stays down, check that you picked the sentinel:// preset and not redis://redis:6379: only the first follows a new master."
+  - "If the failback does nothing for 20 seconds, you stopped the new master too soon. Let SENTINEL replicas mymaster list redis:6379, wait ten more seconds, and stop it again."
+
+verify:
+  - type: event
+    kind: custom
+    match: { name: sentinel_failover }
+    timeoutMs: 300000
+    message: "The game has not seen a Sentinel failover since you started this level. Point it at the sentinel:// target and run docker compose stop redis while it is."
+  - type: redis
+    checks:
+      - cmd: [INFO, replication]
+        matches: "role:master"
+        message: "The Redis the game points at is not a master. Finish the way back: redis back as a replica, then stop redis-replica so that redis takes over again, and point the game at redis://redis:6379."
+  - type: quiz
+    question: "sentinel monitor mymaster redis 6379 2, and three Sentinels are running. What does the 2 mean, and what does a failover need besides it?"
+    options:
+      - id: quorum-vs-majority
+        label: "The quorum: how many Sentinels must agree the master is down. Running the failover also needs one Sentinel to be elected leader by a majority of all the Sentinels"
+      - id: quorum-replicas
+        label: "The number of replicas the master must have before Sentinel will fail over"
+      - id: quorum-everything
+        label: "Two Sentinels are enough for every decision, including the election of the one that runs the failover"
+      - id: quorum-failovers
+        label: "The number of failovers Sentinel may run before a human has to approve it"
+    correct: quorum-vs-majority
+    explanation: "The docs: the quorum only decides failure detection (objectively down). A failover needs a majority of the Sentinels to authorise a leader, which is why there is no failover in the minority side of a partition. With only one Sentinel running, a quorum of 2 can never be reached."
+  - type: quiz
+    question: "Why do the docs say to run at least three Sentinels, on machines that fail independently?"
+    options:
+      - id: three-sentinels
+        label: "A majority of two is two, so losing one stops all failovers; and Sentinels on the same machine or network fail together, which defeats the vote"
+      - id: three-sentinels-speed
+        label: "Each Sentinel handles a third of the client traffic, so three are needed for speed"
+      - id: three-sentinels-replicas
+        label: "There must be one Sentinel per replica and one per master"
+      - id: three-sentinels-license
+        label: "Redis refuses to start fewer than three Sentinels"
+    correct: three-sentinels
+    explanation: "Sentinel is a vote, and a vote needs an odd number of voters who do not all fail together. Two cannot lose one and still hold a majority; three can. They carry no client traffic: clients only ask them where the master is."
+  - type: quiz
+    question: "The docs say to mix Sentinel with Docker or any NAT or port mapping with care. What goes wrong?"
+    options:
+      - id: announce-addresses
+        label: "Redis and Sentinel tell each other and the clients the addresses they see, which behind NAT or port mapping may not be reachable by anyone else, so nodes must announce usable ones (here replica-announce-ip)"
+      - id: nat-encrypts
+        label: "NAT encrypts the replication stream, so Sentinel cannot read the master's state"
+      - id: nat-time
+        label: "Containers share one clock, so every Sentinel sees the same failure time and no vote is needed"
+      - id: nat-slots
+        label: "Port mapping changes the hash slots, which stops the failover from finding the keys"
+    correct: announce-addresses
+    explanation: "INFO and ROLE report the address a node sees for itself, and Sentinel hands addresses to clients. Behind NAT those can be wrong, so the compose file sets --replica-announce-ip. Without it, the stack's failback used to stall: Sentinel knew the old master under two addresses."
+  - type: quiz
+    question: "After a failover, the app found that a handful of scores written in the last moments before the master died were missing. Why?"
+    options:
+      - id: async-replication-loss
+        label: "Replication is asynchronous: the master acknowledged those writes before the replica had them, and the replica that took over never received them"
+      - id: sentinel-restarts-empty
+        label: "Sentinel restarts the new master with an empty dataset and replays only the last snapshot"
+      - id: clients-drop-writes
+        label: "The client library throws away any write sent during the failover, by design"
+      - id: quorum-lost-them
+        label: "The quorum of 2 deletes writes that only one Sentinel saw"
+    correct: async-replication-loss
+    explanation: "The docs say acknowledged writes can be lost in a failover because replication is asynchronous. WAIT narrows the window and min-replicas-to-write bounds it, but neither makes it zero. Sentinel does not touch data; it only decides who is master."
+
+show_me:
+  component: kv_card
+  keys: ["score:final"]
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/replication/
+
+reward:
+  xp: 70
+  badge: "Survived a failover"
+
+solutions:
+  reference: solutions/08-reference.sh
+  wrong:
+    - path: solutions/08-wrong-one-sentinel.sh
+      expect: wrong
+      because: "One Sentinel can see the master is down, but sentinel.conf says quorum 2, so it can never reach the vote that makes it objectively down, and nobody elects a leader. The master stays dead, no failover happens, and the game never sees sentinel_failover. Three Sentinels, so that a quorum and a majority both exist."

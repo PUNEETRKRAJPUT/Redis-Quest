@@ -1,0 +1,167 @@
+id: ch5-12-managed-redis
+chapter: ch5
+title: "Managed Redis"
+mode: decision
+
+story: |
+  `20:09  Harry Bhaiya: "the sponsor's cloud team says we can just rent Redis. a button. they run it. why did we do all this?"`
+
+  Harry Bhaiya asks the question every team asks around this point, and he is half right, which is the dangerous kind. Somebody else can run
+  the boxes, the replicas, the failover and the backups. You have spent the night learning what those words mean precisely so that you
+  can buy them with your eyes open.
+
+  There is nothing to run in this level. The answers below are reasoned, not cited from the docs: a managed service is somebody's product,
+  and the details differ. Think about what changes when you hand over the machine, and what stays yours.
+
+brainstorm:
+  prompt: "Somebody else will run Redis for you. Which of tonight's problems do you still own?"
+  options:
+    - id: how-you-use-it
+      label: "How your code uses it: key design, TTLs, the commands you run, retries and idempotency, and the number of connections"
+      is_reasonable: true
+    - id: nothing
+      label: "None: that is what they are paid to take away"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: skip the cache entirely and let a managed database serve every read"
+      is_reasonable: true
+
+teach: |
+  This level is judgement, not documentation. The docs describe Redis you run yourself; a managed service wraps it, and what it lets you
+  touch is its own decision. The reasoning to practise:
+
+  - **What you give up.** The server's settings are the provider's. Expect `CONFIG SET` and friends to be refused or limited, and persistence,
+    failover and replica count to be options on a plan, not commands. You ask for them, in the provider's words, and you read what
+    they mean in the words of levels 2 to 8: which snapshot interval, which fsync mode, how failover is decided and how long it takes.
+  - **What you gain.** Somebody else patches, monitors, replaces dead boxes and takes the backups, and a cluster becomes a setting
+    instead of a weekend. That is real, and it is paid for per gigabyte, usually of the memory you provision, which is the peak
+    (level 5).
+  - **What stays yours.** Nothing about your code gets fixed from outside. A `KEYS` in a cron, a hot key, a key with no TTL, a big hash, a
+    client per request, a non-idempotent write: a managed Redis serves them faithfully, and bills you for them.
+  - **A checkbox is not a migration.** Turning on the cluster mode brings every rule from level 9 with it: one slot per multi-key step, no
+    WATCH, hash tags, different pub/sub reach.
+  - **Failover still reaches your app.** Even a fast automatic failover is some seconds of errors, and replication is still asynchronous, so
+    the last writes can be lost. The app must reconnect, time out fast, retry safely and tolerate it. Drill it.
+
+task: |
+  Answer the six questions and press Verify. There is nothing to type in the terminal. Choose the answer you would defend to the cloud team.
+
+hints:
+  - "When a question says managed, ask: who owns the setting, and who owns the habit? The first moves to the provider; the second never does."
+  - "Every item you hand over becomes a question to ask in the provider's words: what interval, what mode, what failover time."
+  - "A cluster setting is a promise about slots. Your code decides whether its keys can live with them."
+
+verify:
+  - type: quiz
+    question: "On the managed service you run CONFIG SET appendfsync always, as you did on the crash node. What do you most likely see, and what does it mean?"
+    options:
+      - id: q1-settings-are-theirs
+        label: "It is refused or not available: the provider owns the server's settings, so persistence and failover are chosen for you, through a plan or console, and you ask for what you need"
+      - id: q1-works-as-before
+        label: "It works exactly as on your own Redis, because managed Redis is the same server with a nicer dashboard"
+      - id: q1-works-then-resets
+        label: "It works for you and is quietly applied to every other customer on the same machine"
+      - id: q1-needs-restart
+        label: "It works, but only after you restart the service from the console"
+    correct: q1-settings-are-theirs
+    explanation: "Reasoned, not cited: a provider that runs thousands of instances does not hand out the server's configuration. That is the trade. Persistence, failover and the number of replicas become choices you make on a plan, so you need the vocabulary of levels 2 to 8 to choose well."
+  - type: quiz
+    question: "Which of these stays your job on a managed Redis?"
+    options:
+      - id: q2-your-habits
+        label: "Everything about how your code uses it: a key scheme and a TTL on every key, SCAN not KEYS, idempotent writes, one shared client, retries and timeouts"
+      - id: q2-nothing
+        label: "Nothing: the provider tunes slow commands and big keys away automatically"
+      - id: q2-only-password
+        label: "Only the password, because everything else is behind the console"
+      - id: q2-only-bill
+        label: "Only reading the bill"
+    correct: q2-your-habits
+    explanation: "The provider runs the server; it does not rewrite your commands. A KEYS in a cron stalls a managed Redis exactly as it stalled yours, and a missing TTL grows the bill, which is per gigabyte."
+  - type: quiz
+    question: "The console has a checkbox: clustered mode. What do you check before ticking it?"
+    options:
+      - id: q3-code-survives-slots
+        label: "That the code survives slots: multi-key commands, MULTI and Lua only within one slot (hash tags), no WATCH on the cluster client, and different pub/sub reach. Level 9's list"
+      - id: q3-nothing
+        label: "Nothing: the provider rewrites the commands so that cross-slot steps work"
+      - id: q3-even-nodes
+        label: "That the cluster has an even number of nodes, so the slots divide evenly"
+      - id: q3-only-the-price
+        label: "Only the price per node, since the code does not know the difference"
+    correct: q3-code-survives-slots
+    explanation: "A cluster is a rule about where keys live. A provider can make forming it a checkbox, but a MULTI across two slots is refused whoever runs the nodes. The migration is in your code, as it was in level 9."
+  - type: quiz
+    question: "The bill is per gigabyte of provisioned memory. Which habit from this chapter lowers it most directly?"
+    options:
+      - id: q4-trim-what-you-store
+        label: "Storing less: TTL on everything, compact encodings and the hash trick, no giant keys, and sizing for the real peak instead of a guess"
+      - id: q4-appendonly-off
+        label: "Turning the append-only file off, since the log takes memory"
+      - id: q4-allkeys-everywhere
+        label: "Setting allkeys-lru on every instance, so memory is never an issue"
+      - id: q4-bigger-plan
+        label: "Moving to the biggest plan once, so that nobody ever has to measure again"
+    correct: q4-trim-what-you-store
+    explanation: "Reasoned, with the measurements of level 5 behind it: the cheapest gigabyte is the one you never use. The log lives on disk, not in the memory you pay for. allkeys-lru on a Redis that holds sessions or other data you cannot rebuild loses data, and the biggest plan only hides growth."
+  - type: quiz
+    question: "The provider's sheet says 'durable, with automatic failover in under a minute'. What do you still ask, and test?"
+    options:
+      - id: q5-ask-and-drill
+        label: "Which snapshot interval or fsync mode, how long backups are kept and where, and how long a restore takes; then drill a failover to see that the app reconnects, times out fast, retries safely, and survives losing the last few writes"
+      - id: q5-nothing
+        label: "Nothing: 'durable' means no write is ever lost and 'automatic' means no one sees it"
+      - id: q5-only-failover-time
+        label: "Only the failover time, because durability is the provider's problem"
+      - id: q5-only-restore
+        label: "Only whether a restore is possible, because failover is invisible to applications"
+    correct: q5-ask-and-drill
+    explanation: "Durable is a word; an interval or a mode is a number. You learned both sides in levels 2 to 4 and 7 to 8: replication is asynchronous, so a failover can lose the last writes and always costs seconds of errors, and only a drill tells you whether your app handles them."
+  - type: quiz
+    question: "Harry Bhaiya: 'so we did all that for nothing?' What is the honest answer?"
+    options:
+      - id: q6-vocabulary
+        label: "No: you now know what to ask for and what to check, and the habits (TTLs, SCAN, idempotency, one client, slots) are yours on any server. A managed service buys you the machines, not the design"
+      - id: q6-yes
+        label: "Yes: once somebody else runs Redis, none of this applies and the code does not need to change"
+      - id: q6-only-config
+        label: "Partly: only the CONFIG commands were wasted, and everything else must be learned again for the provider"
+      - id: q6-never-managed
+        label: "Never buy it: self-hosting is always cheaper and safer at every size"
+    correct: q6-vocabulary
+    explanation: "Reasoned: running a server is a job, and a provider will take it off you. What a good service cannot take is the shape of your usage, and you cannot judge what you are buying without the words of this chapter. Whether to buy it is a cost and team question, not a rule."
+
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/admin/
+
+reward:
+  xp: 40
+  badge: "Buys with open eyes"
+
+solutions:
+  reference:
+    - q1-settings-are-theirs
+    - q2-your-habits
+    - q3-code-survives-slots
+    - q4-trim-what-you-store
+    - q5-ask-and-drill
+    - q6-vocabulary
+  wrong:
+    - option: q1-works-as-before
+      expect: wrong
+      because: "A managed service is not your server. The provider decides which settings you may touch, and persistence and failover come as plan choices, not as CONFIG SET."
+    - option: q2-nothing
+      expect: wrong
+      because: "The provider runs the machines; it does not rewrite your commands. A slow KEYS or a key with no TTL costs you exactly as before, and the bill is per gigabyte."
+    - option: q3-nothing
+      expect: wrong
+      because: "Nobody rewrites your multi-key steps. A MULTI or a Lua script across two slots is refused on any cluster, so the code has to be ready for slots before the box is ticked."
+    - option: q4-bigger-plan
+      expect: wrong
+      because: "The biggest plan hides growth and costs the most per month. Measuring and storing less is what lowers a per-gigabyte bill."
+    - option: q5-nothing
+      expect: wrong
+      because: "Durable and automatic are words on a sheet. Replication is still asynchronous, so a failover can lose the last writes and always costs seconds of errors; only a drill shows how the app behaves."
+    - option: q6-yes
+      expect: wrong
+      because: "The machines move to somebody else, but key design, TTLs, commands, idempotency, connections and slots stay in your code, and you need the vocabulary to buy and to check."
