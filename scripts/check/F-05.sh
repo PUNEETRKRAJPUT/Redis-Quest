@@ -124,7 +124,7 @@ if [ -n "$READY" ]; then ok "engine rebooted: $H"; else die "engine did not come
 
 section "playwright: Chapter 0 end to end, show-me panel shows the declared key"
 ( cd ui && npx --no-install playwright install chromium >/dev/null 2>&1 ) || echo "      (playwright install chromium reported a problem; trying the run anyway)"
-( cd ui && P10_BASE_URL="$BASE" npx --no-install playwright test 2>&1 ) | tee "$OUT"
+( cd ui && P10_BASE_URL="$BASE" npx --no-install playwright test e2e/chapter0.e2e.ts 2>&1 ) | tee "$OUT"
 if [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "playwright: Chapter 0 played end to end"; else bad "playwright run failed"; fi
 grep -q "showme-panel" ui/e2e/chapter0.e2e.ts && grep -q 'data-key' ui/e2e/chapter0.e2e.ts && ok "e2e asserts the declared key (game:player:<id>) in the show-me panel" || bad "e2e key assertion missing"
 

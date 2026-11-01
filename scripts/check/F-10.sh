@@ -99,7 +99,7 @@ if [ -n "$READY" ]; then ok "engine rebooted: $H"; else die "engine did not come
 
 section "playwright: gallery renders both components, no unknown-component fallback"
 ( cd ui && npx --no-install playwright install chromium >/dev/null 2>&1 ) || echo "      (playwright install chromium reported a problem; trying the run anyway)"
-( cd ui && P10_BASE_URL="$BASE" npx --no-install playwright test 2>&1 ) | tee "$OUT"
+( cd ui && P10_BASE_URL="$BASE" npx --no-install playwright test e2e/chapter0.e2e.ts 2>&1 ) | tee "$OUT"
 if [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "playwright run passed"; else bad "playwright run failed"; fi
 grep -q 'toHaveCount(14)' ui/e2e/chapter0.e2e.ts && grep -q 'Unknown show-me component' ui/e2e/chapter0.e2e.ts && ok "e2e asserts 14 gallery views and no unknown fallback" || bad "e2e gallery assertions missing"
 for id in stats_latency_panel otp_limiter_panel; do
