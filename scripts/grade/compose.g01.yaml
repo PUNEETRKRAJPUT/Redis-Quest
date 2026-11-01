@@ -1,0 +1,40 @@
+# Compose override for scripts/check/G-01.sh only (project quest-g01). It isolates the grading stack from
+# every other project and from the learner: its own image tag, and scratch directories for the workspace,
+# logs, progress and levels (G01_* are absolute paths exported by the check script).
+x-g01-node: &g01-node
+  image: quest-g01-node:latest
+
+services:
+  engine:
+    <<: *g01-node
+    environment:
+      # Event waits are capped so wrong solutions that wait for an event grade in seconds, not minutes.
+      VERIFY_MAX_EVENT_WAIT_MS: "3000"
+    volumes:
+      - ${G01_WORKSPACE:?}:/workspace
+      - ${G01_LOGS:?}:/logs
+      - ${G01_PROGRESS:?}:/progress
+      - ${G01_LEVELS:?}:/levels:ro
+      # live scenarios (the image has a copy from build time)
+      - ./scenarios:/srv/scenarios:ro
+  app:
+    <<: *g01-node
+    volumes:
+      - ${G01_WORKSPACE:?}:/workspace
+      - ${G01_LOGS:?}:/logs
+      - ${G01_PROGRESS:?}:/progress
+  runner:
+    <<: *g01-node
+    volumes:
+      - ${G01_WORKSPACE:?}:/workspace
+      - ${G01_LOGS:?}:/logs
+      - ${G01_PROGRESS:?}:/progress
+  proxy:
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${G01_LOGS:?}:/logs
+  postgres:
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ${G01_LOGS:?}:/logs

@@ -55,7 +55,7 @@ start early if everything it depends on is `done`.
 | C0 | Chapter 0 levels (5) with reference + wrong solutions (spec: specs/C0, handoff: handoffs/C0) | done (content; live run pending P0-09) |
 | C1 | Chapter 1 levels (16) (spec: specs/C1, handoff: handoffs/C1) | done (content; solutions verified against a private Redis by the author; engine live run pending P0-09) |
 | C2a | Chapter 2 levels 2.1 to 2.4 (spec: specs/C2a, handoff: handoffs/C2a) | done (content; live grading pending G-01) |
-| G-01 | Level grading harness: plays every declared solution through the engine, prints the truth table (spec: specs/G-01) | in progress |
+| G-01 | Level grading harness: plays every declared solution through the engine, prints the truth table (spec: specs/G-01, handoff: handoffs/G-01) | done (79 match; 3 content/engine bugs found, being fixed) |
 | T1 | Five-tester playtest, findings, fixes | todo |
 
 ## Decisions log (newest first)

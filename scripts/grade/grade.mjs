@@ -1,0 +1,562 @@
+#!/usr/bin/env node
+// Level grading harness (G-01): plays every declared solution of a chapter, or of one level, through the
+// real engine over HTTP and prints a truth table (level, solution, declared verdict, engine verdict,
+// PASS / MISMATCH / SKIPPED). A level is only done when its table has no MISMATCH row.
+//
+//   scripts/grade/grade.sh [--engine URL] [--workspace DIR] [--levels DIR] [--run-ops] [--json FILE]
+//                          <chapter-dir | level-id>...
+//
+// It reads levels with the @quest/shared loader (built output in packages/shared/dist) and never parses
+// YAML itself. The engine must already be running with the same level files mounted. Exit codes:
+// 0 every graded solution matches its declaration, 1 at least one MISMATCH, 2 the tool could not run.
+/* global fetch, setTimeout, setInterval, clearInterval, WebSocket, AbortSignal, process, console */
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, '..', '..');
+const shared = await import(pathToFileURL(join(ROOT, 'packages/shared/dist/index.js')).href).catch((e) => {
+  console.error(`cannot load packages/shared/dist (run: pnpm --filter @quest/shared build): ${e.message}`);
+  process.exit(2);
+});
+const { loadChapter, renderTemplate, resolveLevelPath } = shared;
+
+// ---- arguments ------------------------------------------------------------------------------------
+
+const USAGE = `usage: scripts/grade/grade.sh [options] <chapter-dir | level-id>...
+  --engine URL      engine origin as the proxy serves it (default $GRADE_ENGINE or http://127.0.0.1:3500)
+  --workspace DIR   write code solutions straight into this workspace directory instead of PUT /api/workspace/file
+  --levels DIR      where to look up level ids (default: <repo>/levels, including _examples/*)
+  --run-ops         also run .sh ops solutions on this Mac (they run docker compose against the default project)
+  --json FILE       also write the table as JSON
+  -h, --help        this text`;
+
+const opts = { engine: process.env.GRADE_ENGINE ?? 'http://127.0.0.1:3500', workspace: null, levels: join(ROOT, 'levels'), runOps: false, json: null, targets: [] };
+{
+  const a = process.argv.slice(2);
+  for (let i = 0; i < a.length; i++) {
+    const k = a[i];
+    const val = () => {
+      if (i + 1 >= a.length) usageExit(`${k} needs a value`);
+      return a[++i];
+    };
+    if (k === '--engine') opts.engine = val();
+    else if (k === '--workspace') opts.workspace = resolve(val());
+    else if (k === '--levels') opts.levels = resolve(val());
+    else if (k === '--json') opts.json = resolve(val());
+    else if (k === '--run-ops') opts.runOps = true;
+    else if (k === '-h' || k === '--help') {
+      console.log(USAGE);
+      process.exit(0);
+    } else if (k.startsWith('--')) usageExit(`unknown option ${k}`);
+    else opts.targets.push(k);
+  }
+  if (!opts.targets.length) usageExit('give at least one chapter directory or level id');
+  opts.engine = opts.engine.replace(/\/+$/, '');
+}
+function usageExit(msg) {
+  console.error(`${msg}\n${USAGE}`);
+  process.exit(2);
+}
+
+// ---- small helpers --------------------------------------------------------------------------------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const t0 = Date.now();
+const stamp = () => `${String(Math.floor((Date.now() - t0) / 1000)).padStart(4)}s`;
+const log = (m) => console.log(`${stamp()}  ${m}`);
+
+async function api(method, path, body, timeoutMs = 900_000) {
+  let res;
+  try {
+    res = await fetch(`${opts.engine}${path}`, {
+      method,
+      headers: body === undefined ? {} : { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (e) {
+    throw new Error(`${method} ${path}: ${e.message} (is the engine up at ${opts.engine}?)`);
+  }
+  let json = null;
+  try {
+    json = await res.json();
+  } catch {
+    // not JSON
+  }
+  return { status: res.status, body: json };
+}
+
+/** Quotes an argv the way redis-cli would read it back, for /api/cli. */
+function quoteArg(s) {
+  return /^[^\s"'\\]+$/.test(s) ? s : `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+// ---- find the levels to grade ---------------------------------------------------------------------
+
+async function chaptersUnder(root) {
+  const dirs = [];
+  const scan = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (!e.isDirectory()) continue;
+      const p = join(d, e.name);
+      if (existsSync(join(p, 'chapter.yaml'))) dirs.push(p);
+    }
+  };
+  if (!existsSync(root)) return [];
+  scan(root);
+  if (existsSync(join(root, '_examples'))) scan(join(root, '_examples'));
+  const out = [];
+  for (const d of dirs) {
+    const r = await loadChapter(d);
+    if (r.chapter) out.push(r);
+  }
+  return out;
+}
+
+const chapters = []; // LoadedChapter[] in the order requested, with `only` = level ids to grade (null = all)
+async function resolveTargets() {
+  let known = null;
+  for (const t of opts.targets) {
+    const asDir = resolve(t);
+    if (existsSync(asDir) && statSync(asDir).isDirectory() && existsSync(join(asDir, 'chapter.yaml'))) {
+      const r = await loadChapter(asDir);
+      if (r.errors.length) throw new Error(`${t} has level errors (run pnpm --filter @quest/shared levels:validate):\n${r.errors.map((e) => `  ${e.message ?? JSON.stringify(e)}`).join('\n')}`);
+      chapters.push({ lc: r.chapter, only: null });
+      continue;
+    }
+    known ??= await chaptersUnder(opts.levels);
+    let found = null;
+    for (const r of known) {
+      const lv = r.chapter.levels.find((l) => l.level.id === t);
+      if (lv) found = { lc: r.chapter, only: new Set([t]) };
+    }
+    if (!found) throw new Error(`${t}: not a chapter directory and no level with that id under ${opts.levels}`);
+    const prev = chapters.find((c) => c.lc.dir === found.lc.dir && c.only);
+    if (prev) prev.only.add(t);
+    else chapters.push(found);
+  }
+}
+
+// ---- engine plumbing ------------------------------------------------------------------------------
+
+let player = null;
+let slotFiles = null;
+
+// Fallback copy of the slot -> workspace file column of app/src/slots/registry.ts (docs/handoffs/P0-07.md).
+// The live app is asked first (GET /app/slots exposes `file`), so a new slot needs no change here.
+const SLOT_FILE_TABLE = {
+  'onboarding.registerUser': 'ch1/register.js',
+  'cache.getPlayerStats': 'ch2/cache.js',
+  'cache.invalidatePlayerStats': 'ch2/invalidate.js',
+  'prefetch.getFixtures': 'ch2/prefetch.js',
+  'session.create': 'ch3/session-create.js',
+  'session.get': 'ch3/session-get.js',
+  'leaderboard.top': 'ch3/leaderboard.js',
+  'ratelimit.allow': 'ch3/ratelimit.js',
+};
+
+async function loadSlotFiles() {
+  slotFiles = { ...SLOT_FILE_TABLE };
+  const r = await api('GET', '/app/slots', undefined, 5000).catch(() => null);
+  if (r && r.status === 200 && Array.isArray(r.body?.slots)) {
+    for (const s of r.body.slots) if (s.name && s.file && !s.exportName?.startsWith?.('x:')) slotFiles[s.name] = s.file;
+  }
+}
+
+async function ensurePlayer() {
+  const g = await api('GET', '/api/progress');
+  if (g.status === 200) {
+    player = g.body.player;
+    log(`reusing player ${player.id} (${player.name})`);
+    return;
+  }
+  if (g.status === 503) throw new Error(`the engine reports levels_invalid: ${JSON.stringify(g.body).slice(0, 600)}`);
+  const c = await api('POST', '/api/player', { name: 'Grader' });
+  if (c.status !== 201) throw new Error(`POST /api/player -> ${c.status} ${JSON.stringify(c.body)}`);
+  player = c.body.player;
+  log(`created player ${player.id}`);
+}
+
+const envForTemplates = () => {
+  const e = {};
+  for (const k of ['REDIS_PORT', 'PROXY_PORT', 'INSIGHT_PORT', 'PG_PORT']) if (process.env[k]) e[k] = process.env[k];
+  return e;
+};
+const ctxOf = (lv) => ({ player: { id: player.id, name: player.name }, level: { id: lv.level.id }, chapter: { id: lv.chapterId }, env: envForTemplates() });
+
+/** Completes every level before `id` in the engine's play order (ENGINE_DEV=1), so `id` can be started. */
+async function ensureUnlocked(id) {
+  const c = await api('GET', '/api/chapters');
+  if (c.status !== 200) throw new Error(`GET /api/chapters -> ${c.status} ${JSON.stringify(c.body).slice(0, 300)}`);
+  const flat = c.body.chapters.flatMap((ch) => ch.levels);
+  const idx = flat.findIndex((l) => l.id === id);
+  if (idx < 0) throw new Error(`the engine does not know level ${id}; it must mount the same level files this tool reads`);
+  for (let j = 0; j < idx; j++) {
+    if (flat[j].status === 'passed') continue;
+    const r = await api('POST', `/api/levels/${flat[j].id}/complete`);
+    if (r.status !== 200) throw new Error(`cannot unlock ${id}: POST /api/levels/${flat[j].id}/complete -> ${r.status} (the engine needs ENGINE_DEV=1)`);
+  }
+}
+
+async function start(id) {
+  const r = await api('POST', `/api/levels/${id}/start`);
+  if (r.status !== 200) throw new Error(`start ${id} -> ${r.status} ${JSON.stringify(r.body).slice(0, 400)}`);
+}
+
+async function verify(id, answers) {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const r = await api('POST', `/api/levels/${id}/verify`, { answers });
+    if (r.status === 409 && r.body?.error === 'verify_in_progress') {
+      await sleep(2000);
+      continue;
+    }
+    if (r.status !== 200) return { verdict: `HTTP ${r.status}`, checks: [], httpBody: r.body };
+    return r.body;
+  }
+  return { verdict: 'HTTP 409', checks: [], httpBody: { error: 'verify_in_progress' } };
+}
+
+async function cli(command) {
+  const r = await api('POST', '/api/cli', { command });
+  if (r.status !== 200) throw new Error(`/api/cli ${command} -> ${r.status} ${JSON.stringify(r.body)}`);
+  return r.body;
+}
+
+// ---- the learner's moves --------------------------------------------------------------------------
+
+function redisLines(file, ctx) {
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+    .map((l) => renderTemplate(l, ctx));
+}
+
+async function runRedisFile(file, ctx) {
+  const out = [];
+  for (const line of redisLines(file, ctx)) out.push({ line, ...(await cli(line)) });
+  return out;
+}
+
+/** What the UI does for the learner after they act in the terminal (the harness stands in for the UI). */
+async function uiActions(lv, transcript) {
+  const names = lv.level.verify.filter((v) => v.type === 'event' && v.kind === 'custom').map((v) => v.match?.name);
+  const notes = [];
+  for (const n of names) {
+    if (n === 'progress_restored') {
+      // The learner accepts the UI's offer: POST /api/progress/restore. The harness does exactly that and
+      // does NOT post the event itself, so an engine or UI that never emits it shows up as a mismatch.
+      const r = await api('POST', '/api/progress/restore');
+      notes.push(`UI accepted the restore offer (POST /api/progress/restore -> ${r.status})`);
+    } else if (n === 'ui_connected') {
+      await api('POST', '/api/events', { kind: 'custom', name: 'ui_connected' });
+      notes.push('UI posted ui_connected');
+    } else if (n === 'cli_ping') {
+      if (!transcript.some((t) => t.line.toUpperCase() === 'PING')) notes.push('solution never sent PING');
+    } else if (n) notes.push(`event ${n} is produced by the solution itself (nothing simulated)`);
+  }
+  return notes;
+}
+
+const wipes = (transcript) => transcript.some((t) => /^(FLUSHALL|FLUSHDB)\b/i.test(t.line));
+
+/** Typed answers and quiz picks. `good`: the solution is declared right or works_but_wrong, so every answer is correct. */
+async function buildAnswers(lv, good) {
+  const answers = {};
+  const ctx = ctxOf(lv);
+  for (let i = 0; i < lv.level.verify.length; i++) {
+    const v = lv.level.verify[i];
+    if (v.type === 'answer') {
+      if (!good) {
+        answers[String(i)] = 'not-the-answer';
+        continue;
+      }
+      const argv = v.expected.cmd.map((a) => renderTemplate(String(a), ctx));
+      const r = await cli(argv.map(quoteArg).join(' '));
+      answers[String(i)] = r.reply;
+    } else if (v.type === 'quiz') {
+      if (good) answers[String(i)] = v.correct.length > 1 ? v.correct : v.correct[0];
+      else {
+        const wrong = v.options.find((o) => !v.correct.includes(o.id));
+        answers[String(i)] = wrong ? wrong.id : '';
+      }
+    }
+  }
+  return answers;
+}
+
+// ---- code solutions: slot -> workspace file -------------------------------------------------------
+
+const touched = new Map(); // rel -> original content (string) or null when it did not exist
+
+function slotOf(lv) {
+  const slots = new Set(lv.level.verify.filter((v) => typeof v.slot === 'string').map((v) => v.slot));
+  if (slots.size === 0) return { err: 'no slot' };
+  if (slots.size > 1) return { err: `several slots (${[...slots].join(', ')})` };
+  const slot = [...slots][0];
+  const rel = slotFiles[slot];
+  return rel ? { slot, rel } : { err: `unknown slot ${slot}` };
+}
+
+async function readWorkspace(rel) {
+  if (opts.workspace) {
+    const f = join(opts.workspace, rel);
+    return existsSync(f) ? readFileSync(f, 'utf8') : null;
+  }
+  const r = await api('GET', `/api/workspace/file?path=${encodeURIComponent(rel)}`);
+  return r.status === 200 ? r.body.content : null;
+}
+
+async function writeWorkspace(rel, content) {
+  if (!touched.has(rel)) touched.set(rel, await readWorkspace(rel));
+  if (opts.workspace) {
+    const f = join(opts.workspace, rel);
+    mkdirSync(dirname(f), { recursive: true });
+    writeFileSync(f, content);
+  } else {
+    const r = await api('PUT', `/api/workspace/file?path=${encodeURIComponent(rel)}`, { content });
+    if (r.status !== 200) throw new Error(`PUT /api/workspace/file ${rel} -> ${r.status} ${JSON.stringify(r.body)}`);
+  }
+  // The app polls workspace files once a second; let it see this version before the engine activates the slot.
+  await sleep(2000);
+}
+
+async function restoreWorkspace() {
+  for (const [rel, original] of touched) {
+    if (opts.workspace) {
+      if (original === null) rmSync(join(opts.workspace, rel), { force: true });
+      else writeFileSync(join(opts.workspace, rel), original);
+    } else {
+      // The API cannot delete: an empty file has no default export, so the app falls back to its baseline.
+      await api('PUT', `/api/workspace/file?path=${encodeURIComponent(rel)}`, { content: original ?? '' });
+    }
+  }
+  touched.clear();
+}
+
+// ---- recording ------------------------------------------------------------------------------------
+
+const rows = [];
+
+function feedbackOf(out) {
+  const fb = [];
+  for (const c of out.checks ?? []) {
+    const tag = c.skipped ? 'skip' : c.type === 'antipattern' ? (c.ok ? 'ok' : 'HIT') : c.ok ? 'ok' : 'fail';
+    fb.push({ index: c.index, type: c.type, tag, message: String(c.message ?? '') });
+  }
+  if (out.httpBody) fb.push({ index: -1, type: 'http', tag: 'fail', message: JSON.stringify(out.httpBody).slice(0, 600) });
+  return fb;
+}
+
+function record(lv, solution, declared, out, extra = {}) {
+  const got = out?.verdict ?? 'n/a';
+  const row = {
+    level: lv.level.id,
+    chapter: lv.chapterId,
+    mode: lv.level.mode,
+    solution,
+    declared,
+    engine: got,
+    result: got === declared ? 'PASS' : 'MISMATCH',
+    because: extra.because ?? '',
+    note: extra.note ?? '',
+    ms: out?.durationMs ?? null,
+    feedback: feedbackOf(out ?? {}),
+  };
+  rows.push(row);
+  const line = `${row.result === 'PASS' ? 'PASS    ' : 'MISMATCH'} ${row.level}  ${solution}: declared ${declared}, engine ${got}${row.note ? `  [${row.note}]` : ''}`;
+  log(line);
+  if (row.result === 'MISMATCH') for (const f of row.feedback) log(`          [${f.tag}] #${f.index} ${f.type}: ${f.message.split('\n').join(' | ')}`);
+  return row;
+}
+
+function skipped(lv, solution, declared, why, because = '') {
+  rows.push({ level: lv.level.id, chapter: lv.chapterId, mode: lv.level.mode, solution, declared, engine: '-', result: 'SKIPPED', because, note: why, ms: null, feedback: [] });
+  log(`SKIPPED  ${lv.level.id}  ${solution}: ${why}`);
+}
+
+// ---- grading one level ----------------------------------------------------------------------------
+
+async function gradeLevel(lv) {
+  const x = lv.level;
+  const id = x.id;
+  log(`== ${id} (${x.mode})`);
+
+  if (x.mode === 'decision') {
+    await ensureUnlocked(id);
+    const quizzes = x.verify.map((v, i) => [v, i]).filter(([v]) => v.type === 'quiz');
+    const ref = {};
+    for (const [v, i] of quizzes) ref[String(i)] = v.correct.length > 1 ? v.correct : v.correct[0];
+    await start(id);
+    record(lv, `reference [${x.solutions.reference.join(', ')}]`, 'right', await verify(id, ref));
+    for (const w of x.solutions.wrong) {
+      const answers = { ...ref };
+      for (const [v, i] of quizzes) if (v.options.some((o) => o.id === w.option)) answers[String(i)] = w.option;
+      await start(id);
+      record(lv, `option ${w.option}`, w.expect, await verify(id, answers), { because: w.because });
+    }
+    await api('POST', `/api/levels/${id}/complete`);
+    return;
+  }
+
+  const sols = [{ path: x.solutions.reference, expect: 'right', because: '' }, ...x.solutions.wrong.map((w) => ({ ...w }))];
+  let unlocked = false;
+  for (const s of sols) {
+    const ext = extname(s.path);
+    const label = s.path;
+    if (ext === '.sh' && !opts.runOps) {
+      skipped(lv, label, s.expect, 'SKIPPED (ops shell)', s.because);
+      continue;
+    }
+    if (!unlocked) {
+      await ensureUnlocked(id);
+      unlocked = true;
+    }
+    const file = resolveLevelPath(lv, s.path);
+    const good = s.expect !== 'wrong';
+    let transcript = [];
+    let note = '';
+    if (ext === '.js' || ext === '.mjs') {
+      const sl = slotOf(lv);
+      if (sl.err) {
+        skipped(lv, label, s.expect, `SKIPPED (${sl.err}: nowhere to put the solution)`, s.because);
+        continue;
+      }
+      await start(id);
+      await writeWorkspace(sl.rel, readFileSync(file, 'utf8'));
+      note = `workspace/${sl.rel}`;
+    } else if (ext === '.redis') {
+      await start(id);
+      transcript = await runRedisFile(file, ctxOf(lv));
+    } else if (ext === '.sh') {
+      await start(id);
+      log(`running ${s.path} on this Mac (--run-ops)`);
+      const r = spawnSync('bash', [file], { cwd: ROOT, stdio: 'inherit' });
+      note = `ran with --run-ops, exit ${r.status}`;
+    } else {
+      skipped(lv, label, s.expect, `SKIPPED (unknown solution type ${ext})`, s.because);
+      continue;
+    }
+    if (good) {
+      const ui = await uiActions(lv, transcript);
+      if (ui.length) note = [note, ...ui].filter(Boolean).join('; ');
+    }
+    const answers = await buildAnswers(lv, good);
+    const out = await verify(id, answers);
+    record(lv, label, s.expect, out, { because: s.because, note });
+    // A solution that wiped Redis leaves the game's own mirror missing: put it back before the next one.
+    if (wipes(transcript)) await api('POST', '/api/progress/restore');
+  }
+  await restoreWorkspace();
+  await api('POST', `/api/levels/${id}/complete`);
+}
+
+// ---- progress from the WebSocket ------------------------------------------------------------------
+
+let busySince = 0;
+let ticker = null;
+function watchProgress() {
+  try {
+    const ws = new WebSocket(`${opts.engine.replace(/^http/, 'ws')}/ws`);
+    ws.onmessage = (m) => {
+      let e;
+      try {
+        e = JSON.parse(m.data);
+      } catch {
+        return;
+      }
+      if (e.type !== 'level.event' || !String(e.data?.name ?? '').startsWith('verify_')) return;
+      const d = e.data.data ?? {};
+      switch (e.data.name) {
+        case 'verify_started':
+          busySince = Date.now();
+          break;
+        case 'verify_check_started':
+          if (d.type === 'traffic' || d.type === 'behavior') log(`      ... ${d.levelId} check #${d.index} ${d.type} running`);
+          break;
+        case 'verify_traffic_phase':
+          log(`      ... load ${d.phase} for ${d.scenario} (slots on: ${(d.activeSlots ?? []).join(', ') || 'none'})`);
+          break;
+        case 'verify_finished':
+          busySince = 0;
+          break;
+        default:
+      }
+    };
+    ws.onerror = () => undefined;
+  } catch {
+    // progress lines are a convenience
+  }
+  ticker = setInterval(() => {
+    if (busySince && Date.now() - busySince > 15_000) log(`      ... still verifying (${Math.round((Date.now() - busySince) / 1000)} s)`);
+  }, 15_000);
+}
+
+// ---- table ----------------------------------------------------------------------------------------
+
+function printTable() {
+  const shortLevel = (l) => l.replace(/^(ch\d+[a-z]?-\d+|example-[a-z]+-\d+)-.*/, '$1').replace(/^example-/, 'ex-');
+  const cols = [
+    ['LEVEL', (r) => shortLevel(r.level)],
+    ['SOLUTION', (r) => r.solution.replace(/^solutions\//, '')],
+    ['DECLARED', (r) => r.declared],
+    ['ENGINE', (r) => r.engine],
+    ['RESULT', (r) => r.result],
+  ];
+  const w = cols.map(([h, f]) => Math.min(60, Math.max(h.length, ...rows.map((r) => f(r).length))));
+  const fmt = (cells) => cells.map((c, i) => c.slice(0, w[i]).padEnd(w[i])).join('  ');
+  console.log(`\n${fmt(cols.map(([h]) => h))}`);
+  console.log(fmt(w.map((n) => '-'.repeat(n))));
+  for (const r of rows) console.log(fmt(cols.map(([, f]) => f(r))) + (r.result === 'SKIPPED' ? `  ${r.note}` : ''));
+
+  const per = new Map();
+  for (const r of rows) {
+    const c = per.get(r.chapter) ?? { PASS: 0, MISMATCH: 0, SKIPPED: 0 };
+    c[r.result] += 1;
+    per.set(r.chapter, c);
+  }
+  console.log('');
+  for (const [ch, c] of per) console.log(`${ch.padEnd(24)} PASS ${c.PASS}  MISMATCH ${c.MISMATCH}  SKIPPED ${c.SKIPPED}`);
+  const bad = rows.filter((r) => r.result === 'MISMATCH');
+  if (bad.length) {
+    console.log(`\n${bad.length} MISMATCH:`);
+    for (const r of bad) {
+      console.log(`  ${r.level}  ${r.solution}: declared ${r.declared}, engine ${r.engine}`);
+      if (r.because) console.log(`      declared because: ${r.because}`);
+      if (r.note) console.log(`      note: ${r.note}`);
+      for (const f of r.feedback) console.log(`      [${f.tag}] #${f.index} ${f.type}: ${f.message.split('\n').join('\n          ')}`);
+    }
+  }
+}
+
+// ---- main -----------------------------------------------------------------------------------------
+
+try {
+  await resolveTargets();
+  await loadSlotFiles();
+  await ensurePlayer();
+  watchProgress();
+  for (const { lc, only } of chapters) {
+    log(`#### chapter ${lc.id} (${basename(lc.dir)})`);
+    for (const lv of lc.levels) if (!only || only.has(lv.level.id)) await gradeLevel(lv);
+  }
+} catch (e) {
+  console.error(`\ngrade: ${e.stack ?? e}`);
+  if (ticker) clearInterval(ticker);
+  await restoreWorkspace().catch(() => undefined);
+  process.exit(2);
+}
+if (ticker) clearInterval(ticker);
+printTable();
+if (opts.json) {
+  const per = {};
+  for (const r of rows) {
+    per[r.chapter] ??= { PASS: 0, MISMATCH: 0, SKIPPED: 0 };
+    per[r.chapter][r.result] += 1;
+  }
+  writeFileSync(opts.json, `${JSON.stringify({ engine: opts.engine, at: new Date().toISOString(), summary: per, rows }, null, 2)}\n`);
+}
+process.exit(rows.some((r) => r.result === 'MISMATCH') ? 1 : 0);
