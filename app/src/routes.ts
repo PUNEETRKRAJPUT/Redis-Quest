@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { HttpError } from './errors.js';
-import type { SessionUser } from './slots/baselines.js';
+import { loadMatchRows, type SessionUser } from './slots/baselines.js';
 import type { RequestScope, SlotRuntime } from './slots/runtime.js';
 
 declare module 'fastify' {
@@ -66,6 +66,14 @@ export function registerRoutes(app: FastifyInstance, slots: SlotRuntime): void {
     return { fixtures };
   });
 
+  // Chapter 2.7: refill the prefetch cache by hand. The rows are the whole matches table with team names.
+  app.post('/app/prefetch/reload', async (req) => {
+    const scope = scopeOf(req);
+    const rows = await loadMatchRows(scope.deps);
+    const result = await slots.call(scope, 'prefetch.bulkLoad', rows);
+    return { ok: true, rows: rows.length, result: result ?? null };
+  });
+
   app.post('/app/login', async (req, reply) => {
     const body = isObj(req.body) ? req.body : {};
     if (!str(body.userId, 64))
@@ -106,6 +114,23 @@ export function registerRoutes(app: FastifyInstance, slots: SlotRuntime): void {
       );
     }
     return { userId: session.userId, session };
+  });
+
+  // Chapter 2.8: logout forgets the session named by the cookie; the cookie is cleared either way.
+  app.post('/app/logout', async (req, reply) => {
+    const sid = readCookie(req.headers.cookie, 'sid');
+    if (!sid) throw new HttpError(401, 'not_logged_in');
+    const result = await slots.call(scopeOf(req), 'session.destroy', sid);
+    reply.header('set-cookie', 'sid=; Path=/app; HttpOnly; SameSite=Lax; Max-Age=0');
+    return { ok: true, result: result ?? null };
+  });
+
+  app.post('/app/logout-all', async (req) => {
+    const body = isObj(req.body) ? req.body : {};
+    if (!str(body.userId, 64))
+      throw new HttpError(400, 'invalid_user_id', 'body must be { "userId": "u-000001" }');
+    const result = await slots.call(scopeOf(req), 'session.destroyAll', body.userId);
+    return { ok: true, userId: body.userId, result: result ?? null };
   });
 
   app.get<{ Params: { contestId: string }; Querystring: { limit?: string } }>(

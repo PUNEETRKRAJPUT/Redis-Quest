@@ -14,6 +14,8 @@ export interface RouteSecond {
   noDbCount: number;
   /** Responses carrying x-quest-slot-error. */
   slotErrors: number;
+  /** Responses with status 429 (rate limited), for the limiter panel. Additive field. */
+  denied: number;
 }
 
 export interface Sample {
@@ -22,6 +24,8 @@ export interface Sample {
   dbQueries: number;
   redisCommands: number;
   slotError: boolean;
+  /** True for a 429 response. */
+  denied?: boolean;
 }
 
 interface Bucket {
@@ -31,6 +35,7 @@ interface Bucket {
   redisCommands: number;
   noDbCount: number;
   slotErrors: number;
+  denied: number;
 }
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
@@ -43,6 +48,7 @@ export interface RouteTotals {
   redisCommands: number;
   noDbCount: number;
   slotErrors: number;
+  denied: number;
 }
 
 /** Collects per-route samples; `drain()` returns the window's numbers and starts a new window. */
@@ -59,6 +65,7 @@ export class MetricsRecorder {
       redisCommands: 0,
       noDbCount: 0,
       slotErrors: 0,
+      denied: 0,
     });
     t.count += 1;
     if (s.status >= 500) t.errors += 1;
@@ -66,10 +73,19 @@ export class MetricsRecorder {
     t.redisCommands += s.redisCommands;
     if (s.dbQueries === 0) t.noDbCount += 1;
     if (s.slotError) t.slotErrors += 1;
+    if (s.denied) t.denied += 1;
 
     let b = this.buckets.get(route);
     if (!b) {
-      b = { ms: [], errors: 0, dbQueries: 0, redisCommands: 0, noDbCount: 0, slotErrors: 0 };
+      b = {
+        ms: [],
+        errors: 0,
+        dbQueries: 0,
+        redisCommands: 0,
+        noDbCount: 0,
+        slotErrors: 0,
+        denied: 0,
+      };
       this.buckets.set(route, b);
     }
     b.ms.push(s.ms);
@@ -78,6 +94,7 @@ export class MetricsRecorder {
     b.redisCommands += s.redisCommands;
     if (s.dbQueries === 0) b.noDbCount += 1;
     if (s.slotError) b.slotErrors += 1;
+    if (s.denied) b.denied += 1;
   }
 
   drain(): Record<string, RouteSecond> {
@@ -93,6 +110,7 @@ export class MetricsRecorder {
         redisCommands: b.redisCommands,
         noDbCount: b.noDbCount,
         slotErrors: b.slotErrors,
+        denied: b.denied,
       };
     }
     this.buckets = new Map();

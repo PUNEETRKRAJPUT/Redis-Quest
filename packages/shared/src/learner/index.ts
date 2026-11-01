@@ -2,6 +2,7 @@
 export * from './types.js';
 export { countRedis } from './counting.js';
 export type { CountingOptions } from './counting.js';
+export { failFast, commandTimeoutFromEnv, RedisCommandTimeoutError } from './failfast.js';
 export { createLearnerDeps } from './deps.js';
 export type { CreateLearnerDepsOptions, LearnerContext } from './deps.js';
 export { loadLearnerModule, resolveWorkspacePath, LearnerModuleError } from './loader.js';

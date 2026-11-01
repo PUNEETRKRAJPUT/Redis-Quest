@@ -37,6 +37,22 @@ export const SLOTS: readonly SlotDef[] = [
     baseline: b.getFixtures,
   },
   {
+    name: 'prefetch.bulkLoad',
+    file: 'ch2/prefetch-bulk.js',
+    signature: '(deps, rows)',
+    returns:
+      'anything (ignored); called once per instance when the slot is activated and on POST /app/prefetch/reload, rows = every matches row joined with team names',
+    baseline: b.bulkLoadMatches,
+  },
+  {
+    name: 'prefetch.applyChange',
+    file: 'ch2/prefetch-apply.js',
+    signature: '(deps, event)',
+    returns:
+      'anything (ignored); called per legacydb:changes entry, event = { aggregate, aggregateId, op, payload }',
+    baseline: b.applyMatchChange,
+  },
+  {
     name: 'session.create',
     file: 'ch3/session-create.js',
     signature: '(deps, user)',
@@ -49,6 +65,21 @@ export const SLOTS: readonly SlotDef[] = [
     signature: '(deps, sid)',
     returns: 'an object with a string userId, or null when the session does not exist (401)',
     baseline: b.getSession,
+  },
+  {
+    name: 'session.destroy',
+    file: 'ch3/session-destroy.js',
+    signature: '(deps, sid)',
+    returns: 'anything (ignored); the session must be gone afterwards (POST /app/logout)',
+    baseline: b.destroySession,
+  },
+  {
+    name: 'session.destroyAll',
+    file: 'ch3/session-destroy-all.js',
+    signature: '(deps, userId)',
+    returns:
+      'anything (echoed as result); every session of the user must be gone (POST /app/logout-all)',
+    baseline: b.destroyAllSessions,
   },
   {
     name: 'leaderboard.top',

@@ -17,6 +17,8 @@ export interface AppEnv {
   filePollMs: number;
   /** Keep-alive requests per connection before the app asks the proxy to reconnect (0 = unlimited). */
   maxRequestsPerSocket: number;
+  /** Drain the outbox into legacydb:changes even when prefetch.applyChange is not active (APP_OUTBOX_ALWAYS=1). */
+  outboxAlways: boolean;
 }
 
 const int = (v: string | undefined, dflt: number, min: number, max: number): number => {
@@ -45,5 +47,6 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): AppEnv {
     // "you are not alone" bugs. Closing after each response makes Caddy redial, and Docker's DNS hands
     // out the instances in shuffled order. Set 0 once the proxy balances per request itself.
     maxRequestsPerSocket: int(env.APP_MAX_REQUESTS_PER_SOCKET, 1, 0, 1_000_000),
+    outboxAlways: env.APP_OUTBOX_ALWAYS === '1',
   };
 }

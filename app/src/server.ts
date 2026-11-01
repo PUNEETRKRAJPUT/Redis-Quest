@@ -68,6 +68,7 @@ export function buildServer(ctx: AppContext): FastifyInstance {
         dbQueries: req.scope.counters.dbQueries,
         redisCommands: req.scope.counters.redisCommands,
         slotError: reply.hasHeader('x-quest-slot-error'),
+        denied: reply.statusCode === 429,
       });
     }
     finish(req);

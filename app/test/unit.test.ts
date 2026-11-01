@@ -16,9 +16,13 @@ describe('slot registry', () => {
       'cache.invalidatePlayerStats',
       'leaderboard.top',
       'onboarding.registerUser',
+      'prefetch.applyChange',
+      'prefetch.bulkLoad',
       'prefetch.getFixtures',
       'ratelimit.allow',
       'session.create',
+      'session.destroy',
+      'session.destroyAll',
       'session.get',
     ]);
     expect(SLOTS.find((s) => s.name === 'cache.getPlayerStats')).toMatchObject({
@@ -62,16 +66,25 @@ describe('metrics recorder', () => {
       redisCommands: 1,
       slotError: true,
     });
+    r.record('GET /app/x', {
+      ms: 100,
+      status: 429,
+      dbQueries: 0,
+      redisCommands: 0,
+      slotError: false,
+      denied: true,
+    });
     const w = r.drain();
     expect(w['GET /app/x']).toEqual({
-      count: 101,
+      count: 102,
       errors: 1,
       p50Ms: 51,
       p99Ms: 100,
       dbQueries: 50,
       redisCommands: 201,
-      noDbCount: 51,
+      noDbCount: 52,
       slotErrors: 1,
+      denied: 1,
     });
     expect(r.drain()).toEqual({});
   });

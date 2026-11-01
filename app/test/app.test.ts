@@ -305,6 +305,7 @@ describe('metrics push', () => {
       'redisCommands',
       'noDbCount',
       'slotErrors',
+      'denied',
     ]) {
       expect(typeof route[k]).toBe('number');
     }

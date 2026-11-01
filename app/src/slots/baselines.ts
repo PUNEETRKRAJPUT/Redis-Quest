@@ -31,6 +31,55 @@ export async function getFixtures(deps: LearnerDeps): Promise<unknown> {
   return rows;
 }
 
+/**
+ * Chapter 2 prefetch (2.7): the baseline cache does not exist, so there is nothing to load (it takes `(deps, rows)` in the learner's version). The learner's
+ * version fills `cache:match:*` from `rows` (the whole matches table joined with team names).
+ */
+export async function bulkLoadMatches(): Promise<unknown> {
+  return null;
+}
+
+/** Chapter 2 prefetch (2.7): no cache to keep fresh, so a change event is ignored. */
+export async function applyMatchChange(): Promise<unknown> {
+  return null;
+}
+
+/** One row of the full `matches` table with the team names, as `prefetch.bulkLoad` receives it. */
+export interface MatchRow {
+  id: string;
+  season: number;
+  home_team_id: string;
+  away_team_id: string;
+  home_team_name: string;
+  away_team_name: string;
+  venue: string;
+  starts_at: string;
+  status: string;
+}
+
+/** What the stream consumer hands `prefetch.applyChange`, decoded from one `legacydb:changes` entry. */
+export interface ChangeEvent {
+  aggregate: string;
+  aggregateId: string;
+  op: 'insert' | 'update' | 'delete';
+  /** The row as the trigger saw it (old row on delete), parsed from the stream's JSON string. */
+  payload: Record<string, unknown>;
+}
+
+/** The rows `prefetch.bulkLoad` gets: every match, newest id last, `starts_at` as an ISO string. */
+export async function loadMatchRows(deps: LearnerDeps): Promise<MatchRow[]> {
+  const { rows } = await deps.db.query(
+    `SELECT m.id, m.season, m.home_team_id, m.away_team_id, h.name AS home_team_name,
+            a.name AS away_team_name, m.venue, to_char(m.starts_at AT TIME ZONE 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS starts_at, m.status
+       FROM matches m
+       JOIN teams h ON h.id = m.home_team_id
+       JOIN teams a ON a.id = m.away_team_id
+      ORDER BY m.id`,
+  );
+  return rows as MatchRow[];
+}
+
 // Chapter 3.1 lesson: sessions in process memory vanish on restart and do not exist on the other
 // instance after `--scale app=2`. Bounded so a load test cannot grow it forever.
 const SESSION_CAP = 100_000;
@@ -60,6 +109,23 @@ export async function createSession(_deps: LearnerDeps, user: SessionUser): Prom
 
 export async function getSession(_deps: LearnerDeps, sid: string): Promise<unknown> {
   return sessions.get(sid) ?? null;
+}
+
+/** Logout: forget one session. The baseline is the same per-instance Map, so another instance still has it. */
+export async function destroySession(_deps: LearnerDeps, sid: string): Promise<unknown> {
+  return { destroyed: sessions.delete(sid) };
+}
+
+/** Logout everywhere: a linear scan of the Map, and blind to sessions held by the other instance. */
+export async function destroyAllSessions(_deps: LearnerDeps, userId: string): Promise<unknown> {
+  let destroyed = 0;
+  for (const [sid, s] of sessions) {
+    if (s.userId === userId) {
+      sessions.delete(sid);
+      destroyed += 1;
+    }
+  }
+  return { destroyed };
 }
 
 /** Chapter 3 leaderboard: ORDER BY over the unindexed contest_entries table on every read. */

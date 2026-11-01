@@ -9,6 +9,11 @@ import { SLOTS } from './slots/registry.js';
 import { SlotRuntime } from './slots/runtime.js';
 import { validateRegistry } from './slots/validate.js';
 import { LoopWatchdog } from './watchdog.js';
+import { callSlotInBackground, sleep, type BackgroundDeps } from './workers/common.js';
+import { ChangeConsumer } from './workers/changes.js';
+import { OutboxDrainer } from './workers/outbox.js';
+import { loadMatchRows } from './slots/baselines.js';
+import { RequestScope } from './slots/runtime.js';
 
 const env = loadEnv();
 const log = createLogger(env.instance, env.logDir);
@@ -59,10 +64,34 @@ const slots = new SlotRuntime({
 });
 const recorder = new MetricsRecorder();
 
+const bg: BackgroundDeps = { slots, redis, pool, log };
+
+// prefetch.bulkLoad runs once per instance when its slot becomes active (POST /app/prefetch/reload runs it by hand).
+async function runBulkLoad(): Promise<void> {
+  for (let i = 0; i < 25 && !redis.ready; i++) await sleep(200); // Redis may still be connecting at boot
+  const scope = await RequestScope.create({
+    redis: redis.shared,
+    pool,
+    log: (line) => log.info({ learner: true, worker: 'prefetch.bulkLoad' }, line),
+  });
+  try {
+    const rows = await loadMatchRows(scope.deps);
+    const ok = await callSlotInBackground(bg, 'prefetch.bulkLoad', rows);
+    log.info({ rows: rows.length, ok }, 'prefetch.bulkLoad ran on activation');
+  } catch (err) {
+    log.error({ err: (err as Error).message }, 'prefetch.bulkLoad activation failed');
+  } finally {
+    void scope.close().catch(() => undefined);
+  }
+}
+
 const applyConfig = async (cfg: AppConfig): Promise<void> => {
   dbExtraLatencyMs = cfg.dbExtraLatencyMs;
+  const wasActive = new Set(slots.active);
   slots.setActive(cfg.activeSlots);
   await redis.switchTo(cfg.target.redisUrl);
+  if (slots.active.includes('prefetch.bulkLoad') && !wasActive.has('prefetch.bulkLoad'))
+    void runBulkLoad();
 };
 const poller = env.engineUrl
   ? new ConfigPoller(env.engineUrl, env.configPollMs, applyConfig, log)
@@ -84,6 +113,13 @@ const app = buildServer({
     slotTimeoutMs: env.slotTimeoutMs,
   }),
 });
+const outbox = new OutboxDrainer({
+  pool: rawPool,
+  redis: () => redis.shared,
+  log,
+  enabled: () => env.outboxAlways || slots.active.includes('prefetch.applyChange'),
+});
+const changes = new ChangeConsumer(bg, () => slots.active.includes('prefetch.applyChange'));
 const pusher = new MetricsPusher(
   env.engineUrl,
   env.metricsPushMs,
@@ -95,6 +131,8 @@ const pusher = new MetricsPusher(
 async function shutdown(): Promise<void> {
   poller?.stop();
   pusher.stop();
+  outbox.stop();
+  await changes.stop();
   await app.close().catch(() => undefined);
   await Promise.all([
     slots.close(),
@@ -120,3 +158,5 @@ log.info(
 );
 poller?.start();
 pusher.start();
+outbox.start();
+changes.start();

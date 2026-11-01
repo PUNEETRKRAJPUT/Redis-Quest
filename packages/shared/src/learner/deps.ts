@@ -2,6 +2,7 @@ import { format } from 'node:util';
 import { createClient } from 'redis';
 import pg from 'pg';
 import { countRedis } from './counting.js';
+import { commandTimeoutFromEnv, failFast } from './failfast.js';
 import type { LearnerCounters, LearnerDb, LearnerDeps, LearnerRedis } from './types.js';
 
 export interface CreateLearnerDepsOptions {
@@ -17,6 +18,11 @@ export interface CreateLearnerDepsOptions {
   dbPool?: pg.Pool;
   /** Redis connect timeout in ms (default 3000). */
   connectTimeoutMs?: number;
+  /**
+   * Per-command timeout for the learner's Redis calls in ms (default env LEARNER_REDIS_COMMAND_TIMEOUT_MS,
+   * then 2000; 0 = off). A command with no reply by then rejects with RedisCommandTimeoutError.
+   */
+  commandTimeoutMs?: number;
 }
 
 export interface LearnerContext {
@@ -48,6 +54,8 @@ export async function createLearnerDeps(
   } else {
     const created = createClient({
       url: opts.redisUrl ?? process.env.REDIS_URL ?? DEFAULT_REDIS_URL,
+      // Fail fast: an offline client rejects at once (ClientOfflineError) and never replays queued commands.
+      disableOfflineQueue: true,
       socket: {
         connectTimeout: opts.connectTimeoutMs ?? 3000,
         // Short backoff, then give up so a dead Redis becomes an error the learner can read.
@@ -61,7 +69,7 @@ export async function createLearnerDeps(
     rawRedis = created;
   }
 
-  const redis = countRedis(rawRedis, counters, {
+  const counted = countRedis(rawRedis, counters, {
     onDuplicate: (clone) => {
       (clone as { on?: (e: string, f: (err: Error) => void) => void }).on?.('error', (err) =>
         log(`[redis] ${err.message}`),
@@ -69,6 +77,9 @@ export async function createLearnerDeps(
       owned.push(() => closeRedis(clone as unknown as LearnerRedis));
     },
   });
+
+  // Outermost layer: every command the learner issues rejects after commandTimeoutMs.
+  const redis = failFast(counted, opts.commandTimeoutMs ?? commandTimeoutFromEnv());
 
   let pool: pg.Pool;
   if (opts.dbPool) {
