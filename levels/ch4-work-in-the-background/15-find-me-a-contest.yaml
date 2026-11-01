@@ -1,0 +1,147 @@
+id: ch4-15-find-me-a-contest
+chapter: ch4
+title: "Find me a contest"
+mode: cli
+
+story: |
+  It is 10:58 pm and the contest list has become a wall. Eight contests tonight, a hundred next week, and Harry Bhaiya wants a search
+  box: "contests in Shivneri Hostel that cost 50 points or less", "the night ones", "average entry fee per hostel for the sponsor
+  slide". Each contest is a JSON document with a name, a hostel, an entry fee, a prize and some tags, and until now the app has loaded
+  them all and filtered in JavaScript.
+
+  Redis can do the filtering, if you tell it what is in the documents. You declare an index (which fields, of which type) and Redis
+  keeps it up to date as documents come and go. It is the same trick as the leaderboard of Chapter 3, answering a different question,
+  and it is the one place in this chapter where the hard part is not Redis but the shape of the data.
+
+  The game wrote eight contests as JSON at `contest:9101` to `contest:9108`. Index them and ask.
+
+brainstorm:
+  prompt: "Contests are JSON documents. You need filters by hostel and entry fee, a search by tag, and a group-by with an average. What serves that?"
+  options:
+    - id: search-index
+      label: "A Redis Search index over the JSON documents: declare the fields and their types, then query and aggregate"
+      is_reasonable: true
+    - id: scan-and-filter
+      label: "SCAN every contest key, JSON.GET each one and filter in the app"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a contests table in Postgres with indexes on hostel, entry and a tags array column"
+      is_reasonable: true
+
+setup:
+  - cmd:
+      - EVAL
+      - "pcall(redis.call, 'FT.DROPINDEX', 'idx:contest') return 1"
+      - 0
+  - cmd: [JSON.SET, "contest:9101", "$", '{"name":"Midnight Maggi Quiz","hostel":"h-c-02-2","entry":0,"prize":100,"tags":["night","quiz"]}']
+  - cmd: [JSON.SET, "contest:9102", "$", '{"name":"Mess Hall Bracket","hostel":"h-c-02-2","entry":20,"prize":300,"tags":["day","hostel"]}']
+  - cmd: [JSON.SET, "contest:9103", "$", '{"name":"Terrace Chase","hostel":"h-c-02-2","entry":50,"prize":500,"tags":["night","cricket"]}']
+  - cmd: [JSON.SET, "contest:9104", "$", '{"name":"Super Over Showdown","hostel":"h-c-02-2","entry":80,"prize":800,"tags":["night","cricket"]}']
+  - cmd: [JSON.SET, "contest:9105", "$", '{"name":"Bhima Hall Blitz","hostel":"h-c-02-4","entry":30,"prize":400,"tags":["day","cricket"]}']
+  - cmd: [JSON.SET, "contest:9106", "$", '{"name":"Sinhagad Sunrise Run","hostel":"h-c-02-3","entry":10,"prize":150,"tags":["day","fitness"]}']
+  - cmd: [JSON.SET, "contest:9107", "$", '{"name":"Lights Out Trivia","hostel":"h-c-02-4","entry":60,"prize":600,"tags":["night","quiz"]}']
+  - cmd: [JSON.SET, "contest:9108", "$", '{"name":"Savitribai Selfie Hunt","hostel":"h-c-02-1","entry":0,"prize":50,"tags":["day","hostel"]}']
+
+teach: |
+  The search tutorial in the docs: an index is a secondary index. You give Redis a key prefix, a data type (`ON JSON` or `ON HASH`) and a
+  schema, and it indexes existing documents when the index is created and every new or changed one after that. Field types: `TEXT`
+  (full-text words), `TAG` (exact labels), `NUMERIC` (ranges and sorting). Each schema entry is a path, then `AS alias`, then a type.
+
+  - `FT.CREATE idx:contest ON JSON PREFIX 1 contest: SCHEMA $.name AS name TEXT $.hostel AS hostel TAG $.entry AS entry NUMERIC SORTABLE
+    $.tags[*] AS tags TAG`
+  - The tutorial calls the `[*]` on an array the single most common point of confusion: a JSON array is indexed element by element, so
+    the path is `$.tags[*]`. (On this server we measured that `$.tags` alone also indexed these arrays of strings. Use `[*]` anyway: it is
+    the tutorial's form, and says what you mean.)
+  - `FT.SEARCH idx:contest "<query>" [RETURN n field ...] [LIMIT offset count]`. A tag is queried in braces, a numeric range in brackets, and
+    two terms next to each other are an AND: `@tags:{night} @entry:[0 50]`. `LIMIT 0 0` returns only the count, as the first element.
+  - `FT.AGGREGATE idx:contest "*" GROUPBY 1 @hostel REDUCE AVG 1 @entry AS avg_entry` groups and averages, a pipeline of steps.
+  - `FT.INFO idx:contest` shows the index definition and the document count.
+
+  One thing the tutorial does not warn you about, and the server did when we tried it: a tag value with punctuation, like the hostel id
+  `h-c-02-2`, must have its hyphens escaped with a backslash in a query, `@hostel:{h\-c\-02\-2}`. In the game terminal wrap the query in
+  single quotes so the backslashes arrive as typed.
+
+task: |
+  The game dropped any old `idx:contest` and wrote eight contests. Run these in the game terminal.
+
+  1. Create the index:
+     `FT.CREATE idx:contest ON JSON PREFIX 1 contest: SCHEMA $.name AS name TEXT $.hostel AS hostel TAG $.entry AS entry NUMERIC SORTABLE $.tags[*] AS tags TAG`
+  2. Find the contests of Shivneri Hostel (`h-c-02-2`) that cost 50 points or less, with their name and entry fee:
+     `FT.SEARCH idx:contest '@hostel:{h\-c\-02\-2} @entry:[0 50]' RETURN 2 name entry`
+  3. Count the night contests: `FT.SEARCH idx:contest '@tags:{night}' LIMIT 0 0` (the first number is the count).
+  4. Average entry fee per hostel: `FT.AGGREGATE idx:contest "*" GROUPBY 1 @hostel REDUCE AVG 1 @entry AS avg_entry`.
+
+  Then answer the questions, type the average entry fee you found for `h-c-02-2`, and press Verify.
+
+hints:
+  - "If FT.CREATE says the index exists, the game's setup did not run: FT.DROPINDEX idx:contest first (it keeps the documents)."
+  - "A search that finds nothing for @hostel:{...} usually means hostel was indexed as TEXT. Drop the index with FT.DROPINDEX idx:contest and create it again with TAG."
+  - "In the hostel query, the hyphens in h-c-02-2 are escaped with a backslash: h\\-c\\-02\\-2. Use single quotes around the whole query."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [FT.SEARCH, "idx:contest", "*", LIMIT, 0, 0]
+        equals: [8]
+        message: "idx:contest should index all eight contests (FT.SEARCH idx:contest * LIMIT 0 0 should answer 8). If the index is missing, create it with FT.CREATE ... ON JSON PREFIX 1 contest:."
+      - cmd: [FT.SEARCH, "idx:contest", '@hostel:{h\-c\-02\-2} @entry:[0 50]', LIMIT, 0, 0]
+        equals: [3]
+        message: "Shivneri Hostel has three contests costing 50 or less. hostel must be a TAG (an exact label, not TEXT) and entry a NUMERIC field, with the aliases hostel and entry."
+      - cmd: [FT.SEARCH, "idx:contest", '@tags:{night}', LIMIT, 0, 0]
+        equals: [4]
+        message: "Four contests are tagged night. tags should be a TAG field over the array of tags (path $.tags[*]), aliased as tags."
+  - type: answer
+    prompt: "What average entry fee did FT.AGGREGATE report for the hostel h-c-02-2?"
+    expected:
+      cmd:
+        - EVAL_RO
+        - "local sum = 0 for id = 9101, 9104 do sum = sum + cjson.decode(redis.call('JSON.GET', 'contest:' .. id, '$.entry'))[1] end return tostring(sum / 4)"
+        - 0
+      transform: number
+    compare: numeric_within
+    tolerance: 0.01
+    message: "Run FT.AGGREGATE idx:contest * GROUPBY 1 @hostel REDUCE AVG 1 @entry AS avg_entry and read the avg_entry on the row for h-c-02-2. The four contests of that hostel cost 0, 20, 50 and 80 points."
+  - type: quiz
+    question: "In the search tutorial, how is a JSON array of strings like tags written in the schema, and what does the [*] say?"
+    options:
+      - id: array-each-element
+        label: "$.tags[*] AS tags TAG: the [*] selects every element of the array, so each tag is indexed as its own value"
+      - id: star-is-a-wildcard-for-values
+        label: "$.tags AS tags TAG with a * added to the query so any tag matches"
+      - id: star-makes-it-text
+        label: "$.tags[*] AS tags TEXT: the star turns the tags into searchable words"
+      - id: tags-need-no-path
+        label: "Arrays cannot be indexed at all: store each tag in its own field"
+    correct: array-each-element
+    explanation: "The tutorial indexes arrays element by element with [*] and calls forgetting it the single most common point of confusion. In a hash a TAG field is split on commas for you; in JSON nothing is split, so the path says which values to take. A TAG field is then queried in braces, @tags:{night}."
+  - type: quiz
+    question: "When do you pick TAG and when TEXT for a field?"
+    options:
+      - id: tag-exact-text-words
+        label: "TAG for exact labels you filter on as a whole (a hostel id, a category); TEXT for words inside prose you want to search by word"
+      - id: text-for-ids
+        label: "TEXT for ids and labels, TAG for sentences"
+      - id: tag-for-numbers
+        label: "TAG for anything that is a number"
+      - id: same-thing
+        label: "They are the same type under two names"
+    correct: tag-exact-text-words
+    explanation: "The tutorial lists TAG as exact labels and TEXT as word-level full-text. A hostel id is a label you match whole, so TAG; a contest name is words people search by, so TEXT. Numbers you filter by range or sort on are NUMERIC."
+
+show_me:
+  component: json_tree
+  keys: ["contest:9101"]
+docs:
+  - https://redis.io/docs/latest/develop/get-started/search-tutorial/
+  - https://redis.io/docs/latest/develop/data-types/json/
+
+reward:
+  xp: 50
+  badge: "Searchable"
+
+solutions:
+  reference: solutions/15-reference.redis
+  wrong:
+    - path: solutions/15-wrong-hostel-as-text.redis
+      expect: wrong
+      because: "The hostel id was indexed as TEXT, which breaks h-c-02-2 into words. A tag query on a TEXT field matches nothing, so the search for Shivneri's contests up to 50 points returns 0 instead of 3."

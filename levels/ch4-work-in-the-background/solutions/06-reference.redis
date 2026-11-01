@@ -1,0 +1,5 @@
+# Reference: the newest ball is 1700199000000-0, so 24 hours earlier is 1700199000000 - 86400000 = 1700112600000.
+# MINID ~ trims in cheap chunks and may keep a few more than 87; the stream and the group are untouched.
+XTRIM match:m-041:balls MINID ~ 1700112600000-0
+XLEN match:m-041:balls
+XINFO GROUPS match:m-041:balls

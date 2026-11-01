@@ -1,0 +1,4 @@
+# The hostel contest 9001 has exactly one slot left, nobody holds the lock and nobody is a member yet.
+steps:
+  - cmd: [SET, "contest:9001:slots", 1]
+  - cmd: [DEL, "lock:contest:9001", "contest:9001:members"]

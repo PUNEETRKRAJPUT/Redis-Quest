@@ -1,0 +1,153 @@
+id: ch4-02-two-workers-every-ball-once
+chapter: ch4
+title: "Two workers, every ball once"
+mode: code
+
+story: |
+  It is 10:32 pm. Harry Bhaiya has seen the problem and, being Harry Bhaiya, has the answer: "Two workers! Three! Fest ka budget
+  hai." He is not wrong this time. One worker cannot add up forty thousand teams' points per ball before the next ball arrives.
+  But two workers reading the same log have a new problem: if both read ball 4, the batter gets the runs twice, and if they
+  split the log by guessing, some ball is read by nobody.
+
+  The leaderboard code you wrote in Chapter 3 knows how to add points. What it does not have is a way to be one of several
+  workers. Right now the app's `points.consume` reads the balls table in Postgres and recomputes everything, which is why it
+  never keeps up.
+
+  You need the log to hand each ball to exactly one worker, and to remember which balls a worker has finished.
+
+brainstorm:
+  prompt: "Two workers read the same ball log. Each ball must be processed by exactly one of them, and a ball that a worker has taken but not finished must not be forgotten. Where does that bookkeeping live?"
+  options:
+    - id: consumer-group
+      label: "In Redis, in a consumer group on the stream: the group remembers what it handed out and what was acknowledged"
+      is_reasonable: true
+    - id: workers-agree
+      label: "In the workers: each one keeps the last id it read in a variable and they split odd and even balls"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a claimed_by column on a balls table in Postgres, updated with SELECT ... FOR UPDATE SKIP LOCKED"
+      is_reasonable: true
+
+teach: |
+  The streams page in the docs describes consumer groups: a group sits on a stream, remembers the last id it delivered, and
+  gives each entry to one consumer of the group. Each message goes to one consumer in the group. Consumer names are chosen by
+  the client and are case-sensitive.
+
+  - `XGROUP CREATE key group 0-0 MKSTREAM` creates the group and, with `MKSTREAM`, the stream if it is missing. Starting at
+    `0-0` means the group will see the whole stream. A second `XGROUP CREATE` with the same name answers `BUSYGROUP`.
+  - `XREADGROUP GROUP group consumer COUNT n STREAMS key >` asks for entries never delivered to any consumer of the group. The
+    id `>` is that special meaning. An explicit id such as `0` instead re-reads that consumer's own history of unacknowledged
+    entries.
+  - A delivered entry goes into the group's pending list (the PEL), kept per group, until `XACK key group id` says it is done.
+    There is no automatic acknowledgement, which is the point.
+
+  This node-redis gives you `xGroupCreate`, `xReadGroup` and `xAck`. `xReadGroup` answers an array of streams, each with its
+  `messages` (an `id` and a `message` object of strings), or `null` when there is nothing new. A worker that crashes after
+  `xReadGroup` and before `xAck` leaves the entry pending: it was delivered, and not finished. That is at-least-once delivery.
+  An entry can be processed twice, never zero times, which is why the next levels care about repeats.
+
+task: |
+  Fill in `consume(deps, matchId, consumer, count)` in `workspace/ch4/points-consume.js`. It processes up to `count` new balls as
+  `consumer` and returns `{ processed: [<entry ids>] }`, in the order it processed them.
+
+  - The stream is `match:<matchId>:balls` and the group is called `points`. Create the group if it is missing (`0-0`,
+    `MKSTREAM`) and ignore the `BUSYGROUP` error when it already exists.
+  - Read with `XREADGROUP` and the id `>`. For each entry, add `runs` to the batter's score in the sorted set
+    `lb:match:<matchId>` (`ZINCRBY`, the member is the `batter` field), and only then `XACK` it.
+  - Return the ids you processed and acknowledged. When nothing is new, return `{ processed: [] }`.
+
+  The check writes six balls, then calls `consume` as `w1` for three, as `w2` for three, and as `w1` again. Each ball must be
+  processed exactly once between them, and when it is over nothing may be left pending. Tick "Run my code in the app" to see
+  the same function behind `POST /app/workers/points/consume`.
+
+hints:
+  - "The stream already exists when the group is created, but a group can also be created first with MKSTREAM. Use MKSTREAM and catch the BUSYGROUP error."
+  - "xReadGroup(group, consumer, { key, id: '>' }, { COUNT: count }) answers an array of { name, messages }, or null when there is nothing new."
+  - "message.runs is a string. Number() it before zIncrBy, and acknowledge each entry after its points are added, not before."
+
+verify:
+  - type: behavior
+    slot: points.consume
+    fixtures: fixtures/02-six-balls.yaml
+    assertions:
+      - call: { args: ["m-041", "w1", 3] }
+        expect: { processed: ["1700000000001-0", "1700000000002-0", "1700000000003-0"] }
+        message: "w1 asks for 3 new balls and should get the first three entries, in order, and report their ids."
+        sideEffect:
+          - cmd: [ZSCORE, "lb:match:m-041", "p-028"]
+            equals: 5
+            message: "After balls 1 to 3, p-028 has 4 + 1 = 5 points in lb:match:m-041 (ZINCRBY the runs, member = the batter field)."
+          - cmd: [ZSCORE, "lb:match:m-041", "p-034"]
+            equals: 6
+            message: "After balls 1 to 3, p-034 has 6 points in lb:match:m-041."
+      - call: { args: ["m-041", "w2", 3] }
+        expect: { processed: ["1700000000004-0", "1700000000005-0", "1700000000006-0"] }
+        message: "w2 asks for 3 new balls after w1 took the first three, so it should get balls 4, 5 and 6. If it got balls 1 to 3 again, the two workers are not sharing a group."
+        sideEffect:
+          - cmd: [ZSCORE, "lb:match:m-041", "p-028"]
+            equals: 11
+            message: "After all six balls p-028 has 4 + 1 + 0 + 6 = 11 points. A different number means a ball was added twice or never."
+          - cmd: [ZSCORE, "lb:match:m-041", "p-034"]
+            equals: 8
+            message: "After all six balls p-034 has 6 + 2 = 8 points."
+      - call: { args: ["m-041", "w1", 3] }
+        expect: { processed: [] }
+        message: "Every ball has been delivered, so w1 asking again should get nothing new: { processed: [] }."
+  - type: antipattern
+    checks:
+      - cmd:
+          - EVAL_RO
+          - "return redis.call('XPENDING', KEYS[1], ARGV[1])[1]"
+          - 1
+          - "match:m-041:balls"
+          - points
+        equals: 0
+        message: "This passes today, but every ball you processed is still pending in the group because it was never acknowledged. After the next restart the group hands all six out again and the points are added twice. XACK each entry after its points are added."
+  - type: quiz
+    question: "In XREADGROUP GROUP points w1 COUNT 3 STREAMS match:m-041:balls > , what does the > mean?"
+    options:
+      - id: after-my-last-ack
+        label: "Entries after the last one this consumer acknowledged"
+      - id: never-delivered
+        label: "Only entries that have never been delivered to any consumer of this group"
+      - id: everything
+        label: "The whole stream from the first entry"
+      - id: only-new-after-call
+        label: "Only entries added after the call is made, like $"
+    correct: never-delivered
+    explanation: "The special id > means entries never delivered to any consumer in the group. That is what splits the stream between workers: an entry w1 was given is no longer 'never delivered', so w2 gets the next one. An explicit id such as 0 means something else: re-read this consumer's own pending history."
+  - type: quiz
+    question: "A worker reads a ball with XREADGROUP, adds the runs, and crashes before the XACK. What happens to that ball?"
+    options:
+      - id: lost-for-ever
+        label: "It is lost: it was delivered once and the group will never hand it out again"
+      - id: auto-acked
+        label: "Redis acknowledges it when the connection drops"
+      - id: stays-pending
+        label: "It stays in the group's pending list, delivered but not acknowledged, so it can be claimed and processed again"
+      - id: back-to-new
+        label: "It goes back to 'never delivered' and the next XREADGROUP with > gets it"
+    correct: stays-pending
+    explanation: "Delivery puts the entry in the pending list for that consumer, and only XACK removes it. A crash leaves it there, which is what makes recovery possible (the next level) and what makes processing at-least-once: the ball may be counted twice if the crash came after the points were added."
+
+show_me:
+  component: stream_log
+  keys: ["match:m-041:balls"]
+docs:
+  - https://redis.io/docs/latest/develop/data-types/streams/
+  - https://redis.io/docs/latest/develop/use-cases/streaming
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+
+reward:
+  xp: 50
+  badge: "Share the load"
+
+solutions:
+  reference: solutions/02-reference.js
+  wrong:
+    - path: solutions/02-wrong-xread.js
+      expect: wrong
+      because: "Plain XREAD has no group and no memory. Every call starts again at the first ball, so w2 is handed balls 1 to 3 again and balls 4 to 6 are never processed."
+    - path: solutions/02-works-but-wrong-no-ack.js
+      expect: works_but_wrong
+      because: "The group shares the balls and the points are right, but nothing is acknowledged. All six entries stay pending, and after a restart the group hands them out again and the batters get their runs twice."

@@ -1,0 +1,11 @@
+# Fifty delayed jobs d-1 .. d-50, all due (scores 1 to 50). The antipattern check runs ten promoters at once over them.
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'queue:jobs:job:*')) do redis.call('DEL', k) end redis.call('DEL', 'queue:jobs:pending', 'queue:jobs:processing', 'queue:jobs:completed', 'queue:jobs:failed', 'queue:jobs:delayed') return 1"
+      - 0
+  - cmd:
+      - EVAL
+      - "for i = 1, 50 do redis.call('ZADD', KEYS[1], i, 'd-' .. i) redis.call('HSET', 'queue:jobs:job:d-' .. i, 'id', 'd-' .. i, 'payload', '{\"kind\":\"reminder\"}', 'status', 'delayed', 'attempts', '0', 'enqueued_at_ms', '1700000000000') end return 50"
+      - 1
+      - "queue:jobs:delayed"

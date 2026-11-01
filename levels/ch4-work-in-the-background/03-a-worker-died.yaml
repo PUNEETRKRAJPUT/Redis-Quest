@@ -1,0 +1,147 @@
+id: ch4-03-a-worker-died
+chapter: ch4
+title: "A worker died"
+mode: code
+
+story: |
+  It is 10:34 pm. Two workers are sharing the balls beautifully, until Teja restarts one of them to "try something" and the
+  chase gets a new problem. Worker w2 read three balls, was killed in the middle of them, and came back as a different
+  process with a different name. Nobody told the group. Those three balls were delivered, never acknowledged, and are now
+  nobody's. The batters are three balls short, and Teja has already screenshotted it.
+
+  Redis did not lose the balls. They are in the group's pending list with w2's name on them and a clock: how long since they
+  were delivered. What the app is missing is a sweeper, a function that asks "what has been pending for too long?" and gives it
+  to a live worker.
+
+  You are going to write that sweeper, and in the next level the same sweeper will meet a ball that can never be finished.
+
+brainstorm:
+  prompt: "A worker took three balls and died. They are pending under its name. How does a live worker find them and finish the job?"
+  options:
+    - id: claim-idle-pending
+      label: "Ask the group for pending entries that have been idle too long, take them over, process them and acknowledge them"
+      is_reasonable: true
+    - id: replay-everything
+      label: "Re-read the whole stream from the first ball and add every ball's points again"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a worker heartbeat table in Postgres, and a job that reassigns the dead worker's balls"
+      is_reasonable: true
+
+teach: |
+  Everything a group has delivered and not yet acknowledged is in its pending entries list (PEL). Two commands look at it.
+
+  - `XPENDING key group` is a summary: how many, the smallest and largest id, and a count per consumer. The extended form,
+    `XPENDING key group - + 10` or `XPENDING key group <id> <id> 1`, lists entries as `[id, consumer, idle ms, delivery count]`.
+  - `XAUTOCLAIM key group consumer min-idle-ms 0-0 COUNT n` (Redis 6.2 and later) takes over entries that have been idle at
+    least that long and returns them, so a live worker can finish what a dead one started. The docs show
+    `XAUTOCLAIM race:italy italy_riders Alice 60000 0-0 COUNT 1`, the target being the caller itself.
+
+  Why `0` here and `60000` in production? The idle time is how long since the entry was delivered. A worker in the middle of
+  a slow ball is also idle in this sense. Production sweeps use a minimum such as a minute so they never steal from a worker
+  that is only busy. The check cannot wait a minute, so it asks for 0.
+
+  This node-redis: `xAutoClaim(key, group, consumer, minIdleMs, '0-0', { COUNT })` answers `{ nextId, messages, deletedMessages }`;
+  `xPendingRange(key, group, start, end, count)` answers entries with `deliveriesCounter`. Claiming adds one to an entry's
+  delivery counter, so a counter read after the claim already counts it. Ids in `deletedMessages` are pending entries whose payload
+  was trimmed away; Redis removes them from the PEL for you.
+
+  Process what you claim with the same code as `consume` (add the runs, then `XACK`). Return the ids in `reclaimed`; level 4
+  will fill `deadLettered`.
+
+task: |
+  Work in `workspace/ch4/points-consume.js` (keep `consume` as it is) and fill in `sweep(deps, matchId, consumer, minIdleMs, maxDeliveries)` in
+  `workspace/ch4/points-sweep.js`. If you like, write both in one file and have each file re-export what it needs. It returns
+  `{ reclaimed: [ids], deadLettered: [ids] }`.
+
+  - Claim the group's idle entries for `consumer` with `XAUTOCLAIM` (group `points`, start `0-0`, `COUNT` 100).
+  - For each claimed entry, read its delivery count. At level 3 none is over the limit, so process it: add the runs to
+    `lb:match:<matchId>` for the `batter`, `XACK` it, and put its id in `reclaimed`.
+  - Entries at or over `maxDeliveries` go to the dead-letter stream, which is level 4's job. Leave `deadLettered` empty for now,
+    or already do it.
+
+  The check starts with six balls and a group where `w2` read the first three and died. First it calls `consume` as `w1` for
+  three: `w1` must get balls 4 to 6 and leave `w2`'s three alone. Then, from a fresh start, it calls
+  `sweep("m-041", "w1", 0, 5)` and expects the three dead worker's balls back in `reclaimed`, nothing pending, and their runs
+  added.
+
+hints:
+  - "xAutoClaim(key, 'points', consumer, minIdleMs, '0-0', { COUNT: 100 }) answers { nextId, messages, deletedMessages }. The balls are in messages, as { id, message }."
+  - "Acknowledge each claimed entry with xAck after adding its runs. A claimed entry that is not acknowledged is still pending, now under your name."
+  - "For the delivery count: xPendingRange(key, 'points', id, id, 1) answers an array whose first item has deliveriesCounter."
+
+verify:
+  - type: behavior
+    slot: points.consume
+    fixtures: fixtures/03-w2-died.yaml
+    assertions:
+      - call: { args: ["m-041", "w1", 3] }
+        expect: { processed: ["1700000000004-0", "1700000000005-0", "1700000000006-0"] }
+        message: "w2 took balls 1 to 3 and died. w1 asking for 3 new balls should get balls 4, 5 and 6. The group already exists now, so creating it again answers BUSYGROUP: ignore that."
+        sideEffect:
+          - cmd:
+              - EVAL_RO
+              - "return redis.call('XPENDING', KEYS[1], ARGV[1])[1]"
+              - 1
+              - "match:m-041:balls"
+              - points
+            equals: 3
+            message: "w2's three balls are still pending (they are not w1's to finish yet), so XPENDING should count 3. consume must only read new balls with the id > and must leave the pending ones alone."
+  - type: behavior
+    slot: points.sweep
+    fixtures: fixtures/03-w2-died.yaml
+    assertions:
+      - call: { args: ["m-041", "w1", 0, 5] }
+        expect:
+          reclaimed: ["1700000000001-0", "1700000000002-0", "1700000000003-0"]
+          deadLettered: []
+        message: "w2's three balls have been idle at least 0 ms, so sweep as w1 should claim, process and report balls 1, 2 and 3 in reclaimed, and nothing in deadLettered."
+        sideEffect:
+          - cmd:
+              - EVAL_RO
+              - "return redis.call('XPENDING', KEYS[1], ARGV[1])[1]"
+              - 1
+              - "match:m-041:balls"
+              - points
+            equals: 0
+            message: "After the sweep nothing should be pending: every claimed ball is processed and then acknowledged with XACK."
+          - cmd: [ZSCORE, "lb:match:m-041", "p-028"]
+            equals: 5
+            message: "Balls 1 and 2 are p-028's, 4 + 1 = 5 points. If it is missing, the sweep never processed them; more than 5 means they were added twice."
+          - cmd: [ZSCORE, "lb:match:m-041", "p-034"]
+            equals: 6
+            message: "Ball 3 is p-034's, 6 points."
+  - type: quiz
+    question: "Why does the production sweep pass a minimum idle time like 60000 ms to XAUTOCLAIM and not 0?"
+    options:
+      - id: redis-needs-it
+        label: "XAUTOCLAIM refuses a minimum idle time below a minute"
+      - id: faster-sweep
+        label: "A larger number makes the sweep run faster"
+      - id: ack-delay
+        label: "It delays the acknowledgements so they can be batched"
+      - id: only-take-from-the-silent
+        label: "So it only takes entries from workers that have been silent a long time, and never steals a ball from a worker that is just busy on it"
+    correct: only-take-from-the-silent
+    explanation: "The idle time is how long since the entry was delivered, not whether the worker is alive. A short minimum would take balls away from a worker still finishing them, and two workers would then process the same ball. A minute is a trade: a dead worker's balls wait a minute, a busy worker is left alone. The check uses 0 only because it cannot wait."
+
+show_me:
+  component: stream_log
+  keys: ["match:m-041:balls"]
+docs:
+  - https://redis.io/docs/latest/develop/data-types/streams/
+  - https://redis.io/docs/latest/develop/use-cases/streaming
+
+reward:
+  xp: 60
+  badge: "Nobody left behind"
+
+solutions:
+  reference: solutions/03-reference.js
+  wrong:
+    - path: solutions/03-wrong-consume-only.js
+      expect: wrong
+      because: "sweep returns two empty lists and claims nothing. w2's three balls stay pending for ever and their points are never added."
+    - path: solutions/03-wrong-xclaim-no-ack.js
+      expect: wrong
+      because: "sweep claims and processes the balls but never acknowledges them. They are still pending, now under w1's name, so the next sweep adds the same points again."

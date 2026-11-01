@@ -1,0 +1,47 @@
+id: ch4
+title: "Work in the background"
+incident:
+  - from: roommate
+    time: "22:30"
+    text: "bhai last over of the chase and the ticker just skipped ball 4. I restarted the points worker, ONE second 😭"
+  - from: senior
+    time: "22:32"
+    text: "Scene kya hai? Forty thousand teams need points per ball. Two workers? Three? Fest ka budget hai"
+  - from: roommate
+    time: "22:34"
+    text: "yaar now some batters have DOUBLE points. the old worker came back and did its balls again"
+  - from: warden
+    time: "22:36"
+    text: "My nephew Bunty was given his prize points twice. Twice. Explain this before the chase ends."
+  - from: roommate
+    time: "22:39"
+    text: "also the last slot in the hostel contest went to two people. TWO. how"
+  - from: rival-college
+    time: "22:41"
+    text: "Nothing personal. Your server did a lot of work in the background tonight. Did it know it had already done it? 😏"
+  - from: you
+    time: "22:43"
+    text: "the work has left the request. it needs a log that remembers, a queue that survives a crash, and a rule for repeats: once, even if told twice"
+  - from: senior
+    time: "22:45"
+    text: "I do not follow but the last ball is soon. Please. Before the trophy, bhai"
+levels:
+  - ch4-01-the-ball-log
+  - ch4-02-two-workers-every-ball-once
+  - ch4-03-a-worker-died
+  - ch4-04-the-poison-ball
+  - ch4-05-analytics-wants-it-too
+  - ch4-06-how-much-history
+  - ch4-07-the-job-queue
+  - ch4-08-credit-the-wallet-once
+  - ch4-09-later-and-more-important
+  - ch4-10-last-slot-in-the-contest
+  - ch4-11-the-lock-expired-while-you-held-it
+  - ch4-12-lobby-expired-tell-everyone
+  - ch4-13-forty-thousand-sessions-expired-in-one-second
+  - ch4-14-is-this-username-taken
+  - ch4-15-find-me-a-contest
+  - ch4-16-the-ops-wall
+  - ch4-17-interview-streaming
+  - ch4-18-interview-job-queue
+  - ch4-19-interview-time-series-dashboard

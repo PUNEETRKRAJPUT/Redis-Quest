@@ -1,0 +1,6 @@
+# An empty queue: every queue list, the delayed set and every job hash from earlier runs is removed.
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'queue:jobs:job:*')) do redis.call('DEL', k) end redis.call('DEL', 'queue:jobs:pending', 'queue:jobs:processing', 'queue:jobs:completed', 'queue:jobs:failed', 'queue:jobs:delayed') return 1"
+      - 0

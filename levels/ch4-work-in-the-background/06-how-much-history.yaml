@@ -1,0 +1,138 @@
+id: ch4-06-how-much-history
+chapter: ch4
+title: "How much history"
+mode: cli
+
+story: |
+  It is 10:40 pm and Warden Sir's phone rings during the best over of the chase. It is not about cricket. It is the Redis
+  memory warning from the monitoring page Teja added: the ball log has grown for two days and nothing ever removes an entry. The
+  points workers need the last day at most. Everything older is already in Postgres and in the reports.
+
+  "A log that only grows," the warden says, "is a cupboard nobody cleans. Clean it, but do not throw away what the workers are
+  still reading." That second sentence is the careful part: a stream key has consumer groups attached to it, and a clumsy clean-up
+  takes them away too.
+
+  The game has loaded 200 balls spread over a little more than two days (one ball every 1,000,000 ms, about 16 minutes apart)
+  and a group `points`. Keep the last 24 hours.
+
+brainstorm:
+  prompt: "The ball log should keep only the last 24 hours, and the consumer group on it must survive. How do you cut it?"
+  options:
+    - id: trim-by-id
+      label: "Trim the stream by id: entries older than the id of 24 hours ago are removed, and the stream and its group stay"
+      is_reasonable: true
+    - id: delete-and-recreate
+      label: "DEL the stream key and start again with the balls from the last day"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a nightly Postgres job that deletes old balls, and a worker that mirrors it into Redis"
+      is_reasonable: false
+
+setup:
+  - cmd: [DEL, "match:m-041:balls", "match:m-041:balls:dead"]
+  - cmd:
+      - EVAL
+      - "for i = 0, 199 do redis.call('XADD', KEYS[1], (1700000000000 + i * 1000000) .. '-0', 'over', tostring(math.floor(i / 6) + 1), 'ball', tostring(i % 6 + 1), 'batter', 'p-028', 'runs', '1') end return 200"
+      - 1
+      - "match:m-041:balls"
+  - cmd: [XGROUP, CREATE, "match:m-041:balls", points, "0-0"]
+
+teach: |
+  The streaming guide gives three ways to bound a stream: cap it as you write (`XADD ... MAXLEN ~ n`), cap it by time with
+  `XTRIM key MINID ~ <ms>-0` (its example is "the last 24 h"), or leave `XADD` alone and trim on a schedule. It recommends the
+  approximate `~` form by default and exact trimming only if you need it.
+
+  Ids start with a millisecond time, so "older than 24 hours" is an id. If the newest ball is `1700199000000-0`, then 24 hours
+  earlier is 1700199000000 - 86400000 = 1700112600000, and `XTRIM match:m-041:balls MINID ~ 1700112600000-0` removes entries
+  with a smaller id. `XLEN` tells you what is left.
+
+  - With `~`, Redis trims in whole internal chunks and may keep a little more than you asked for. An exact trim of this stream would
+    leave 87 balls. The approximate one leaves more (we measured 100 on this stack), and that is fine for a retention rule.
+  - `XTRIM` removes entries, never the stream or its groups. `DEL` removes the key and everything attached to it.
+
+  Now the careful part. Reading with the id `>` asks for new entries. Reading with an explicit id such as `0` re-reads that
+  consumer's own pending history, which is how a worker resumes after a restart. And trimming only removes entries from the
+  stream, not their ids from a group's pending list: an id can stay pending after its payload is gone. `XAUTOCLAIM` returns such
+  ids in `deletedMessages` and removes them from the PEL, so a sweeper should log them or send them to the dead-letter stream.
+
+task: |
+  The newest of the 200 balls has the id `1700199000000-0`.
+
+  1. `XTRIM match:m-041:balls MINID ~ 1700112600000-0` keeps everything from the last 24 hours (that id is the newest minus
+     86,400,000 ms).
+  2. `XLEN match:m-041:balls` and see how many are left. An exact trim would leave 87; the approximate one leaves a little more.
+  3. `XINFO GROUPS match:m-041:balls` and check the `points` group is still there.
+
+  Then answer the two questions and press Verify.
+
+hints:
+  - "XTRIM key MINID ~ id: the ~ goes between MINID and the id, with spaces around it."
+  - "If XLEN still says 200, the trim did not run, or the id was too small. Check the id has 1700112600000, not 170011260000."
+  - "If you used DEL by mistake, start the level again: its setup writes the 200 balls back."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "match:m-041:balls"]
+        equals: stream
+        message: "match:m-041:balls should still be a stream."
+      - cmd: [EXISTS, "match:m-041:balls"]
+        equals: 1
+        message: "The stream is gone. XTRIM removes old entries and leaves the key; DEL removes the whole key and its consumer group with it."
+      - cmd: [XLEN, "match:m-041:balls"]
+        lte: 100
+        message: "The stream still holds more than 100 balls. XTRIM match:m-041:balls MINID ~ 1700112600000-0 should leave 100 or fewer."
+      - cmd: [XLEN, "match:m-041:balls"]
+        gte: 87
+        message: "Fewer than 87 balls are left, which is more than the last 24 hours. Check the id you trimmed to: 1700112600000-0."
+      - cmd:
+          - EVAL_RO
+          - "return #redis.call('XINFO', 'GROUPS', KEYS[1])"
+          - 1
+          - "match:m-041:balls"
+        equals: 1
+        message: "The points group should still be on the stream. XTRIM keeps groups; a DEL and rebuild loses them."
+  - type: quiz
+    question: "After a restart, a worker wants its own unacknowledged entries back, not new ones. What does it pass to XREADGROUP?"
+    options:
+      - id: greater-than
+        label: ">: it returns everything this consumer has not acknowledged"
+      - id: explicit-id-zero
+        label: "An explicit id such as 0 instead of >: that re-reads the consumer's own pending history"
+      - id: dollar
+        label: "$: it returns everything since the last ack"
+      - id: nothing-needed
+        label: "Nothing: the group re-delivers pending entries by itself on reconnect"
+    correct: explicit-id-zero
+    explanation: "The guide says an id like 0-0 in place of > replays the consumer's own pending history, which is how a worker recovers after a restart. > only ever returns entries never delivered, and the group never re-delivers pending ones by itself: someone has to ask, either the worker with 0, or a sweeper with XAUTOCLAIM."
+  - type: quiz
+    question: "The ball log is trimmed while some entries are still pending in a group. What can happen to those pending ids?"
+    options:
+      - id: trim-blocks
+        label: "XTRIM refuses to remove an entry that is pending"
+      - id: pending-without-payload
+        label: "An id can stay in the pending list after its entry was trimmed away; XAUTOCLAIM reports it in deletedMessages and removes it from the pending list"
+      - id: auto-acked
+        label: "Redis acknowledges the trimmed entries for the group"
+      - id: stream-deleted
+        label: "The whole stream is deleted when a pending entry is trimmed"
+    correct: pending-without-payload
+    explanation: "Trimming works on the stream and does not look at any group's pending list. The streaming guide describes the result: the id can still be pending while its payload is gone, and XAUTOCLAIM (Redis 7.0 and later) returns those ids in deletedMessages and drops them from the pending list, so you can log them or route them to a dead-letter store."
+
+show_me:
+  component: stream_log
+  keys: ["match:m-041:balls"]
+docs:
+  - https://redis.io/docs/latest/develop/data-types/streams/
+  - https://redis.io/docs/latest/develop/use-cases/streaming
+
+reward:
+  xp: 40
+  badge: "Spring cleaning"
+
+solutions:
+  reference: solutions/06-reference.redis
+  wrong:
+    - path: solutions/06-wrong-del.redis
+      expect: wrong
+      because: "DEL removes the whole key, and the points group with it: the stream is gone, XLEN reads 0 and XINFO GROUPS has nothing to report. Trimming removes old entries and leaves the stream and its groups where they are."

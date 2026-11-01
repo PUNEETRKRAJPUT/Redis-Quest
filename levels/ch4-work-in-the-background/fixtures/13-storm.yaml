@@ -1,0 +1,6 @@
+# Fifty session keys storm:1 .. storm:50, created in the same moment with no expiry, the way fifty logins at the toss are.
+steps:
+  - cmd:
+      - EVAL
+      - "for i = 1, 50 do redis.call('SET', 'storm:' .. i, 'x') end return 50"
+      - 0

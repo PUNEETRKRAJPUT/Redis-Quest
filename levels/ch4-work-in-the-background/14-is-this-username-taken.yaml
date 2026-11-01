@@ -1,0 +1,128 @@
+id: ch4-14-is-this-username-taken
+chapter: ch4
+title: "Is this username taken?"
+mode: code
+
+story: |
+  It is 10:56 pm and registrations are open for the knockout rounds. Every signup form checks, as you type, whether the username is
+  taken, and every keystroke is a query: `SELECT 1 FROM users WHERE handle = $1`. Twenty thousand students typing four to
+  twelve characters is a lot of queries for a question whose answer is, almost always, "no, that name is free".
+
+  Teja wants to cache it. You cannot cache "free": the moment someone registers it, the cache is wrong. What you can do is keep a
+  very small summary of every name that exists, one that can say "definitely not here" without ever asking Postgres, and "maybe"
+  when it cannot be sure. Then only the maybes go to the database, and the database has the last word.
+
+  It sounds like cheating. It is called a Bloom filter, and the docs list "is this username taken" as its textbook use.
+
+brainstorm:
+  prompt: "Nearly every username checked is free, and the answer must be certain. How do you avoid asking Postgres each time?"
+  options:
+    - id: bloom-in-front
+      label: "A Bloom filter in front: a no from it is certain and skips Postgres; a yes is checked in Postgres"
+      is_reasonable: true
+    - id: cache-the-answers
+      label: "Cache every answer, free or taken, with a TTL"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a unique index on handle and let the INSERT fail when the name exists"
+      is_reasonable: true
+
+teach: |
+  The Bloom filter page of the docs: a probabilistic structure that "can guarantee the absence" of an item but "can only give an
+  estimation about its presence". No false negatives; false positives at the rate you chose. You cannot delete from a Bloom
+  filter. The page lists a username-taken check as a use: on a "yes", check the main database.
+
+  - `BF.RESERVE key error_rate capacity` creates it, for example `BF.RESERVE bf:usernames 0.001 1000000`. `BF.ADD`, `BF.MADD`
+    add one or many; `BF.EXISTS` and `BF.MEXISTS` ask. `BF.EXISTS` answers 1 (maybe present) or 0 (certainly absent).
+  - Sizing, from the page: 1% error is 7 hash functions and 9.585 bits per item; 0.1% is 10 hash functions and 14.378 bits per item;
+    0.01% is 14 and 19.170. At 0.1% for a million handles that is about 14.4 million bits, roughly 1.8 MB (by arithmetic from those
+    figures). Past the capacity the error rate grows, and a scaling filter adds sub-filters.
+  - A hit is "probably there", so the answer from Postgres is the one you return, and `checkedDb: true` says you needed it.
+
+  The filter in this level was built by the game: it holds the real handle of seed user `u-000010`, which is also in Postgres, and a
+  second handle `quest.ghost99` that is in the filter and not in Postgres, a stand-in for the false positive you must expect.
+
+  This node-redis has typed `bf` helpers; the reference uses `redis.sendCommand(['BF.EXISTS', key, name])` so it works with any version.
+  Its answer is the integer 1 or 0. The `db` handle is `db.query(sql, params)`, answering `{ rows }`.
+
+  A neighbour worth knowing, not graded: the cuckoo filter (`CF.RESERVE`, `CF.ADD`, `CF.EXISTS`) can also delete (`CF.DEL`), which is why the
+  docs suggest it for coupon validation, removing a coupon when it is used. Bloom cannot.
+
+task: |
+  Fill in `usernameTaken(deps, name)` in `workspace/ch4/username-taken.js`. It returns `{ taken: boolean, checkedDb: boolean }`.
+
+  - Ask the filter first: `BF.EXISTS bf:usernames <name>`.
+  - If it says 0, the name is certainly free: return `{ taken: false, checkedDb: false }` and do not touch Postgres.
+  - If it says 1, ask Postgres with `db.query('SELECT 1 FROM users WHERE handle = $1', [name])` and answer from the rows:
+    `{ taken: rows.length > 0, checkedDb: true }`.
+
+  The check uses three names: `tariq.bhat75` (in the filter and in Postgres), `quest.ghost99` (in the filter, not in Postgres) and
+  `nobody.has.this.name` (in neither). Tick "Run my code in the app" to try `GET /app/usernames/tariq.bhat75` and the others.
+
+hints:
+  - "BF.EXISTS answers an integer: 1 means maybe present, 0 means certainly absent. Compare with Number(reply) === 0."
+  - "A yes from the filter is not the answer: the users table is. taken is true only when Postgres returns a row."
+  - "redis.sendCommand(['BF.EXISTS', 'bf:usernames', name]) works without any typed helper."
+
+verify:
+  - type: behavior
+    slot: users.usernameTaken
+    fixtures: fixtures/14-filter.yaml
+    assertions:
+      - call: { args: [tariq.bhat75] }
+        expect: { taken: true, checkedDb: true }
+        message: "tariq.bhat75 is in the filter and in the users table: the filter says maybe, Postgres says yes, so the answer is { taken: true, checkedDb: true }."
+      - call: { args: [quest.ghost99] }
+        expect: { taken: false, checkedDb: true }
+        message: "quest.ghost99 is in the filter but not in Postgres, a false positive. The filter says maybe, so Postgres is asked, and the answer is { taken: false, checkedDb: true }. A yes from the filter is not the answer."
+      - call: { args: [nobody.has.this.name] }
+        expect: { taken: false, checkedDb: false }
+        message: "nobody.has.this.name is in neither. The filter says certainly not, so the answer is { taken: false, checkedDb: false } and Postgres is never asked."
+  - type: quiz
+    question: "A Bloom filter for a million handles at an error rate of 0.1% needs 14.378 bits per item. About how much memory is that?"
+    options:
+      - id: about-180-mb
+        label: "About 180 MB"
+      - id: about-18-kb
+        label: "About 18 KB"
+      - id: about-1-8-mb
+        label: "About 1.8 MB (a million items times 14.378 bits is roughly 14.4 million bits)"
+      - id: same-as-the-handles
+        label: "As much as the handles themselves, a few tens of MB"
+    correct: about-1-8-mb
+    explanation: "The page gives 14.378 bits per item for 0.1%. A million items is 14,378,000 bits, which is a little under 1.8 megabytes. That is small enough to keep in front of every signup form. Oversizing wastes memory and undersizing raises the error rate or adds sub-filters."
+  - type: quiz
+    question: "A shop wants to stop a coupon being used twice, and a used coupon must be removed from the set of valid ones. Which structure?"
+    options:
+      - id: bloom-filter
+        label: "A Bloom filter: remove the coupon with BF.DEL"
+      - id: hyperloglog
+        label: "A HyperLogLog: it counts how many coupons were used"
+      - id: count-min-sketch
+        label: "A count-min sketch: it estimates how many times each coupon was used"
+      - id: cuckoo-filter
+        label: "A cuckoo filter: it supports deletion (CF.DEL), which is why the docs list coupon validation as a use"
+    correct: cuckoo-filter
+    explanation: "A Bloom filter cannot delete, and there is no BF.DEL. The cuckoo filter can, at the cost of slower inserts. The docs name coupon validation (remove the coupon on use) as a use case, with the caution that inserting the same item repeatedly can fill the filter."
+
+show_me:
+  component: kv_card
+  keys: ["bf:usernames"]
+docs:
+  - https://redis.io/docs/latest/develop/data-types/probabilistic/bloom-filter/
+  - https://redis.io/docs/latest/develop/data-types/probabilistic/cuckoo-filter/
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+
+reward:
+  xp: 50
+  badge: "Definitely not"
+
+solutions:
+  reference: solutions/14-reference.js
+  wrong:
+    - path: solutions/14-wrong-postgres-always.js
+      expect: wrong
+      because: "Postgres is asked for every name, including the one the filter knows is free, so checkedDb is true for nobody.has.this.name. The filter was never used."
+    - path: solutions/14-wrong-trust-the-filter.js
+      expect: wrong
+      because: "A yes from the filter is reported as taken. quest.ghost99 is only a false positive, so a free name is refused, and the real handle comes back without having been checked in Postgres."

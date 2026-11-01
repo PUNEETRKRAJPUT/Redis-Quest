@@ -1,0 +1,8 @@
+# Wrong: a list holds the six balls, but it is not a stream. No ids, no XRANGE, no XINFO STREAM, and TYPE says list.
+RPUSH match:m-041:balls "over 1 ball 1 batter p-028 runs 4"
+RPUSH match:m-041:balls "over 1 ball 2 batter p-028 runs 1"
+RPUSH match:m-041:balls "over 1 ball 3 batter p-034 runs 0"
+RPUSH match:m-041:balls "over 1 ball 4 batter p-034 runs 6"
+RPUSH match:m-041:balls "over 1 ball 5 batter p-028 runs 2"
+RPUSH match:m-041:balls "over 1 ball 6 batter p-028 runs 1"
+LLEN match:m-041:balls

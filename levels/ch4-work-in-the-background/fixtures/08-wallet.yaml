@@ -1,0 +1,4 @@
+# u-000010 starts with 100 points, and the award for match m-041 has not been credited yet.
+steps:
+  - cmd: [SET, "wallet:u-000010", 100]
+  - cmd: [DEL, "idem:award-m-041-u-000010"]

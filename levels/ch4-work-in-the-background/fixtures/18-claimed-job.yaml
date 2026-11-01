@@ -1,0 +1,8 @@
+# One job being worked on: fixture-1 is in processing, claimed by a worker holding the token "fixture-token", attempt 1.
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'queue:jobs:job:*')) do redis.call('DEL', k) end redis.call('DEL', 'queue:jobs:pending', 'queue:jobs:processing', 'queue:jobs:completed', 'queue:jobs:failed', 'queue:jobs:delayed') return 1"
+      - 0
+  - cmd: [HSET, "queue:jobs:job:fixture-1", id, fixture-1, payload, '{"kind":"award","userId":"u-000010","amount":50}', status, processing, attempts, 1, enqueued_at_ms, 1700000000000, claimed_at_ms, 99999999999999, claim_token, fixture-token]
+  - cmd: [LPUSH, "queue:jobs:processing", fixture-1]

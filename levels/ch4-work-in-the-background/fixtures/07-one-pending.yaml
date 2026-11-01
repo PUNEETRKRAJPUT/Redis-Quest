@@ -1,0 +1,8 @@
+# One job waiting, with a known id: fixture-1. Nothing else in the queue.
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'queue:jobs:job:*')) do redis.call('DEL', k) end redis.call('DEL', 'queue:jobs:pending', 'queue:jobs:processing', 'queue:jobs:completed', 'queue:jobs:failed', 'queue:jobs:delayed') return 1"
+      - 0
+  - cmd: [HSET, "queue:jobs:job:fixture-1", id, fixture-1, payload, '{"kind":"award","userId":"u-000010","amount":50}', status, pending, attempts, 0, enqueued_at_ms, 1700000000000]
+  - cmd: [LPUSH, "queue:jobs:pending", fixture-1]

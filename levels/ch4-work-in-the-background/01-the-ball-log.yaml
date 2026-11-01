@@ -1,0 +1,132 @@
+id: ch4-01-the-ball-log
+chapter: ch4
+title: "The ball log"
+mode: cli
+
+story: |
+  It is 10:30 pm and the chase is down to the last over. Forty thousand teams are staring at their phones waiting for points per
+  ball, and the ticker you built in Chapter 3 has just lost two balls again. Teja sends a screenshot: ball 1, then ball 4, as
+  if nothing happened in between. "I only restarted the worker! One second! It was one second, bhai!"
+
+  The ticker is a broadcast. A restart is a gap, and the gap is simply gone. What the points worker needs is not a broadcast but a
+  log: every ball written down in order, kept after it is read, so that a worker that was away can say "I last saw this one,
+  give me everything after it".
+
+  Redis has exactly that type, a stream. Before any worker exists, you will write the balls of an over into one and read them
+  back in the ways a worker will.
+
+brainstorm:
+  prompt: "Every ball of a match must be kept in order, and a worker that restarts must be able to ask for everything after the last ball it saw. What holds the balls?"
+  options:
+    - id: stream-log
+      label: "A log in Redis where every entry gets an id that sorts in time order, and a reader can ask for the entries after any id"
+      is_reasonable: true
+    - id: pubsub-channel
+      label: "The Pub/Sub channel from Chapter 3, with the worker subscribed all the time"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a balls table in Postgres, and the worker asks for rows with an id above the last one it saw"
+      is_reasonable: true
+
+setup:
+  - cmd: [DEL, "match:m-041:balls"]
+
+teach: |
+  The streams page in the docs calls a stream an append-only log with consumer groups. Every entry has an id of the form
+  `<milliseconds>-<sequence>` and a set of field and value pairs. Writing `*` as the id asks Redis to generate one that is
+  greater than every id already in the stream.
+
+  - `XADD key [MAXLEN ~ n] * field value ...` appends an entry and answers with the id it got. `XADD` is O(1), and a cap
+    such as `MAXLEN ~ 1000` makes the stream drop its oldest entries as new ones arrive. The docs' production guidance for
+    streams is `MAXLEN ~` by default, exact trimming only when you really need it.
+  - `XLEN key` is how many entries the stream holds, also O(1).
+  - `XRANGE key - + [COUNT n]` reads entries from the oldest (`-`) to the newest (`+`), both ends inclusive. A `(` in front
+    of an id makes that end exclusive, which is how you page: `XRANGE key (<last id you saw> + COUNT 2`.
+  - `XINFO STREAM key` describes the stream: `length`, `first-entry`, `last-entry` and more.
+
+  A stream is not a list. An entry stays when it is read, ids are time-ordered by construction, and one stream can be read by
+  many readers at once, each from its own position. That is the difference from the broadcast of Chapter 3 and from a list
+  used as a queue, where reading an item removes it.
+
+  Fields here follow the chapter: `over`, `ball`, `batter`, `runs`. The ball log of match `m-041` lives at
+  `match:m-041:balls`. Worked example, not your task: `XADD demo:log * who teja what chai`.
+
+task: |
+  The game has deleted `match:m-041:balls`. Write the first over, six balls, in the game terminal.
+
+  1. Append all six, each with `XADD match:m-041:balls MAXLEN ~ 1000 * ...` and these fields:
+     - `over 1 ball 1 batter p-028 runs 4`
+     - `over 1 ball 2 batter p-028 runs 1`
+     - `over 1 ball 3 batter p-034 runs 0`
+     - `over 1 ball 4 batter p-034 runs 6`
+     - `over 1 ball 5 batter p-028 runs 2`
+     - `over 1 ball 6 batter p-028 runs 1`
+     Each `XADD` answers with the id Redis gave the entry.
+  2. `XLEN match:m-041:balls` should answer 6.
+  3. Read two at a time: `XRANGE match:m-041:balls - + COUNT 2`. Copy the id of the second entry and read the next two with
+     `XRANGE match:m-041:balls (<that id> + COUNT 2`.
+  4. `XINFO STREAM match:m-041:balls`, and find `length`, `first-entry` and `last-entry` in the answer.
+
+  Then answer the two questions and press Verify.
+
+hints:
+  - "XADD match:m-041:balls MAXLEN ~ 1000 * over 1 ball 2 batter p-028 runs 1 is the second ball. The * is typed as it is."
+  - "The id of the second entry is the first element of the second item XRANGE printed, something like 1793522888894-0."
+  - "If you pressed Verify with the wrong count, DEL match:m-041:balls and write the six again, or just append until XLEN says 6."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [TYPE, "match:m-041:balls"]
+        equals: stream
+        message: "match:m-041:balls should be a stream. Write the balls with XADD, not RPUSH or SET."
+      - cmd: [XLEN, "match:m-041:balls"]
+        equals: 6
+        message: "The first over has six balls, so XLEN match:m-041:balls should be 6."
+      - cmd: [XINFO, STREAM, "match:m-041:balls"]
+        contains: length
+        message: "XINFO STREAM should describe the stream, including its length. It does not, so the key is not a stream."
+  - type: quiz
+    question: "Why does the log use XADD ... MAXLEN ~ 1000 and not the exact MAXLEN 1000?"
+    options:
+      - id: tilde-keeps-forever
+        label: "The ~ means keep every entry for ever, so nothing is trimmed"
+      - id: tilde-per-match
+        label: "The ~ makes one cap per match instead of one for the whole stream"
+      - id: exact-is-not-allowed
+        label: "Redis refuses the exact form on a stream that has consumer groups"
+      - id: approximate-is-the-default
+        label: "The approximate form is the docs' default for capping a stream: Redis may keep slightly more than 1000 and trims in cheap chunks, and exact trimming is for when you really need it"
+    correct: approximate-is-the-default
+    explanation: "The streaming guide recommends MAXLEN ~ by default and exact trimming only if needed. The approximate form lets Redis trim in whole chunks, so the stream can briefly hold a little more than the number you wrote, and the work per XADD stays small. For a ball log that is exactly the right trade: nobody needs exactly 1000."
+  - type: quiz
+    question: "What does XADD answer with?"
+    options:
+      - id: ok
+        label: "OK"
+      - id: the-length
+        label: "The new length of the stream"
+      - id: the-entry-id
+        label: "The id it gave the new entry, like 1793522888894-0 (milliseconds, a dash, a sequence number)"
+      - id: the-trimmed-count
+        label: "How many old entries the cap removed"
+    correct: the-entry-id
+    explanation: "XADD answers with the id of the entry it wrote. That id is what a reader remembers as 'the last ball I saw' and passes back, with a ( in front, to ask for everything after it."
+
+show_me:
+  component: stream_log
+  keys: ["match:m-041:balls"]
+docs:
+  - https://redis.io/docs/latest/develop/data-types/streams/
+  - https://redis.io/docs/latest/develop/use-cases/streaming
+
+reward:
+  xp: 30
+  badge: "Ball by ball"
+
+solutions:
+  reference: solutions/01-reference.redis
+  wrong:
+    - path: solutions/01-wrong-list.redis
+      expect: wrong
+      because: "RPUSH builds a list, not a stream. The six balls are there, but TYPE says list, XLEN refuses to run on it, and a list has no ids and no way to ask for everything after a ball."

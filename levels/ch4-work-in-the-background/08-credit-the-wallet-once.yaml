@@ -1,0 +1,148 @@
+id: ch4-08-credit-the-wallet-once
+chapter: ch4
+title: "Credit the wallet once"
+mode: code
+
+story: |
+  It is 10:44 pm and Warden Sir has his glasses on, which is never good. "My nephew Bunty's wallet shows 200. It should show
+  150. He says he was given the contest prize twice, and he says it very proudly." The warden is right and so is Bunty. The job
+  queue from the last level is at-least-once: when a worker is slow, the reclaimer hands the job to another, and for a minute
+  two workers both believe the prize is theirs to give. Both add 50 points.
+
+  You cannot make the queue deliver exactly once. Nobody can. What you can do is make the thing the job does safe to repeat. A
+  prize for match m-041 and user u-000010 is one event, however many times the job is delivered, and it needs a name that every
+  delivery shares: an idempotency key.
+
+  "One gift per student, same as the mess token," the warden says. Write the mess token.
+
+brainstorm:
+  prompt: "The same credit job can be delivered twice. How do you make sure the wallet changes once?"
+  options:
+    - id: idempotency-key
+      label: "Give the credit a key that every delivery shares, remember that it was used, and only change the wallet the first time"
+      is_reasonable: true
+    - id: hope-no-repeat
+      label: "Make the reclaimer wait longer so a job is never delivered twice"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a unique constraint on a ledger row in Postgres, with the credit and the row inserted in one transaction"
+      is_reasonable: true
+
+teach: |
+  The job-queue page of the docs says it plainly: delivery is at-least-once, and work with side effects such as a charge needs
+  idempotency keys or a low retry count. An idempotency key is a name for the event, not for the attempt. Here
+  `award-m-041-u-000010` means "the prize of match m-041 for user u-000010". A random id made per delivery would be useless: it
+  would differ every time.
+
+  - `SET idem:<key> 1 NX EX 86400` writes the marker only if it does not exist (NX) and gives it a day to live (EX). The answer
+    is `OK` for the first caller and nil for everyone after. In a Lua script `redis.call('SET', ...)` is truthy or `false`.
+  - Only when the marker was written do you `INCRBY wallet:<userId> amount`.
+
+  The two steps have to be one step. After a `SET NX` and before the `INCRBY` a crash would leave the marker saying "done" and
+  the wallet untouched: the credit would be lost for ever, which is worse than a double credit you can see. A transaction cannot
+  help: you do not know whether to credit until the `SET` has answered. A Lua script makes both happen together, and returns
+  the balance. (In a `MULTI` after the `SET` replied you would have two steps again.)
+
+  The marker needs an expiry, or every prize ever given leaves a key behind. A day is longer than any retry window this queue
+  has. Returns here: `{ credited, balance }`, where `credited` says whether this call was the one that changed the wallet.
+
+task: |
+  Fill in `credit(deps, userId, amount, idempotencyKey)` in `workspace/ch4/wallet-credit.js`. It returns
+  `{ credited: boolean, balance: number }`.
+
+  - The marker is the string `idem:<idempotencyKey>`, set with `NX` and an expiry of `86400` seconds. The wallet is the string
+    `wallet:<userId>` holding the points.
+  - First call with a key: add `amount` to the wallet and return `{ credited: true, balance: <new balance> }`.
+  - Any later call with the same key: change nothing and return `{ credited: false, balance: <current balance> }`.
+  - Do the marker and the credit as one step (a Lua script is the simplest way).
+
+  The check gives `u-000010` 100 points and credits 50 twice with the key `award-m-041-u-000010`: the second call must not
+  add. Then twenty calls race for a fresh key on `u-000011`: exactly one may credit. Tick "Run my code in the app" to try it with
+  `POST /app/wallets/u-000010/credit` and a JSON body of `amount` and `key`.
+
+hints:
+  - "SET key value NX EX seconds answers OK or nil. In a Lua script, redis.call('SET', ...) returns a truthy value or false."
+  - "Return the balance from the script too: { 1, balance } when you credited, { 0, balance } when the key had been used."
+  - "redis.eval(script, { keys: [markerKey, walletKey], arguments: [String(amount), '86400'] }, and read the two numbers from the reply array."
+
+verify:
+  - type: behavior
+    slot: wallet.credit
+    fixtures: fixtures/08-wallet.yaml
+    assertions:
+      - call: { args: [u-000010, 50, award-m-041-u-000010] }
+        expect: { credited: true, balance: 150 }
+        message: "The first credit of 50 to a wallet of 100 should return { credited: true, balance: 150 }."
+      - call: { args: [u-000010, 50, award-m-041-u-000010] }
+        expect: { credited: false, balance: 150 }
+        message: "The same key again is a repeat: it must not credit, and should return { credited: false, balance: 150 }."
+        sideEffect:
+          - cmd: [GET, "wallet:u-000010"]
+            equals: 150
+            message: "The wallet should read 150 after two deliveries of the same credit. Anything higher means the repeat was credited."
+  - type: behavior
+    slot: wallet.credit
+    fixtures: fixtures/08-wallet-fresh.yaml
+    concurrency: 20
+    assertions:
+      - call: { args: [u-000011, 50, award-m-041-u-000011] }
+        repeat: 20
+        expectCount: { value: { credited: true, balance: 150 }, equals: 1 }
+        message: "Twenty simultaneous calls with one key: exactly one should return { credited: true, balance: 150 }. More than one means two callers both saw a fresh key and both credited."
+        sideEffect:
+          - cmd: [GET, "wallet:u-000011"]
+            equals: 150
+            message: "After twenty calls with one key the wallet should read 150, one credit of 50."
+  - type: antipattern
+    checks:
+      - cmd: [TTL, "idem:award-m-041-u-000011"]
+        between: [1, 86400]
+        message: "This passes today, but the idempotency marker never expires. Every prize ever given leaves an idem:<key> string in Redis for good. Give the marker an expiry when you set it: SET ... NX EX 86400."
+  - type: quiz
+    question: "What should the idempotency key be built from?"
+    options:
+      - id: random-per-delivery
+        label: "A random id made each time the job is delivered"
+      - id: the-business-event
+        label: "The event being paid, like award-m-041-u-000010 (the match and the user): every delivery of the same job shares it"
+      - id: timestamp
+        label: "The time the worker started"
+      - id: worker-name
+        label: "The name of the worker that handled it"
+    correct: the-business-event
+    explanation: "The point of the key is that two deliveries of the same job produce the same key, so the second finds the marker. Anything created per delivery (a random id, a timestamp, the worker's name) differs between deliveries and protects nothing."
+  - type: quiz
+    question: "Why must the SET NX and the INCRBY happen as one step?"
+    options:
+      - id: faster
+        label: "Two commands are slower than one script"
+      - id: redis-requires
+        label: "Redis refuses a SET NX that is not inside a script"
+      - id: expiry
+        label: "Otherwise the marker's expiry does not start"
+      - id: crash-between-loses-credit
+        label: "A crash between them leaves the marker saying done and the wallet unchanged, and the repeat is then refused: the credit is lost for ever"
+    correct: crash-between-loses-credit
+    explanation: "With the marker first and the credit second, a crash in between records that the credit was done when it was not, and every retry is then refused as a repeat. Putting both in one Lua script makes them happen together or not at all."
+
+show_me:
+  component: kv_card
+  keys: ["wallet:u-000010", "idem:award-m-041-u-000010"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/job-queue
+  - https://redis.io/docs/latest/develop/programmability/eval-intro/
+  - https://redis.io/docs/latest/develop/data-types/strings/
+
+reward:
+  xp: 60
+  badge: "One gift per student"
+
+solutions:
+  reference: solutions/08-reference.js
+  wrong:
+    - path: solutions/08-wrong-no-idempotency.js
+      expect: wrong
+      because: "Every call adds to the wallet. The second delivery of the same credit returns credited: true and the wallet reads 200 instead of 150, which is exactly Bunty's double prize."
+    - path: solutions/08-works-but-wrong-no-ttl-on-key.js
+      expect: works_but_wrong
+      because: "The credit is applied once per key and the race is closed, but the marker has no expiry. Every award leaves an idem:<key> string in Redis for ever."

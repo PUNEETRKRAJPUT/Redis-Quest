@@ -1,0 +1,122 @@
+id: ch4-12-lobby-expired-tell-everyone
+chapter: ch4
+title: "The lobby expired, tell everyone"
+mode: cli
+
+story: |
+  It is 10:52 pm. The match lobby for m-043 is a key that opens ten minutes before the toss and is supposed to vanish when the
+  lobby closes. When it vanishes, three things must happen: the "lobby closed" banner, the entry fees refunded and the leaderboard
+  frozen. Today those are triggered by a timer in the app that wakes up every thirty seconds and checks which lobbies are over.
+  Teja points out the obvious: "Redis already knows when it deletes the key. Why do we poll?"
+
+  He is half right, which is the dangerous kind of right. Redis can tell you when a key expires. It does that through the same
+  Pub/Sub you used for the ticker, with the same promise: at most once, to whoever is listening at that instant. And it tells you
+  when it deletes the key, which is not always the moment the clock runs out.
+
+  Switch the notifications on and watch one lobby go. Then decide how much to trust it.
+
+brainstorm:
+  prompt: "Something should happen the moment a lobby key expires. How does the app find out?"
+  options:
+    - id: expired-events
+      label: "Ask Redis to publish an event when a key expires and subscribe to it, with a slow poll behind it for the events that are missed"
+      is_reasonable: true
+    - id: only-events
+      label: "Rely on the expiry event alone: Redis will always tell us"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a scheduled_at column in Postgres and a job that polls for lobbies whose time has passed"
+      is_reasonable: true
+
+teach: |
+  The keyspace notifications page of the docs: Redis can publish events about changes to keys over Pub/Sub. They are **off by default**
+  because they cost CPU. You enable them with the `notify-keyspace-events` setting, `redis.conf` or `CONFIG SET`, and the value must
+  include `K` (events on the keyspace channel `__keyspace@0__:<key>`) or `E` (events on the keyevent channel `__keyevent@0__:<event>`).
+  Letters pick event classes. `x` is expired events, `e` is evicted, `g` is generic commands like `DEL` and `EXPIRE`, `$` is string
+  commands, and `A` is an alias for most of them.
+
+  - `CONFIG SET notify-keyspace-events Ex` turns on the expired events on the keyevent channel. `CONFIG GET notify-keyspace-events`
+    shows what is set; Redis may reorder the letters (`Ex` reads back as `xE`).
+  - When a key with a TTL expires, Redis publishes `__keyevent@0__:expired` with the key name as the message.
+  - Pub/Sub here is **fire and forget**: a subscriber that is disconnected misses the event for good, the same at-most-once you met in Chapter 3.
+  - The page is explicit about timing: `expired` fires when Redis **deletes** the key (when it is accessed, or when a background scan
+    finds it), **not exactly when the TTL reaches zero**, and a significant delay is possible.
+
+  So the event is a good trigger and a poor guarantee. Use it to react fast, and keep a slower sweep behind it that finds lobbies the
+  event never reported. In a cluster the events are per node, so a subscriber has to listen on each.
+
+task: |
+  Run these in the game terminal.
+
+  1. `CONFIG SET notify-keyspace-events Ex`
+  2. `SET lobby:m-043 open EX 10`
+  3. Press Verify **now** and leave it waiting. The check subscribes to the expired events while it waits (up to 60 seconds) and
+     sees the lobby go about ten seconds after your `SET`. If you press Verify after the key is already gone, the check missed it:
+     run step 2 again, which sets a new ten second lifetime, and press Verify straight away.
+
+  Answer the two questions before you press Verify, or after: the answers do not depend on the event.
+
+hints:
+  - "CONFIG SET notify-keyspace-events Ex with a capital E and a lowercase x. Then CONFIG GET notify-keyspace-events should show xE."
+  - "If the event is not seen, check CONFIG GET first: with no config the key still expires, silently."
+  - "The game's check waits for the event, so press Verify within a few seconds of the SET and do not type anything else while it waits."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [CONFIG, GET, notify-keyspace-events]
+        oneOf:
+          - [notify-keyspace-events, xE]
+          - [notify-keyspace-events, AKE]
+          - [notify-keyspace-events, gxE]
+          - [notify-keyspace-events, xeE]
+        message: "Expired events are not switched on. CONFIG SET notify-keyspace-events Ex needs E (the keyevent channel) and x (expired events). CONFIG GET should read xE."
+  - type: event
+    kind: key_expired
+    match: { key: "lobby:m-043" }
+    timeoutMs: 60000
+    message: "The game has not seen lobby:m-043 expire. Run CONFIG SET notify-keyspace-events Ex, then SET lobby:m-043 open EX 10, press Verify straight away and wait up to a minute."
+  - type: quiz
+    question: "The lobby key was set with EX 10. What does the expired event promise?"
+    options:
+      - id: fires-at-exact-second
+        label: "It fires at exactly the tenth second, and Redis keeps it until a subscriber reads it"
+      - id: fires-on-every-read
+        label: "It fires every time anyone reads the key after it has expired"
+      - id: fires-when-deleted-maybe-late
+        label: "It fires when Redis actually deletes the key, which can be later than the 10 seconds, and it is fire and forget: a subscriber that was disconnected misses it"
+      - id: always-delivered
+        label: "It is delivered at least once to every client that ever subscribed"
+    correct: fires-when-deleted-maybe-late
+    explanation: "The keyspace notifications page says expired events are published when the key is deleted, on access or by the background scan, not exactly when the TTL reaches zero, and that Pub/Sub is fire and forget, so events are lost for subscribers that are disconnected. Treat the event as a hint that speeds things up."
+  - type: quiz
+    question: "The banner and the refunds must happen for every lobby, even if the app restarts at the wrong moment. What is the design?"
+    options:
+      - id: event-plus-sweep
+        label: "React to the expired event for speed, and keep a slower sweep that finds lobbies the event never reported"
+      - id: events-only
+        label: "Subscribe to the expired event and nothing else"
+      - id: poll-only-fast
+        label: "Poll every lobby every second and never use events"
+      - id: longer-ttl
+        label: "Give every lobby a longer TTL so the event cannot be missed"
+    correct: event-plus-sweep
+    explanation: "An event is lost when the subscriber is away, and it can arrive late, so it cannot be the only trigger. Polling alone works but wastes work and reacts slowly. The sound shape is the event for speed and a sweep for correctness, which is the same pattern as a stream with a reconciling reader."
+
+show_me:
+  component: ttl_timer
+  keys: ["lobby:m-043"]
+docs:
+  - https://redis.io/docs/latest/develop/pubsub/keyspace-notifications/
+  - https://redis.io/docs/latest/develop/pubsub/
+
+reward:
+  xp: 40
+  badge: "Tell everyone"
+
+solutions:
+  reference: solutions/12-reference.redis
+  wrong:
+    - path: solutions/12-wrong-no-config.redis
+      expect: wrong
+      because: "Notifications are off by default. The lobby expires, but nothing was ever published, so the game waits for an event that cannot come and CONFIG GET shows no x and no E."

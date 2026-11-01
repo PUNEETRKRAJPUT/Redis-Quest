@@ -1,0 +1,16 @@
+# The five samples the record check writes, already stored in the shape the reference stores them, so range can be checked on
+# its own. Two one-minute buckets (ALIGN 0): 1700000040000 holds samples 1 to 3, 1700000100000 holds samples 4 and 5.
+#   at             status  ms   requests  errors (1 when status >= 500)
+#   1700000040000  200     20   1         0
+#   1700000050000  200     40   1         0
+#   1700000059000  500     300  1         1
+#   1700000100000  200     60   1         0
+#   1700000130000  503     100  1         1
+steps:
+  - cmd: [DEL, "ts:requests:GET_app_players_:id_stats", "ts:errors:GET_app_players_:id_stats", "ts:latency:GET_app_players_:id_stats", "td:latency"]
+  - cmd: [TS.CREATE, "ts:requests:GET_app_players_:id_stats", RETENTION, 86400000, DUPLICATE_POLICY, SUM, LABELS, kind, requests, route, "GET_app_players_:id_stats"]
+  - cmd: [TS.CREATE, "ts:errors:GET_app_players_:id_stats", RETENTION, 86400000, DUPLICATE_POLICY, SUM, LABELS, kind, errors, route, "GET_app_players_:id_stats"]
+  - cmd: [TS.CREATE, "ts:latency:GET_app_players_:id_stats", RETENTION, 86400000, DUPLICATE_POLICY, LAST, LABELS, kind, latency, route, "GET_app_players_:id_stats"]
+  - cmd: [TS.MADD, "ts:requests:GET_app_players_:id_stats", 1700000040000, 1, "ts:requests:GET_app_players_:id_stats", 1700000050000, 1, "ts:requests:GET_app_players_:id_stats", 1700000059000, 1, "ts:requests:GET_app_players_:id_stats", 1700000100000, 1, "ts:requests:GET_app_players_:id_stats", 1700000130000, 1]
+  - cmd: [TS.MADD, "ts:errors:GET_app_players_:id_stats", 1700000040000, 0, "ts:errors:GET_app_players_:id_stats", 1700000050000, 0, "ts:errors:GET_app_players_:id_stats", 1700000059000, 1, "ts:errors:GET_app_players_:id_stats", 1700000100000, 0, "ts:errors:GET_app_players_:id_stats", 1700000130000, 1]
+  - cmd: [TS.MADD, "ts:latency:GET_app_players_:id_stats", 1700000040000, 20, "ts:latency:GET_app_players_:id_stats", 1700000050000, 40, "ts:latency:GET_app_players_:id_stats", 1700000059000, 300, "ts:latency:GET_app_players_:id_stats", 1700000100000, 60, "ts:latency:GET_app_players_:id_stats", 1700000130000, 100]

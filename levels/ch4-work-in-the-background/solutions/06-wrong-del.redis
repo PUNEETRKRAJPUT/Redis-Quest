@@ -1,0 +1,3 @@
+# Wrong: DEL removes the key, so the consumer group goes with it.
+DEL match:m-041:balls
+XLEN match:m-041:balls

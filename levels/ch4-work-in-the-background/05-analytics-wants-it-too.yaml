@@ -1,0 +1,160 @@
+id: ch4-05-analytics-wants-it-too
+chapter: ch4
+title: "Analytics wants it too"
+mode: cli
+
+story: |
+  It is 10:38 pm. The points workers are healthy, and then Harry Bhaiya walks in with a second request, the kind that
+  sounds small. The sponsors want a live "runs per over" board and a post-match report, and the analytics script has to see
+  every ball, the same balls the points workers see, without taking any of them away from the points workers.
+
+  A list would not do this: reading a ball from a list removes it for everybody. Pub/Sub would drop balls whenever the
+  analytics script blinks. But a stream does not care how many groups read it. Each group has its own place in the log and its
+  own pending list, as if each had its own copy.
+
+  The game has put six balls in `match:m-041:balls` and a group `points` that has read and acknowledged all of them. Add
+  analytics next to it, and watch the two groups drift apart on purpose.
+
+brainstorm:
+  prompt: "Points workers and an analytics job must both receive every ball, each at its own speed, and neither may take balls from the other. How?"
+  options:
+    - id: second-group
+      label: "A second consumer group on the same stream: each group keeps its own position and pending list"
+      is_reasonable: true
+    - id: shared-group
+      label: "Put the analytics worker in the points group so it gets its share of the balls"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: the points worker writes every ball it processes to an events table for analytics"
+      is_reasonable: true
+
+setup:
+  - cmd: [DEL, "match:m-041:balls", "match:m-041:balls:dead", "lb:match:m-041"]
+  - cmd: [XADD, "match:m-041:balls", "1700000000001-0", over, 1, ball, 1, batter, p-028, runs, 4]
+  - cmd: [XADD, "match:m-041:balls", "1700000000002-0", over, 1, ball, 2, batter, p-028, runs, 1]
+  - cmd: [XADD, "match:m-041:balls", "1700000000003-0", over, 1, ball, 3, batter, p-034, runs, 6]
+  - cmd: [XADD, "match:m-041:balls", "1700000000004-0", over, 1, ball, 4, batter, p-028, runs, 0]
+  - cmd: [XADD, "match:m-041:balls", "1700000000005-0", over, 1, ball, 5, batter, p-034, runs, 2]
+  - cmd: [XADD, "match:m-041:balls", "1700000000006-0", over, 1, ball, 6, batter, p-028, runs, 6]
+  - cmd: [XGROUP, CREATE, "match:m-041:balls", points, "0-0"]
+  - cmd: [XREADGROUP, GROUP, points, w1, COUNT, 10, STREAMS, "match:m-041:balls", ">"]
+  - cmd: [XACK, "match:m-041:balls", points, "1700000000001-0", "1700000000002-0", "1700000000003-0", "1700000000004-0", "1700000000005-0", "1700000000006-0"]
+
+teach: |
+  The streaming guide says it directly: multiple independent groups on one stream, each group with its own
+  `last-delivered-id` and its own pending list. Adding a consumer to a group splits that group's work; adding a group gives a new
+  reader the whole stream.
+
+  - `XGROUP CREATE key group <id>` decides where the new group starts. `$` means "only entries added after this moment"; `0-0`
+    means "from the very first entry, replay everything". The guide's advice for a new group on an old stream is usually `$`,
+    and use `XRANGE` if you really want the history.
+  - `XINFO GROUPS key` lists each group: `name`, `consumers`, `pending`, `last-delivered-id`, `entries-read`, and `lag`. The guide
+    tells you to alert on `lag` and `pending`. In the answer on this stack, `pending` counts entries delivered and not yet
+    acknowledged, and `lag` counts entries in the stream the group has not been given yet.
+  - `XPENDING key group` is the summary for one group, and `XINFO CONSUMERS key group` shows each worker's idle time and pending.
+
+  Here you create the group at `$`, add two balls, read them as one analytics worker and, on purpose, do not acknowledge them.
+  Then `XINFO GROUPS` shows two groups in two different states: points has two balls it has not been given yet (lag 2), and
+  analytics has been given them but has not acknowledged them (pending 2).
+
+task: |
+  The game has written six balls and a `points` group that has read and acknowledged all of them.
+
+  1. `XGROUP CREATE match:m-041:balls analytics $` creates the analytics group, starting from now.
+  2. Add two more balls:
+     - `XADD match:m-041:balls * over 2 ball 1 batter p-028 runs 4`
+     - `XADD match:m-041:balls * over 2 ball 2 batter p-034 runs 1`
+  3. Read them as one analytics worker: `XREADGROUP GROUP analytics a1 COUNT 10 STREAMS match:m-041:balls >`. You get the two
+     new balls, not the six old ones. **Do not acknowledge them**, so the numbers stay visible.
+  4. `XINFO GROUPS match:m-041:balls`. For each group read `pending` and `lag`.
+
+  Then answer the two questions and press Verify.
+
+hints:
+  - "XGROUP CREATE takes the stream, the group name and the start id: $ for only new entries."
+  - "If XREADGROUP answers nil, the two XADDs came before the group was created. Create the group first, then add the balls."
+  - "If you read the history by mistake and pending says 8, delete the group with XGROUP DESTROY match:m-041:balls analytics and start step 1 again."
+
+verify:
+  - type: redis
+    checks:
+      - cmd:
+          - EVAL_RO
+          - "local g = redis.call('XINFO','GROUPS',KEYS[1]) local n = {} for i,x in ipairs(g) do n[#n+1] = x[2] end table.sort(n) return n"
+          - 1
+          - "match:m-041:balls"
+        equals: [analytics, points]
+        message: "The stream should have exactly two groups, analytics and points. Create the second with XGROUP CREATE match:m-041:balls analytics $."
+      - cmd: [XLEN, "match:m-041:balls"]
+        equals: 8
+        message: "The stream should hold the six original balls and the two you added, 8 in all."
+      - cmd:
+          - EVAL_RO
+          - "return redis.call('XPENDING', KEYS[1], ARGV[1])[1]"
+          - 1
+          - "match:m-041:balls"
+          - analytics
+        equals: 2
+        message: "analytics should have exactly 2 pending entries: the two new balls it read and did not acknowledge. If it has 8 it was created at 0-0 and read the whole history."
+      - cmd:
+          - EVAL_RO
+          - "local g = redis.call('XINFO','GROUPS',KEYS[1]) for _,x in ipairs(g) do if x[2]==ARGV[1] then for i=1,#x,2 do if x[i]==ARGV[2] then return x[i+1] end end end end return -1"
+          - 1
+          - "match:m-041:balls"
+          - points
+          - lag
+        equals: 2
+        message: "The points group has not read the two new balls, so its lag should be 2. If it is 0, someone read them as points."
+      - cmd:
+          - EVAL_RO
+          - "local g = redis.call('XINFO','GROUPS',KEYS[1]) for _,x in ipairs(g) do if x[2]==ARGV[1] then for i=1,#x,2 do if x[i]==ARGV[2] then return x[i+1] end end end end return -1"
+          - 1
+          - "match:m-041:balls"
+          - analytics
+          - lag
+        equals: 0
+        message: "analytics has been given every ball, so its lag should be 0. If it is not 0, run the XREADGROUP in step 3."
+  - type: quiz
+    question: "A new group is created on a stream that already holds a day of balls. When should the group start at $ and when at 0-0?"
+    options:
+      - id: zero-always
+        label: "0-0 always: a group should never miss a ball"
+      - id: dollar-for-new-zero-for-history
+        label: "$ for a reader that only needs balls from now on; 0-0 only if it really must replay the whole history (the guide says use XRANGE for history on a new group)"
+      - id: dollar-always
+        label: "$ always: 0-0 is not a valid start id"
+      - id: same-thing
+        label: "They are the same thing on a stream that has data"
+    correct: dollar-for-new-zero-for-history
+    explanation: "The streaming guide advises a new group on an old stream to start at $ and read history with XRANGE if needed. A group created at 0-0 is handed every entry in the stream, which for analytics on a busy match means a day of balls delivered in one burst."
+  - type: quiz
+    question: "XINFO GROUPS shows points with lag 2, pending 0, and analytics with lag 0, pending 2. What does that mean?"
+    options:
+      - id: analytics-behind
+        label: "analytics is two balls behind and points is two balls ahead"
+      - id: points-behind-analytics-unacked
+        label: "points has not yet been given two balls in the stream; analytics was given the two balls and has not acknowledged them"
+      - id: both-broken
+        label: "Both groups are broken: a healthy group has lag 0 and pending 0 at all times"
+      - id: points-lost
+        label: "points lost two balls and analytics is holding them"
+    correct: points-behind-analytics-unacked
+    explanation: "Lag is how many entries in the stream the group has not been handed; pending is how many it was handed and has not acknowledged. The guide tells you to alert on both: a growing lag means the group's workers are too slow, a growing pending means they are crashing or forgetting to acknowledge."
+
+show_me:
+  component: stream_log
+  keys: ["match:m-041:balls"]
+docs:
+  - https://redis.io/docs/latest/develop/data-types/streams/
+  - https://redis.io/docs/latest/develop/use-cases/streaming
+
+reward:
+  xp: 40
+  badge: "Two readers, one log"
+
+solutions:
+  reference: solutions/05-reference.redis
+  wrong:
+    - path: solutions/05-wrong-group-at-zero.redis
+      expect: wrong
+      because: "The group was created at 0-0, so it replays the whole history: after the read analytics has 8 pending entries, not the 2 new balls. A new reader that only needs balls from now on should start at $."

@@ -1,0 +1,10 @@
+# Reference: the first over as a stream. * lets Redis choose each id, MAXLEN ~ 1000 caps the log cheaply.
+XADD match:m-041:balls MAXLEN ~ 1000 * over 1 ball 1 batter p-028 runs 4
+XADD match:m-041:balls MAXLEN ~ 1000 * over 1 ball 2 batter p-028 runs 1
+XADD match:m-041:balls MAXLEN ~ 1000 * over 1 ball 3 batter p-034 runs 0
+XADD match:m-041:balls MAXLEN ~ 1000 * over 1 ball 4 batter p-034 runs 6
+XADD match:m-041:balls MAXLEN ~ 1000 * over 1 ball 5 batter p-028 runs 2
+XADD match:m-041:balls MAXLEN ~ 1000 * over 1 ball 6 batter p-028 runs 1
+XLEN match:m-041:balls
+XRANGE match:m-041:balls - + COUNT 2
+XINFO STREAM match:m-041:balls

@@ -1,0 +1,6 @@
+# Wrong: created at 0-0, so analytics replays all eight balls and has eight pending, not two.
+XGROUP CREATE match:m-041:balls analytics 0-0
+XADD match:m-041:balls * over 2 ball 1 batter p-028 runs 4
+XADD match:m-041:balls * over 2 ball 2 batter p-034 runs 1
+XREADGROUP GROUP analytics a1 COUNT 10 STREAMS match:m-041:balls >
+XINFO GROUPS match:m-041:balls

@@ -64,6 +64,8 @@ start early if everything it depends on is `done`.
 | E-01 | Engine, UI and harness plumbing for Chapter 3: `service_scaled` emitter, "Run my code in the app" switch, harness rules for channel, scale and ticker_gap events (spec: specs/E-01, handoff: handoffs/E-01) | done (check 38 PASS; scratch chapter 6/6; examples 9/9) |
 | A-02 | App plumbing for Chapter 3: leaderboard addPoints/rank/recompute, contest.join, ticker publish slot and provided subscriber with gap detection, `x-quest-instance`, `scripts/hit.sh` (spec: specs/A-02, handoff: handoffs/A-02) | done (check 101 PASS; scale=2 lets 20 through; ticker_gap missed 2; 40,098 recompute rows in 124 ms) |
 | C3 | Chapter 3 levels (15) (spec: specs/C3, handoff: handoffs/C3) | done (static check 302 PASS; graded through the engine by G-01: 43/43 incl. both traffic-decided wrongs, pub/sub and ticker_gap events; 3.1 by hand: 10 then 20 allowed, scale event seen; switch verified in a browser) |
+| A-03 | App plumbing for Chapter 4: stream consume/sweep, job queue slots and routes, idempotent credit, delayed jobs, contest lock, TTL jitter, Bloom username check, ops wall with a provided request hook (spec: specs/A-03) | in progress |
+| C4 | Chapter 4 levels (16 + 3 interviews) (spec: specs/C4) | in progress (parallel with A-03) |
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)

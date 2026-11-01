@@ -1,0 +1,284 @@
+id: ch4-18-interview-job-queue
+chapter: ch4
+title: "Interview: a job queue from a blank file"
+mode: code
+
+interview:
+  minutes: 30
+  rebuild_of: ch4-07-the-job-queue
+  hint_xp_cost: 10
+
+story: |
+  The panel for the next interview is a staff engineer from a ride-hailing company, and the question is the one every backend candidate gets. "Build me a job queue on Redis. Workers take jobs one at a time, a worker can die while holding one, and I do not want to lose it or run it twice at once. I will watch the clock and then kill things."
+
+  No roommate to panic, no teaching page. If you like the files you have now, copy them to safe names first. Then open the empty ones.
+
+brainstorm:
+  prompt: "Before you type: what are the lists, what moves between them, and what stops a stale worker from finishing a job it no longer owns?"
+  options:
+    - id: pending-processing-token
+      label: "A pending list and a processing list with an atomic move, a visibility-timeout reclaimer, and a per-claim token checked in a script"
+      is_reasonable: true
+    - id: single-list-rpop
+      label: "One list, workers RPOP a job and do the work"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a jobs table in Postgres with SELECT ... FOR UPDATE SKIP LOCKED"
+      is_reasonable: true
+
+task: |
+  Write five functions from blank files: `enqueue`, `claim`, `complete`, `fail` and `reclaim`, in `workspace/ch4/jobs-enqueue.js`, `jobs-claim.js`,
+  `jobs-complete.js`, `jobs-fail.js` and `jobs-reclaim.js` (one file re-exported from the five is fine). Each gets `{ redis }` as `deps`.
+
+  - Keys: lists `queue:jobs:pending`, `queue:jobs:processing`, `queue:jobs:completed` and `queue:jobs:failed`, and one hash per job, `queue:jobs:job:<id>`, with
+    `id`, `payload` (JSON text), `status`, `attempts`, `enqueued_at_ms`, `claimed_at_ms` and `claim_token`. New ids go on the left of `pending`, so the oldest is on the right.
+  - `enqueue(deps, payload)` stores the job (status `pending`, attempts 0) and queues it. It returns the id.
+  - `claim(deps, worker, timeoutMs)` moves the oldest id from `pending` to `processing` atomically, waiting up to `timeoutMs` on a connection of its own, stamps
+    status `processing`, `claimed_at_ms`, a fresh random `claim_token` and attempts + 1, and returns `{ id, payload, token, attempts }`, or `null` when nothing arrived.
+  - `complete(deps, id, token, result)` returns `false` and changes nothing unless `token` is the stored one; otherwise it takes the job out of `processing`, pushes
+    the id onto `completed`, sets status `completed` and returns `true`.
+  - `fail(deps, id, token, error, maxAttempts)` has the same token rule (returns `false`). It records `last_error`, takes the job out of `processing` and returns
+    `"retry"` (status `pending`, back on `pending`) while attempts is below `maxAttempts`, otherwise `"failed"` (status `failed`, id on `failed`).
+  - `reclaim(deps, visibilityMs)` moves every job in `processing` claimed `visibilityMs` or more ago back to `pending` (status `pending`, token cleared) and returns how many.
+
+  The check seeds jobs by hand with known ids and tokens, then kills nothing and trusts nothing.
+
+hints:
+  - "The token check and the list moves in complete and fail have to be one step: a Lua script with redis.eval."
+  - "BLMOVE blocks its connection: use deps.redis.duplicate() and connect() for it, never the shared client." 
+
+verify:
+  - type: behavior
+    slot: jobs.enqueue
+    fixtures: fixtures/18-empty-queue.yaml
+    assertions:
+      - call: { args: [{ kind: award, userId: u-000010, amount: 50 }] }
+        message: "enqueue should store the job and put its id on queue:jobs:pending."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:pending"]
+            equals: 1
+            message: "After one enqueue, queue:jobs:pending should hold exactly one id (LPUSH it)."
+          - cmd:
+              - EVAL_RO
+              - "return redis.call('HGET', 'queue:jobs:job:' .. redis.call('LINDEX', KEYS[1], 0), 'status')"
+              - 1
+              - "queue:jobs:pending"
+            equals: pending
+            message: "The id on queue:jobs:pending should have a hash queue:jobs:job:<id> whose status is pending."
+          - cmd:
+              - EVAL_RO
+              - "return redis.call('HGET', 'queue:jobs:job:' .. redis.call('LINDEX', KEYS[1], 0), 'payload')"
+              - 1
+              - "queue:jobs:pending"
+            matches: "u-000010"
+            message: "The job's payload field should hold the payload as JSON text (it should mention u-000010)."
+  - type: behavior
+    slot: jobs.claim
+    fixtures: fixtures/18-one-pending.yaml
+    assertions:
+      - call: { args: [w1, 500] }
+        message: "claim takes the oldest job (fixture-1) from pending and moves it to processing."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:processing"]
+            equals: 1
+            message: "After a claim the job should be in queue:jobs:processing. Move it with BLMOVE, so it is never in neither list."
+          - cmd: [LLEN, "queue:jobs:pending"]
+            equals: 0
+            message: "After a claim the job should have left queue:jobs:pending."
+          - cmd: [HGET, "queue:jobs:job:fixture-1", status]
+            equals: processing
+            message: "A claimed job's hash should say status processing."
+          - cmd: [HGET, "queue:jobs:job:fixture-1", attempts]
+            equals: 1
+            message: "A claim adds one to attempts (HINCRBY), so fixture-1 should now show 1."
+          - cmd: [HGET, "queue:jobs:job:fixture-1", claimed_at_ms]
+            gte: 1
+            message: "A claimed job should record claimed_at_ms, the time it was taken, for the reclaimer."
+      - call: { args: [w2, 300] }
+        expect: null
+        message: "Nothing is waiting any more, so a second claim should wait up to 300 ms and then return null."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:processing"]
+            equals: 1
+            message: "The second claim found nothing, so processing should still hold only fixture-1."
+  - type: behavior
+    slot: jobs.reclaim
+    fixtures: fixtures/18-stuck-job.yaml
+    assertions:
+      - call: { args: [5000] }
+        expect: 1
+        message: "Two jobs are in processing: fixture-stuck was claimed long ago, fixture-fresh was claimed in the far future. With a 5000 ms visibility timeout exactly one should be moved back."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:pending"]
+            equals: 1
+            message: "The stuck job should be back on queue:jobs:pending."
+          - cmd: [LLEN, "queue:jobs:processing"]
+            equals: 1
+            message: "The fresh job must stay in processing: it has not been there for the visibility timeout yet."
+          - cmd: [LINDEX, "queue:jobs:pending", 0]
+            equals: fixture-stuck
+            message: "The job that came back should be fixture-stuck."
+          - cmd: [HGET, "queue:jobs:job:fixture-stuck", status]
+            equals: pending
+            message: "A reclaimed job's hash should say status pending again."
+          - cmd: [HGET, "queue:jobs:job:fixture-stuck", claim_token]
+            equals: null
+            message: "A reclaimed job loses its claim token, so the old worker's complete will be refused."
+          - cmd: [HGET, "queue:jobs:job:fixture-fresh", status]
+            equals: processing
+            message: "fixture-fresh was not touched: its status should still be processing."
+  - type: behavior
+    slot: jobs.complete
+    fixtures: fixtures/18-claimed-job.yaml
+    assertions:
+      - call: { args: [fixture-1, wrong-token, { ok: true }] }
+        expect: false
+        message: "A worker with the wrong token no longer owns the job. complete must refuse it and return false."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:processing"]
+            equals: 1
+            message: "A refused complete must change nothing: fixture-1 should still be in processing."
+          - cmd: [HGET, "queue:jobs:job:fixture-1", status]
+            equals: processing
+            message: "A refused complete must leave the status as processing."
+      - call: { args: [fixture-1, fixture-token, { ok: true }] }
+        expect: true
+        message: "The worker holding fixture-token owns fixture-1, so complete should return true."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:processing"]
+            equals: 0
+            message: "A completed job should leave queue:jobs:processing."
+          - cmd: [LLEN, "queue:jobs:completed"]
+            equals: 1
+            message: "A completed job's id should be pushed onto queue:jobs:completed."
+          - cmd: [HGET, "queue:jobs:job:fixture-1", status]
+            equals: completed
+            message: "A completed job's hash should say status completed."
+      - call: { args: [fixture-1, fixture-token, { ok: true }] }
+        expect: false
+        message: "Completing the same job a second time with the same token must return false: the claim is spent."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:completed"]
+            equals: 1
+            message: "A second complete must not add the id to queue:jobs:completed again."
+  - type: behavior
+    slot: jobs.fail
+    fixtures: fixtures/18-claimed-job.yaml
+    assertions:
+      - call: { args: [fixture-1, wrong-token, boom, 1] }
+        expect: false
+        message: "fail with a token that is not the job's must return false and change nothing."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:processing"]
+            equals: 1
+            message: "A refused fail must leave fixture-1 in processing."
+      - call: { args: [fixture-1, fixture-token, boom, 1] }
+        expect: failed
+        message: "fixture-1 has made 1 attempt and maxAttempts is 1, so fail should give up and return the string failed."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:failed"]
+            equals: 1
+            message: "A job that gave up should be pushed onto queue:jobs:failed."
+          - cmd: [LLEN, "queue:jobs:processing"]
+            equals: 0
+            message: "A failed job should leave processing."
+          - cmd: [HGET, "queue:jobs:job:fixture-1", status]
+            equals: failed
+            message: "A job that gave up should have status failed."
+          - cmd: [HGET, "queue:jobs:job:fixture-1", last_error]
+            equals: boom
+            message: "fail should record the error text in last_error."
+  - type: behavior
+    slot: jobs.fail
+    fixtures: fixtures/18-claimed-job.yaml
+    assertions:
+      - call: { args: [fixture-1, fixture-token, boom, 3] }
+        expect: retry
+        message: "fixture-1 has made 1 attempt and maxAttempts is 3, so fail should put it back and return the string retry."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:pending"]
+            equals: 1
+            message: "A job that will be retried should be back on queue:jobs:pending."
+          - cmd: [LLEN, "queue:jobs:processing"]
+            equals: 0
+            message: "A job that will be retried should leave processing."
+          - cmd: [HGET, "queue:jobs:job:fixture-1", status]
+            equals: pending
+            message: "A job that will be retried should have status pending again."
+          - cmd: [HGET, "queue:jobs:job:fixture-1", attempts]
+            equals: 1
+            message: "fail does not change attempts: the next claim adds the next one."
+  - type: antipattern
+    slot: jobs.claim
+    fixtures: fixtures/18-one-pending.yaml
+    assertions:
+      - call: { args: [w1, 500] }
+        message: "This passes today, but a claimed job has no claim_token in its hash. Without a stored token nothing can be fenced: when a job is reclaimed and given to another worker, the slow first worker can still complete it. Write a random claim_token at claim time and return it to the worker."
+        sideEffect:
+          - cmd: [HGET, "queue:jobs:job:fixture-1", claim_token]
+            lengthGte: 8
+            message: "This passes today, but a claimed job has no claim_token in its hash. Without a stored token nothing can be fenced: when a job is reclaimed and given to another worker, the slow first worker can still complete it. Write a random claim_token at claim time and return it to the worker."
+  - type: quiz
+    question: "Why does claim use BLMOVE pending processing RIGHT LEFT and not RPOP?"
+    options:
+      - id: rpop-is-slower
+        label: "RPOP is slower than BLMOVE on long lists"
+      - id: atomic-handover
+        label: "BLMOVE moves the id into processing in one step, so a worker that dies right after taking a job leaves it in processing where the reclaimer can find it; RPOP removes it from Redis for good"
+      - id: rpop-is-removed
+        label: "RPOP no longer exists in Redis 8"
+      - id: blmove-orders
+        label: "BLMOVE keeps jobs in priority order and RPOP does not"
+    correct: atomic-handover
+    explanation: "The job-queue guide builds on an atomic move between two lists. With RPOP the id leaves Redis the moment it is popped, so a crash before the worker records anything loses the job without a trace. With BLMOVE the id is always in exactly one list, and the processing list is what the reclaimer sweeps."
+  - type: quiz
+    question: "What does the per-claim token in complete and fail protect against?"
+    options:
+      - id: stale-worker
+        label: "A slow worker whose job was reclaimed and given to another worker: its late complete has the old token and is refused"
+      - id: wrong-queue
+        label: "A worker completing a job from a different queue"
+      - id: two-enqueues
+        label: "The same job being enqueued twice"
+      - id: network-loss
+        label: "Redis losing the connection in the middle of a Lua script"
+    correct: stale-worker
+    explanation: "The guide's scripts check the claim token first and return 0 if the worker no longer owns the job, which is called being fenced. After a reclaim and a new claim the stored token is different, so the first worker's late answer changes nothing."
+  - type: quiz
+    question: "What is the trade-off in choosing the visibility timeout?"
+    options:
+      - id: shorter-is-always-better
+        label: "Shorter is always better: jobs come back faster"
+      - id: too-short-duplicates-too-long-delays
+        label: "Too short and a slow but healthy job is reclaimed and runs twice; too long and a crashed worker's job waits a long time before it comes back"
+      - id: longer-is-always-better
+        label: "Longer is always better: jobs are never reclaimed by mistake"
+      - id: no-trade-off
+        label: "There is none: the timeout only affects the history lists"
+    correct: too-short-duplicates-too-long-delays
+    explanation: "The guide lists both failure modes. A timeout shorter than the slowest healthy job duplicates work, and a timeout much longer than needed delays recovery after a crash. Because delivery is at-least-once, anything with a side effect needs an idempotency key, which is the next level."
+
+show_me:
+  component: kv_card
+  keys: ["queue:jobs:pending", "queue:jobs:processing"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/job-queue
+  - https://redis.io/docs/latest/develop/data-types/lists/
+  - https://redis.io/docs/latest/develop/programmability/eval-intro/
+
+reward:
+  xp: 90
+  badge: "Queue, from memory"
+
+solutions:
+  reference: solutions/07-reference.js
+  wrong:
+    - path: solutions/07-wrong-rpop.js
+      expect: wrong
+      because: "claim takes the job with RPOP. The id is gone from pending and was never moved to processing, so the processing list stays empty. If the worker dies, the job is lost, and the reclaimer has nothing to sweep."
+    - path: solutions/07-wrong-no-token-check.js
+      expect: wrong
+      because: "complete does not look at the token, so a worker that no longer owns the job completes it anyway and a wrong token returns true. The fence the whole design needs is missing."
+    - path: solutions/07-works-but-wrong-no-token-stored.js
+      expect: works_but_wrong
+      because: "Every check on a seeded job passes, but claim hands the worker a token and never stores it. A job claimed by this code has no claim_token in its hash, so no later complete can be refused: anyone can finish it."

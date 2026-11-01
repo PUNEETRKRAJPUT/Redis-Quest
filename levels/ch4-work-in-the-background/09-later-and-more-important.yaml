@@ -1,0 +1,189 @@
+id: ch4-09-later-and-more-important
+chapter: ch4
+title: "Later, and more important"
+mode: code
+
+story: |
+  It is 10:46 pm. Harry Bhaiya has a promise to the sponsor, written in his spreadsheet, row 14: "send every player a reminder
+  fifteen minutes before their match, and send the prize message the moment a contest closes, not before". Two different kinds
+  of job: one that must wait until a particular time, and one that must go now. The queue you built is for the second kind. It
+  runs every job as soon as a worker is free.
+
+  A reminder for tomorrow cannot sit at the front of the pending list for twenty hours, and a worker cannot sleep on it. What
+  you need is a place where jobs wait with a time attached, and something that, once a second, asks "which of these are due?"
+  and moves exactly those into the queue.
+
+  There may be two copies of that something, because Harry Bhaiya has two copies of everything.
+
+brainstorm:
+  prompt: "Jobs that must run at a given time wait somewhere with their run time, and a timer moves the due ones into the queue. Where do they wait?"
+  options:
+    - id: sorted-set-by-time
+      label: "In a sorted set whose score is the run time, so the due jobs are simply the ones with a score up to now"
+      is_reasonable: true
+    - id: sleeping-workers
+      label: "In pending, each worker looks at the job's run time and sleeps until then"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a scheduled_jobs table in Postgres with a run_at column, polled by a cron job"
+      is_reasonable: true
+
+teach: |
+  The job-queue page lists delayed queues among its variations: a sorted set with `ZADD`, scored by run-at time, read with a score
+  range. That is the whole idea. The delayed set `queue:jobs:delayed` holds job ids; the score is the epoch milliseconds when the
+  job may start; the job's own hash `queue:jobs:job:<id>` holds the payload as before.
+
+  - `schedule`: write the hash (status `delayed`) and `ZADD queue:jobs:delayed <runAtMs> <id>` together in a `MULTI`.
+  - `promoteDue`: find the ids with a score up to now, `ZRANGE queue:jobs:delayed -inf <nowMs> BYSCORE LIMIT 0 100`, and for each
+    `ZREM` it from the delayed set, `LPUSH` it onto `queue:jobs:pending` and set its status to `pending`. Return how many moved.
+
+  Both halves should be the same step. Run `ZRANGE` from JavaScript and then `ZREM` and `LPUSH` one at a time, and two promoters
+  that start together both read the same due ids before either removes them, so each job is pushed to pending twice. That is
+  correct with one promoter and wrong with two, the same race as in the rate limiter of Chapter 3. One Lua script has no gap
+  for the second promoter to fit into. Pass `nowMs` into the script as an argument.
+
+  In the app something calls `promoteDue` on a timer, roughly once a second; here the check calls it itself.
+  Note that a sorted set scored by time is also how a priority queue works: score by priority instead of time.
+
+task: |
+  Write two functions in a bundle: `schedule` in `workspace/ch4/jobs-schedule.js` and `promoteDue` in `workspace/ch4/jobs-promote.js` (one file
+  re-exported from both is fine).
+
+  - `schedule(deps, payload, runAtMs)`: make a job id (random hex), store the job hash `queue:jobs:job:<id>` with `id`, `payload`
+    (JSON text), `status` set to `delayed`, `attempts` 0 and `enqueued_at_ms`, and `ZADD queue:jobs:delayed` with `runAtMs` as the
+    score. Return the id.
+  - `promoteDue(deps, nowMs)`: move every id with a score at or below `nowMs` (at most 100 at a time) from `queue:jobs:delayed` to
+    `queue:jobs:pending` with `LPUSH`, set the job's `status` to `pending`, and return how many moved. Do it in one Lua script.
+
+  The check schedules a job for time 1 and one for time 9,999,999,999,999 (the year 2286) and confirms both are waiting. Then
+  it starts from two seeded delayed jobs and calls `promoteDue(1000)`: only the first may move. Finally ten promoters run at once
+  over fifty due jobs: all fifty must end up in pending exactly once.
+
+hints:
+  - "ZRANGE key -inf <nowMs> BYSCORE LIMIT 0 100 lists the ids due by now. In a Lua script, ARGV[1] is the time you passed in."
+  - "A job moved by promoteDue must also leave the delayed set: ZREM it, or the next promoter moves it again."
+  - "If the ten-at-once check ends with more than fifty ids in pending, two promoters read the same ids. Put the read and the moves in one script."
+
+verify:
+  - type: behavior
+    slot: jobs.schedule
+    fixtures: fixtures/09-empty.yaml
+    assertions:
+      - call: { args: [{ kind: reminder, userId: u-000010 }, 1] }
+        message: "schedule should add the job id to queue:jobs:delayed with the run time as its score."
+        sideEffect:
+          - cmd: [ZCARD, "queue:jobs:delayed"]
+            equals: 1
+            message: "After one schedule, queue:jobs:delayed should hold exactly one id (ZADD it)."
+          - cmd: [ZCOUNT, "queue:jobs:delayed", 1, 1]
+            equals: 1
+            message: "The score must be the run time you passed in, here 1."
+          - cmd:
+              - EVAL_RO
+              - "return redis.call('HGET', 'queue:jobs:job:' .. redis.call('ZRANGE', KEYS[1], 0, 0)[1], 'status')"
+              - 1
+              - "queue:jobs:delayed"
+            equals: delayed
+            message: "The delayed id should have a hash queue:jobs:job:<id> whose status is delayed."
+      - call: { args: [{ kind: reminder, userId: u-000011 }, 9999999999999] }
+        message: "A second job scheduled far in the future must wait in the same set."
+        sideEffect:
+          - cmd: [ZCARD, "queue:jobs:delayed"]
+            equals: 2
+            message: "After two schedules, queue:jobs:delayed should hold two ids."
+          - cmd: [ZCOUNT, "queue:jobs:delayed", 9999999999999, 9999999999999]
+            equals: 1
+            message: "The second job's score should be 9999999999999."
+          - cmd: [LLEN, "queue:jobs:pending"]
+            equals: 0
+            message: "A scheduled job must not go to pending until it is due."
+  - type: behavior
+    slot: jobs.promoteDue
+    fixtures: fixtures/09-two-delayed.yaml
+    assertions:
+      - call: { args: [1000] }
+        expect: 1
+        message: "d-1 is due at 1 and d-2 at 9999999999999. promoteDue(1000) should move exactly one job and return 1."
+        sideEffect:
+          - cmd: [ZCARD, "queue:jobs:delayed"]
+            equals: 1
+            message: "Only d-2 should still be waiting in queue:jobs:delayed."
+          - cmd: [LLEN, "queue:jobs:pending"]
+            equals: 1
+            message: "Exactly one job should be in queue:jobs:pending."
+          - cmd: [LINDEX, "queue:jobs:pending", 0]
+            equals: d-1
+            message: "The job that moved should be d-1, the one that was due."
+          - cmd: [HGET, "queue:jobs:job:d-1", status]
+            equals: pending
+            message: "A promoted job's hash should say status pending."
+          - cmd: [ZSCORE, "queue:jobs:delayed", d-2]
+            equals: 9999999999999
+            message: "d-2 must be untouched: still waiting with its score."
+      - call: { args: [1000] }
+        expect: 0
+        message: "Calling promoteDue(1000) again should move nothing and return 0: d-1 already moved."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:pending"]
+            equals: 1
+            message: "A second promoteDue must not push d-1 again."
+  - type: antipattern
+    slot: jobs.promoteDue
+    fixtures: fixtures/09-fifty-due.yaml
+    concurrency: 10
+    assertions:
+      - call: { args: [1000] }
+        repeat: 10
+        message: "This passes with one promoter, but ten promoters at once pushed some jobs to pending more than once, so queue:jobs:pending holds more than the 50 jobs there were. The read and the moves are separate commands, so two promoters read the same due ids. Do the read, the removal and the push in one Lua script."
+        sideEffect:
+          - cmd: [LLEN, "queue:jobs:pending"]
+            equals: 50
+            message: "This passes with one promoter, but ten promoters at once pushed some jobs to pending more than once, so queue:jobs:pending holds more than the 50 jobs there were. The read and the moves are separate commands, so two promoters read the same due ids. Do the read, the removal and the push in one Lua script."
+  - type: quiz
+    question: "Why is the delayed set a sorted set scored by the run time, and not a list?"
+    options:
+      - id: due-is-a-score-range
+        label: "The set is kept ordered by score, so the jobs due by now are one range query (up to now), however many jobs are waiting"
+      - id: lists-cant-hold-ids
+        label: "A list cannot hold job ids"
+      - id: sets-are-faster
+        label: "A sorted set pushes faster than a list"
+      - id: expiry
+        label: "A sorted set expires its members by itself when their score passes"
+    correct: due-is-a-score-range
+    explanation: "A list is ordered by arrival, so finding the due jobs means reading all of them. A sorted set is ordered by score, so the due jobs are the ones with a score up to now and promoteDue reads just those. The set does not expire anything by itself: promoteDue has to move the ids out."
+  - type: quiz
+    question: "Two promoters run together. Why does a ZRANGE from JavaScript followed by ZREM and LPUSH put some jobs in pending twice?"
+    options:
+      - id: zrem-fails
+        label: "ZREM fails when two clients call it"
+      - id: lpush-duplicates
+        label: "LPUSH sometimes writes an element twice"
+      - id: both-read-before-either-removes
+        label: "Both read the same due ids before either has removed them, and each then pushes every id it read"
+      - id: clock-skew
+        label: "The two promoters have different clocks"
+    correct: both-read-before-either-removes
+    explanation: "The read and the removal are separate commands, and between them the other promoter can run its own read. Both see the due ids, both push them. A Lua script runs as one step, so the second promoter's read happens after the first has finished moving, and finds nothing."
+
+show_me:
+  component: kv_card
+  keys: ["queue:jobs:delayed", "queue:jobs:pending"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/job-queue
+  - https://redis.io/docs/latest/develop/data-types/sorted-sets/
+  - https://redis.io/docs/latest/develop/programmability/eval-intro/
+
+reward:
+  xp: 60
+  badge: "On time"
+
+solutions:
+  reference: solutions/09-reference.js
+  wrong:
+    - path: solutions/09-wrong-promote-all.js
+      expect: wrong
+      because: "promoteDue ignores the score and moves every delayed job. promoteDue(1000) returns 2, and the job meant for the year 2286 is already in pending."
+    - path: solutions/09-works-but-wrong-js-two-step.js
+      expect: works_but_wrong
+      because: "Correct with one promoter. With ten at once they all read the same fifty due ids before any removes them, and each pushes all of them: pending ends with many times fifty jobs."

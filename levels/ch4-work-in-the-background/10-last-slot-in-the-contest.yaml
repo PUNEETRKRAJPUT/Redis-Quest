@@ -1,0 +1,124 @@
+id: ch4-10-last-slot-in-the-contest
+chapter: ch4
+title: "The last slot in the contest"
+mode: code
+
+story: |
+  It is 10:48 pm. Shivneri Hostel's contest has one slot left, and two hundred people who all saw "1 slot left" on their phone
+  and tapped at the same moment. When the dust settles, nine members are in a contest for one, the slot counter says minus eight,
+  and Teja has screenshotted the leaderboard header: "Contest full (9/1)".
+
+  This is the same problem as the double wallet fee in Chapter 3, with a different shape. There you needed one number to change in
+  one step. Here the decision is "is there a slot?" and the action is "take it, record who took it, tell them yes", and between
+  looking and taking someone else can look too.
+
+  Last time the answer was a transaction. This time it is the oldest tool in the box: a lock. Only one request may be in the
+  room, and the others wait outside, politely, with a timer.
+
+brainstorm:
+  prompt: "Two hundred requests want the last slot at the same instant. Which one gets it, and what do the other 199 do?"
+  options:
+    - id: lock-then-check
+      label: "They take a lock first: the one that gets it looks and takes the slot, the others retry briefly and then find none left"
+      is_reasonable: true
+    - id: check-then-decr
+      label: "Each reads the counter and, if it is above zero, decrements it"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: UPDATE contests SET slots = slots - 1 WHERE id = $1 AND slots > 0 RETURNING slots in Postgres"
+      is_reasonable: true
+
+teach: |
+  The distributed-locks page of the docs gives the single-instance recipe: acquire with `SET resource_name my_random_value NX PX 30000`.
+  `NX` means only if absent, so exactly one caller wins; `PX` is the expiry, so a holder that dies cannot block everyone for ever (the
+  lock is deadlock-free). The value must be unique per client and request, because it is how you prove the lock is yours.
+
+  - Release only if the value still matches. The docs' script: `if redis.call("get",KEYS[1]) == ARGV[1] then return redis.call("del",KEYS[1])
+    else return 0 end`. Since Redis 8.4 the same is one command, `DELEX key IFEQ my_random_value`; this game's Redis is 8.10 and the
+    script works on all versions. A plain `DEL` is unsafe: if your lock had expired and someone else holds it now, you would delete theirs.
+  - Callers that do not get the lock retry for a short while, then give up. Waiting for ever turns a slow holder into an outage.
+  - Under the lock do the work: read `contest:<id>:slots`, and if it is above 0, `DECR` it and `SADD` the user to
+    `contest:<id>:members`. Always release in a `finally`.
+
+  In this node-redis: `redis.set(key, token, { condition: 'NX', expiration: { type: 'PX', value: 5000 } })` answers `'OK'` or `null`, and
+  `redis.eval(script, { keys, arguments })` runs the release. A lock is more machinery than a Lua script, and for one counter a script
+  would do. It is here because the next level is about what a lock cannot promise, and you need to have held one.
+
+task: |
+  Fill in `claimLastSlot(deps, contestId, userId)` in `workspace/ch4/contest-last-slot.js`. It returns `true` if this user got a slot and
+  `false` if none was left.
+
+  - The lock is `lock:contest:<contestId>`. Take it with `SET ... NX PX 5000` and a random token of your own for the value. If
+    you do not get it, wait a few milliseconds and try again, for at most about two seconds, then return `false`.
+  - With the lock held: read `contest:<contestId>:slots`. If it is above 0, `DECR` it, `SADD` the user to `contest:<contestId>:members`
+    and return `true`. Otherwise return `false`.
+  - Release the lock on every path, and only if it still holds your token (compare and delete).
+
+  The check starts with `contest:9001:slots` at 1 and fires 200 calls at once for `u-000010`. Exactly one must return `true`, the slot
+  counter must end at 0, and the lock must be released. A call after that must return `false`. Tick "Run my code in the app" to send
+  `POST /app/contests/9001/last-slot` with a JSON body `{ "userId": "u-000010" }`.
+
+hints:
+  - "A lock that is never released blocks everyone for its whole expiry. Put the release in a finally block."
+  - "redis.set(lock, token, { condition: 'NX', expiration: { type: 'PX', value: 5000 } }) answers 'OK' when you got the lock and null when someone else holds it."
+  - "Release with a Lua script that compares GET with your token and only then DELs. redis.eval(script, { keys: [lock], arguments: [token] })."
+
+verify:
+  - type: behavior
+    slot: contest.claimLastSlot
+    fixtures: fixtures/10-one-slot.yaml
+    concurrency: 200
+    assertions:
+      - call: { args: [9001, u-000010] }
+        repeat: 200
+        expectCount: { value: true, equals: 1 }
+        message: "200 callers fight for the last slot of contest 9001: exactly one should return true. More than one means two callers both looked, both saw a slot and both took it."
+        sideEffect:
+          - cmd: [GET, "contest:9001:slots"]
+            equals: 0
+            message: "The slot counter should end at exactly 0. Below zero means more than one caller took the last slot."
+          - cmd: [EXISTS, "lock:contest:9001"]
+            equals: 0
+            message: "The lock should be released when everyone has finished: lock:contest:9001 still exists. Release it in a finally block, with a compare-and-delete script."
+          - cmd: [SCARD, "contest:9001:members"]
+            equals: 1
+            message: "contest:9001:members should hold the one user who got the slot."
+      - call: { args: [9001, u-000011] }
+        expect: false
+        message: "The contest is full, so a later call should return false."
+        sideEffect:
+          - cmd: [GET, "contest:9001:slots"]
+            equals: 0
+            message: "A refused call must not change the slot counter."
+  - type: quiz
+    question: "The lock value is a random token and the release is a script that compares it before deleting. Why not just DEL the lock?"
+    options:
+      - id: del-is-slower
+        label: "DEL is slower than a script"
+      - id: del-needs-token
+        label: "DEL refuses to delete a key with an expiry"
+      - id: del-may-remove-someone-elses-lock
+        label: "If your lock expired and another client now holds it, a plain DEL would remove their lock, not yours"
+      - id: script-extends-ttl
+        label: "The script also extends the lock's expiry"
+    correct: del-may-remove-someone-elses-lock
+    explanation: "The docs say a plain DEL is unsafe: the value is how you prove the lock is still yours. Without the check, a slow holder whose lock expired deletes the next holder's lock, and a third client can walk in while the second is still working. On Redis 8.4 and later DELEX key IFEQ value does the compare-and-delete in one command."
+
+show_me:
+  component: kv_card
+  keys: ["contest:9001:slots", "lock:contest:9001"]
+docs:
+  - https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/
+  - https://redis.io/docs/latest/develop/programmability/eval-intro/
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+
+reward:
+  xp: 60
+  badge: "Only one in the room"
+
+solutions:
+  reference: solutions/10-reference.js
+  wrong:
+    - path: solutions/10-wrong-no-lock.js
+      expect: wrong
+      because: "Reads the counter and then decrements it, with nothing in between. 200 callers all read 1 before any decrement lands, so many of them return true and the counter ends far below zero."

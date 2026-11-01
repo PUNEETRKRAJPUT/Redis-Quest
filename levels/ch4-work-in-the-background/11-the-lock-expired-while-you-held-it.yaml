@@ -1,0 +1,140 @@
+id: ch4-11-the-lock-expired-while-you-held-it
+chapter: ch4
+title: "The lock expired while you held it"
+mode: decision
+
+story: |
+  It is 10:50 pm and the contest works, which is exactly when Teja asks the dangerous question. "So the lock has a five second
+  expiry. What if the winner is slow? Like, really slow? Like the server pauses for eight seconds because of something?" You
+  look at the code you wrote and realise you do not know.
+
+  The lock does what the page of the docs says it does: one winner, no deadlock, a safe release. But the docs do not stop there.
+  They end with a section that starts, in effect, "and here is what this does not promise". A lock with an expiry trades one
+  guarantee for another, and a lock held by a process that cannot tell how long it has been paused is a promise with a hole in it.
+
+  No code in this level. It is four decisions, the kind a lead asks in a review, and each of them is about when a double holder is
+  a bug and when it is only wasted work.
+
+brainstorm:
+  prompt: "Your lock expires after 5 seconds. The holder is paused for 8 seconds in the middle of its work. What do you worry about?"
+  options:
+    - id: two-holders
+      label: "That the lock expired, a second client took it, and now two clients believe they hold it"
+      is_reasonable: true
+    - id: nothing
+      label: "Nothing: Redis keeps the lock for as long as its holder is alive"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: keep the slot counter in Postgres, where the row lock lives with the data being protected"
+      is_reasonable: true
+
+teach: |
+  The distributed-locks page lists three properties a lock should have: mutual exclusion, being deadlock-free, and fault tolerance.
+  The single-instance recipe from the last level, `SET ... NX PX` with a random value, gives you the second one for certain because
+  of the expiry. Mutual exclusion holds only as long as every holder finishes before its lock expires.
+
+  - A holder that is slow (a long pause, a slow query, a stalled network) can outlive its lock. The lock expires, a second client
+    acquires it, and for a while both believe they hold it. The expiry that made the lock safe against crashes is what lets the
+    slow holder lose it.
+  - The page's closing disclaimer says "you should implement fencing tokens", and that Redis does not use a monotonic clock for
+    expiration, so a wall-clock jump can also break exclusion. It points to Martin Kleppmann's critique and to the reply from Redis's author.
+  - Redlock, the page's multi-node algorithm, takes the lock on a majority of independent masters, and counts the lock valid only for
+    the time left after the acquire. It survives one node dying. It assumes bounded clock drift, and it still has no answer for a paused holder.
+  - A fencing token is a number that grows with every grant of the lock. The resource being protected (the database, the counter)
+    remembers the highest number it has seen and refuses a write that carries an older one. Then a late holder can no longer do harm.
+  - The page also says plain replication is not enough: after a failover a second client can take a lock the first still holds, which is
+    fine only if an occasional double holder is acceptable.
+
+  So the question to ask of any lock is not "does it work" but "what happens if two clients are inside at once?"
+
+task: |
+  Answer the four questions and press Verify. There is nothing to type in the terminal.
+
+  Think of the contest slot from the last level, a cache refresh that recomputes a player's stats, and a wallet credit. For each, ask
+  what two simultaneous holders would cost.
+
+hints:
+  - "The expiry is what makes the lock safe against a crash and unsafe against a pause: those are two different failures."
+  - "Fencing is done by the resource, not the lock: the lock only hands out the numbers, the database says no to old ones."
+  - "Ask what two clients inside at once would do to the data: for the last contest slot it is the bug itself, for a cache refresh it is a wasted query."
+
+verify:
+  - type: quiz
+    question: "Your lock has a 5 second expiry. The holder pauses for 8 seconds in the middle of its work and then carries on. What can have happened?"
+    options:
+      - id: redis-extends
+        label: "Redis extended the expiry because the holder's connection was still open"
+      - id: second-waits
+        label: "The second client was refused until the first one released the lock"
+      - id: second-holder-took-over
+        label: "The lock expired, a second client acquired it, and when the first client wakes up both believe they hold the lock: mutual exclusion is lost"
+      - id: delete-was-safe
+        label: "The first client's release deletes its own lock at the end, so nothing could have gone wrong"
+    correct: second-holder-took-over
+    explanation: "The expiry exists so a crashed holder cannot block everyone for ever, and it does not know whether the holder is dead or only slow. After it passes, anyone can acquire the lock. The page's disclaimer is that a TTL lock is deadlock-free but does not by itself guarantee mutual exclusion against a slow holder. Release with compare-and-delete is safe for the lock, and does nothing about the work the slow holder did while it no longer held it."
+  - type: quiz
+    question: "What is the fix for a holder that outlived its lock, and who has to apply it?"
+    options:
+      - id: longer-expiry
+        label: "A much longer expiry on the lock, so a holder can never outlive it"
+      - id: fencing-token-on-the-resource
+        label: "A fencing token: each grant of the lock carries a growing number, and the resource being written (database, counter) refuses writes with a number older than the newest it has seen"
+      - id: lock-checks-itself
+        label: "The lock key checks the holder's token before every write the holder makes"
+      - id: more-retries
+        label: "More retries by the clients that did not get the lock"
+    correct: fencing-token-on-the-resource
+    explanation: "The page says you should implement fencing tokens. The lock cannot police a holder that is paused, so the protection has to sit on the resource: it compares the token it receives with the highest one it has seen and refuses the old one. A longer expiry only makes the pause that breaks you rarer, and makes a crash block everyone for longer."
+  - type: quiz
+    question: "What does Redlock add over the single-instance lock, and what does it not fix?"
+    options:
+      - id: fixes-everything
+        label: "It makes a paused holder safe, because five nodes cannot all expire at once"
+      - id: needs-no-expiry
+        label: "It needs no expiry, so a slow holder keeps its lock for ever"
+      - id: just-a-library
+        label: "It is a client library that adds retries and nothing else"
+      - id: majority-but-not-pauses
+        label: "It takes the lock on a majority of independent Redis masters, so a failed node or a failover does not lose it; it still assumes bounded clock drift and does not make a paused holder safe, which is why the docs still say to use fencing tokens"
+    correct: majority-but-not-pauses
+    explanation: "Redlock tries N independent masters, counts the lock valid only if a majority granted it within the validity time, and unlocks all on failure. It is built for losing a node, not for a holder that pauses past its validity. The page assumes bounded clock drift (not synchronised clocks), and its closing disclaimer, with Kleppmann's critique and the reply to it, is why fencing tokens still matter."
+  - type: quiz
+    question: "In which of these is an occasional double holder of the lock acceptable?"
+    options:
+      - id: cache-refresh
+        label: "A lock around recomputing a cached player's stats: two clients recompute the same value, the later write wins, and the cost is one extra query"
+      - id: contest-slot
+        label: "A lock around taking the last contest slot: two holders means two members for one slot"
+      - id: wallet-credit
+        label: "A lock around crediting a wallet: two holders means a double credit"
+      - id: all-three
+        label: "All three: the lock only needs to work most of the time"
+    correct: cache-refresh
+    explanation: "The page says a lock built on replication is fine only if an occasional double holder is acceptable, and the same test applies to expiry. For a cache refresh two holders only waste work. For the contest slot the double holder is the bug the lock was written to prevent, and for a wallet credit it is the double prize from level 8. Those need a guard on the data (a counter checked inside Redis, or an idempotency key) rather than trust in the lock."
+
+docs:
+  - https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/
+
+reward:
+  xp: 40
+  badge: "What a lock cannot promise"
+
+solutions:
+  reference:
+    - second-holder-took-over
+    - fencing-token-on-the-resource
+    - majority-but-not-pauses
+    - cache-refresh
+  wrong:
+    - option: redis-extends
+      expect: wrong
+      because: "Redis never extends a lock by itself. The expiry counts down whether the holder is alive, slow or dead, which is exactly why a paused holder can lose it."
+    - option: longer-expiry
+      expect: wrong
+      because: "A longer expiry makes the breaking pause rarer, not impossible, and a crashed holder then blocks everyone for the whole length of it. The protection has to be on the resource, with a fencing token."
+    - option: fixes-everything
+      expect: wrong
+      because: "Redlock survives losing a node. It does not stop a holder from pausing past its validity time and then carrying on, and the docs' own disclaimer says to implement fencing tokens as well."
+    - option: all-three
+      expect: wrong
+      because: "Only the cache refresh can tolerate two holders. For the contest slot and the wallet credit a second holder is the very bug the guard exists for."

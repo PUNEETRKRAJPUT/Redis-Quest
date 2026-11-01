@@ -1,0 +1,9 @@
+# Two delayed jobs: d-1 is due at 1 (long ago), d-2 at 9999999999999 (the year 2286). Nothing is waiting in pending.
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'queue:jobs:job:*')) do redis.call('DEL', k) end redis.call('DEL', 'queue:jobs:pending', 'queue:jobs:processing', 'queue:jobs:completed', 'queue:jobs:failed', 'queue:jobs:delayed') return 1"
+      - 0
+  - cmd: [HSET, "queue:jobs:job:d-1", id, d-1, payload, '{"kind":"reminder","userId":"u-000010"}', status, delayed, attempts, 0, enqueued_at_ms, 1700000000000]
+  - cmd: [HSET, "queue:jobs:job:d-2", id, d-2, payload, '{"kind":"reminder","userId":"u-000011"}', status, delayed, attempts, 0, enqueued_at_ms, 1700000000000]
+  - cmd: [ZADD, "queue:jobs:delayed", 1, d-1, 9999999999999, d-2]

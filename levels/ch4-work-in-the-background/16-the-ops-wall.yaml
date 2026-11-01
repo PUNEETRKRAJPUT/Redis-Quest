@@ -1,0 +1,197 @@
+id: ch4-16-the-ops-wall
+chapter: ch4
+title: "The ops wall"
+mode: code
+
+story: |
+  It is 11:00 pm, the chase is over, and Harry Bhaiya has been handed a clipboard by the college. The fest committee wants a wall
+  of graphs on the big screen next to the trophy: requests per minute, errors per minute and the average response time of the
+  player stats page, live, for the last day. Teja has built the React side in an hour. What the backend has is
+  `/metrics`, a counter that only goes up and forgets everything on restart.
+
+  Redis has a type for exactly this, and you have now met every other one in this chapter. A time series is a list of
+  timestamped numbers that Redis knows how to bucket: sum the requests in each minute, average the milliseconds, drop what is
+  older than a day, all inside the server. Warden Sir, passing through, asks why it is not just a sorted set with a score per
+  minute. It is a fair question, and the check will answer it.
+
+  The app will feed your recorder with its own real requests while it is switched on. You write two functions: one that records
+  a request, and one that reads the wall back.
+
+brainstorm:
+  prompt: "Count requests, errors and response times per minute, keep a day, and graph the last hour with one-minute buckets. Where do the numbers live?"
+  options:
+    - id: time-series
+      label: "One Redis time series per metric and route, with a retention of a day, written with TS.MADD and read as bucketed ranges"
+      is_reasonable: true
+    - id: sorted-set-per-minute
+      label: "A sorted set per metric with the minute as the score and a counter as the member, trimmed by a job"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a requests table in Postgres, grouped by minute with date_trunc"
+      is_reasonable: true
+
+teach: |
+  The time-series-dashboard page of the docs recommends one Redis time series key per metric, with labels and a short RETENTION, written
+  in batches with `TS.MADD` and read with `TS.RANGE ... ALIGN 0 AGGREGATION <agg> <bucket ms>`. Its demo calls the commands through the
+  generic `sendCommand()`, which is what the reference does too.
+
+  - `TS.CREATE key RETENTION 86400000 LABELS kind requests route <route>` makes a series. `RETENTION` is in milliseconds and is
+    measured against the newest sample: older samples are dropped by the series itself, so you need no `EXPIRE`. `TS.MADD` does not
+    create keys, so create first and ignore the "already exists" error (the page calls this idempotent setup).
+  - `TS.MADD k1 ts value k2 ts value ...` writes several samples at once. Here one call writes three: requests (1), errors (1 for
+    a status of 500 or more, else 0) and latency (the milliseconds).
+  - `TS.RANGE key from to ALIGN 0 AGGREGATION sum 60000` buckets by minute. `ALIGN 0` anchors the buckets to multiples of 60000 ms, so
+    the boundaries do not move as the window slides. The aggregators include `sum` (requests, errors) and `avg` (latency).
+  - Latency percentiles do not need every sample: `TDIGEST.ADD td:latency <ms>` and `TDIGEST.QUANTILE td:latency 0.99` estimate them
+    (`TDIGEST.CREATE` first).
+
+  Two more tools, not graded: `TS.CREATERULE` builds a compaction rule into a second series (raw to one-minute to one-hour averages;
+  the destination must exist first and only new data is processed), and `TOPK.RESERVE topk:players 5` with `TOPK.ADD` keeps the trending
+  players cheaply.
+
+  The route in the keys is the route key: runs of spaces and slashes become one `_`, so `GET /app/players/:id/stats` is
+  `GET_app_players_:id_stats`.
+
+task: |
+  Write a bundle: `record` in `workspace/ch4/ops-record.js` and `range` in `workspace/ch4/ops-range.js` (one file re-exported from both is fine).
+
+  - `record(deps, sample)` with `sample = { route, status, ms, at }` (`at` is epoch milliseconds). For the route key `R` write
+    `ts:requests:R`, `ts:errors:R` and `ts:latency:R` with one `TS.MADD` at time `at`: 1; 1 if `status` is 500 or more, else 0; and
+    `ms`. Create each series first if it does not exist, with `RETENTION 86400000` and labels `kind` and `route`, and ignore "already
+    exists". Also add `ms` to the t-digest `td:latency` (create it first the same way). Duplicate timestamps should add up for
+    requests and errors: create those two with `DUPLICATE_POLICY SUM` and latency with `DUPLICATE_POLICY LAST`. The return value is ignored.
+  - `range(deps, route, fromMs, toMs, bucketMs)` returns `{ route, buckets: [{ at, requests, errors, avgMs }] }`, oldest bucket first:
+    `TS.RANGE` of each series with `ALIGN 0` and `AGGREGATION sum <bucketMs>` (requests, errors) or `avg` (latency), merged by bucket
+    start. A route with no data returns an empty `buckets` list (the keys do not exist, and `TS.RANGE` then answers an error).
+
+  The check records five requests for `GET_app_players_:id_stats` (statuses 200, 200, 500, 200, 503 at times in two minutes), reads the series back with `TS.GET`
+  and `TS.RANGE`, and then calls `range` on the same data seeded by the game. Tick "Run my code in the app" and the app feeds
+  `record` with its real requests: look at `GET /app/ops/wall?route=...`.
+
+hints:
+  - "TS.MADD takes key, timestamp, value triplets: TS.MADD ts:requests:R at 1 ts:errors:R at 0 ts:latency:R at 123."
+  - "TS.CREATE answers an error with the text 'already exists' when the key is there. Catch it and carry on; any other error is real."
+  - "TS.RANGE answers [[timestamp, value], ...]: values come back as strings, so Number() them. Merge the three lists by timestamp."
+
+verify:
+  - type: behavior
+    slot: ops.record
+    fixtures: fixtures/16-clean.yaml
+    assertions:
+      - call: { args: [{ route: "GET_app_players_:id_stats", status: 200, ms: 20, at: 1700000040000 }] }
+        message: "The first request: one sample in each of the three series at time 1700000040000."
+        sideEffect:
+          - cmd: [TS.GET, "ts:requests:GET_app_players_:id_stats"]
+            equals: [1700000040000, 1]
+            message: "ts:requests:GET_app_players_:id_stats should hold the sample [1700000040000, 1]: one request at that time. TS.MADD does not create keys, so create the series first."
+          - cmd: [TS.GET, "ts:errors:GET_app_players_:id_stats"]
+            equals: [1700000040000, 0]
+            message: "ts:errors:GET_app_players_:id_stats should hold [1700000040000, 0]: a status of 200 is not an error, and the series gets a 0 for it."
+          - cmd: [TS.GET, "ts:latency:GET_app_players_:id_stats"]
+            equals: [1700000040000, 20]
+            message: "ts:latency:GET_app_players_:id_stats should hold [1700000040000, 20]: the milliseconds of the request."
+      - call: { args: [{ route: "GET_app_players_:id_stats", status: 200, ms: 40, at: 1700000050000 }] }
+        message: "The second request, ten seconds later."
+        sideEffect:
+          - cmd: [TS.GET, "ts:latency:GET_app_players_:id_stats"]
+            equals: [1700000050000, 40]
+            message: "ts:latency:GET_app_players_:id_stats should now end with [1700000050000, 40]."
+      - call: { args: [{ route: "GET_app_players_:id_stats", status: 500, ms: 300, at: 1700000059000 }] }
+        message: "A failing request: status 500 counts as an error."
+        sideEffect:
+          - cmd: [TS.GET, "ts:errors:GET_app_players_:id_stats"]
+            equals: [1700000059000, 1]
+            message: "A status of 500 or more should write a 1 to ts:errors:GET_app_players_:id_stats."
+      - call: { args: [{ route: "GET_app_players_:id_stats", status: 200, ms: 60, at: 1700000100000 }] }
+        message: "The first request of the next minute."
+        sideEffect:
+          - cmd: [TS.GET, "ts:requests:GET_app_players_:id_stats"]
+            equals: [1700000100000, 1]
+            message: "ts:requests:GET_app_players_:id_stats should now end with [1700000100000, 1]."
+      - call: { args: [{ route: "GET_app_players_:id_stats", status: 503, ms: 100, at: 1700000130000 }] }
+        message: "A second failing request, status 503."
+        sideEffect:
+          - cmd: [TS.GET, "ts:errors:GET_app_players_:id_stats"]
+            equals: [1700000130000, 1]
+            message: "A status of 503 should write a 1 to ts:errors:GET_app_players_:id_stats."
+          - cmd: [TS.RANGE, "ts:requests:GET_app_players_:id_stats", "-", "+", ALIGN, 0, AGGREGATION, sum, 60000]
+            equals: [[1700000040000, 3], [1700000100000, 2]]
+            message: "Summed per minute (ALIGN 0, buckets of 60000 ms) the requests should be 3 in the minute starting 1700000040000 and 2 in the minute starting 1700000100000."
+          - cmd: [TS.INFO, "ts:requests:GET_app_players_:id_stats"]
+            contains: retentionTime
+            message: "ts:requests:GET_app_players_:id_stats should be a time series: TS.INFO describes it, including its retentionTime."
+          - cmd:
+              - EVAL_RO
+              - "return redis.call('TDIGEST.QUANTILE', KEYS[1], ARGV[1])[1]"
+              - 1
+              - "td:latency"
+              - 0.99
+            between: [200, 300]
+            message: "td:latency should hold the five latencies (20, 40, 300, 60, 100), so its 99th percentile should be close to 300. Add each request's ms with TDIGEST.ADD."
+  - type: antipattern
+    checks:
+      - cmd: [TS.INFO, "ts:requests:GET_app_players_:id_stats"]
+        contains: 86400000
+        message: "This passes today, but the series has no retention, so every request ever made stays in Redis for good. Create each series with RETENTION 86400000 (a day, in milliseconds): the series drops older samples itself."
+  - type: behavior
+    slot: ops.range
+    fixtures: fixtures/16-seeded.yaml
+    assertions:
+      - call: { args: ["GET_app_players_:id_stats", 1700000040000, 1700000159999, 60000] }
+        expect:
+          route: "GET_app_players_:id_stats"
+          buckets:
+            - { at: 1700000040000, requests: 3, errors: 1, avgMs: 120 }
+            - { at: 1700000100000, requests: 2, errors: 1, avgMs: 80 }
+        message: "Five requests in two one-minute buckets. The first minute has 3 requests, 1 error and an average of (20 + 40 + 300) / 3 = 120 ms; the second has 2 requests, 1 error and an average of (60 + 100) / 2 = 80 ms. Buckets start at multiples of 60000 (ALIGN 0), oldest first."
+      - call: { args: [GET_app_nothing_here, 1700000040000, 1700000159999, 60000] }
+        expect: { route: GET_app_nothing_here, buckets: [] }
+        message: "A route nobody has recorded has no series. range should return an empty buckets list, not throw."
+  - type: quiz
+    question: "Why does TS.RANGE use ALIGN 0 for the minute buckets of a live graph?"
+    options:
+      - id: stable-boundaries
+        label: "It anchors every bucket to a multiple of the bucket size, so the boundaries stay put as the time window slides and a bucket does not change shape between refreshes"
+      - id: align-sorts
+        label: "It sorts the buckets, newest first"
+      - id: align-fills
+        label: "It fills empty buckets with zeros"
+      - id: align-faster
+        label: "It makes the aggregation faster"
+    correct: stable-boundaries
+    explanation: "The time-series dashboard page says ALIGN 0 keeps bucket boundaries stable while the window moves. Without it the buckets start at the first sample of the requested range, so the same minute is cut differently every time the window shifts and the graph jitters."
+  - type: quiz
+    question: "Why RETENTION on the series and not an EXPIRE on the key?"
+    options:
+      - id: expire-not-allowed
+        label: "EXPIRE is not allowed on a time series"
+      - id: same-thing
+        label: "They are the same thing, RETENTION is only a nicer name"
+      - id: retention-trims-samples
+        label: "RETENTION drops samples older than the window, relative to the newest, while the series lives on; EXPIRE would delete the whole series at once"
+      - id: retention-is-faster
+        label: "RETENTION makes TS.RANGE faster"
+    correct: retention-trims-samples
+    explanation: "The page says RETENTION trims relative to the newest sample, so the series keeps a rolling window and needs no EXPIRE. An EXPIRE on the key removes everything at the deadline, and a graph of the last day would go blank."
+
+show_me:
+  component: kv_card
+  keys: ["ts:requests:GET_app_players_:id_stats", "td:latency"]
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/time-series-dashboard
+  - https://redis.io/docs/latest/develop/data-types/timeseries/
+  - https://redis.io/docs/latest/develop/data-types/probabilistic/t-digest/
+
+reward:
+  xp: 70
+  badge: "Wall of numbers"
+
+solutions:
+  reference: solutions/16-reference.js
+  wrong:
+    - path: solutions/16-wrong-zset-per-minute.js
+      expect: wrong
+      because: "A sorted set with a count per minute is a hand-made time series. The keys are not time series, so TS.GET and TS.RANGE refuse to read them, errors and latency are not recorded, and nothing drops old samples."
+    - path: solutions/16-works-but-wrong-no-retention.js
+      expect: works_but_wrong
+      because: "Every sample is written and read back correctly, but the series were created without RETENTION. Nothing drops old samples, so every request ever made stays in Redis for good."

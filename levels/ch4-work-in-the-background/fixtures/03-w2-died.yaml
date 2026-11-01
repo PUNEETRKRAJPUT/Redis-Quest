@@ -1,0 +1,12 @@
+# The same six balls as level 2 (explicit ids 1700000000001-0 .. 6). The group "points" exists, and worker w2 read the first
+# three balls (1 to 3) and then died: they are delivered to w2 once and never acknowledged. Balls 4 to 6 were never delivered.
+steps:
+  - cmd: [DEL, "match:m-041:balls", "match:m-041:balls:dead", "lb:match:m-041"]
+  - cmd: [XADD, "match:m-041:balls", "1700000000001-0", over, 1, ball, 1, batter, p-028, runs, 4]
+  - cmd: [XADD, "match:m-041:balls", "1700000000002-0", over, 1, ball, 2, batter, p-028, runs, 1]
+  - cmd: [XADD, "match:m-041:balls", "1700000000003-0", over, 1, ball, 3, batter, p-034, runs, 6]
+  - cmd: [XADD, "match:m-041:balls", "1700000000004-0", over, 1, ball, 4, batter, p-028, runs, 0]
+  - cmd: [XADD, "match:m-041:balls", "1700000000005-0", over, 1, ball, 5, batter, p-034, runs, 2]
+  - cmd: [XADD, "match:m-041:balls", "1700000000006-0", over, 1, ball, 6, batter, p-028, runs, 6]
+  - cmd: [XGROUP, CREATE, "match:m-041:balls", points, "0-0"]
+  - cmd: [XREADGROUP, GROUP, points, w2, COUNT, 3, STREAMS, "match:m-041:balls", ">"]

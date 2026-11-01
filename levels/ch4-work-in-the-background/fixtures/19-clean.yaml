@@ -1,0 +1,3 @@
+# No series for the route GET_app_players_:id_stats and no latency digest: record starts from nothing.
+steps:
+  - cmd: [DEL, "ts:requests:GET_app_players_:id_stats", "ts:errors:GET_app_players_:id_stats", "ts:latency:GET_app_players_:id_stats", "td:latency"]

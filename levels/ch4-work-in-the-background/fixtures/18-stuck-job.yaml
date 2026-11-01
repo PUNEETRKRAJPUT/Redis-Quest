@@ -1,0 +1,10 @@
+# Two jobs in processing. fixture-stuck was claimed at 1700000000000 (long ago, so any visibility timeout has passed).
+# fixture-fresh was claimed at 99999999999999 (in the far future, so it can never be old enough to reclaim).
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'queue:jobs:job:*')) do redis.call('DEL', k) end redis.call('DEL', 'queue:jobs:pending', 'queue:jobs:processing', 'queue:jobs:completed', 'queue:jobs:failed', 'queue:jobs:delayed') return 1"
+      - 0
+  - cmd: [HSET, "queue:jobs:job:fixture-stuck", id, fixture-stuck, payload, '{"kind":"award","userId":"u-000010","amount":50}', status, processing, attempts, 1, enqueued_at_ms, 1700000000000, claimed_at_ms, 1700000000000, claim_token, stale-token]
+  - cmd: [HSET, "queue:jobs:job:fixture-fresh", id, fixture-fresh, payload, '{"kind":"award","userId":"u-000011","amount":20}', status, processing, attempts, 1, enqueued_at_ms, 1700000000000, claimed_at_ms, 99999999999999, claim_token, fresh-token]
+  - cmd: [LPUSH, "queue:jobs:processing", fixture-stuck, fixture-fresh]

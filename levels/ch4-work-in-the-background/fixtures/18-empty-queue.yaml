@@ -1,0 +1,7 @@
+# An empty queue: every queue list and every job hash from earlier runs is removed (random job ids cannot be named, so one
+# EVAL finds them by prefix).
+steps:
+  - cmd:
+      - EVAL
+      - "for _, k in ipairs(redis.call('KEYS', 'queue:jobs:job:*')) do redis.call('DEL', k) end redis.call('DEL', 'queue:jobs:pending', 'queue:jobs:processing', 'queue:jobs:completed', 'queue:jobs:failed', 'queue:jobs:delayed') return 1"
+      - 0

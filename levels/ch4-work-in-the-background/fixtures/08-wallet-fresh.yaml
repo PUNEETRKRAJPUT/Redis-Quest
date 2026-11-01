@@ -1,0 +1,4 @@
+# u-000011 starts with 100 points and a key nobody has used: twenty callers will race for it.
+steps:
+  - cmd: [SET, "wallet:u-000011", 100]
+  - cmd: [DEL, "idem:award-m-041-u-000011"]

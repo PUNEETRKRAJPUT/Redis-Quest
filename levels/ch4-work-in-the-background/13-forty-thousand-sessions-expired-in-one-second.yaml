@@ -1,0 +1,147 @@
+id: ch4-13-forty-thousand-sessions-expired-in-one-second
+chapter: ch4
+title: "Forty thousand sessions expired in one second"
+mode: code
+
+story: |
+  It is 10:54 pm and the app has just done something nobody asked it to. At the toss, forty thousand people logged in within
+  about a minute, and every session was given a thirty minute life. Thirty minutes later, which is now, forty thousand sessions
+  have expired in the same second. Everyone is logged out together, everyone logs in again together, and the login endpoint and
+  the OTP vendor are facing a second toss rush. Jignesh from the SMS vendor sends a polite one-line message with a number in it.
+
+  Nothing is broken. Every session did exactly what it was told. The mistake is that they were all told the same thing at the same
+  time. A deadline shared by forty thousand keys is a deadline that arrives forty thousand times at once.
+
+  The cure is the cheapest in this chapter: do not let the deadlines line up.
+
+brainstorm:
+  prompt: "Forty thousand keys are created within a minute of each other, each with a 30 minute expiry. What goes wrong at the 30 minute mark, and what is the fix?"
+  options:
+    - id: add-jitter
+      label: "They all expire in the same moment. Give each key a slightly different expiry (base plus a random extra) so they expire spread over a window"
+      is_reasonable: true
+    - id: shorter-ttl
+      label: "Use a shorter expiry, so there are fewer sessions around when it happens"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: stop expiring sessions on a timer and delete them in a nightly job instead"
+      is_reasonable: false
+
+setup:
+  - cmd:
+      - EVAL
+      - "for i = 1, 50 do redis.call('SET', 'storm:' .. i, 'x') end return 50"
+      - 0
+
+teach: |
+  Redis removes an expired key when the key is accessed or when a background scan finds it, as the keyspace notifications page says when
+  it explains why an expired event can arrive late. A key's expiry is a deadline, and deadlines that coincide make the work, and the
+  consequences, coincide. Forty thousand sessions that all expire in the same second means forty thousand logins in the same
+  second. That is the expiry storm. It is the same shape as the stampede in Chapter 2, with a timer instead of a cold cache.
+
+  - The fix is **jitter**: expire each key at `base + random(0..jitter)` seconds. With a base of 600 and a jitter of 120 the deadlines
+    spread evenly over two minutes, and the work with them.
+  - `EXPIRE key seconds` answers 1 when it set the expiry and 0 when the key does not exist. Here the function answers how many
+    keys it gave an expiry to.
+  - Sending fifty `EXPIRE` commands one await at a time costs fifty round trips. A pipeline sends them together: in this node-redis,
+    `const p = redis.multi(); p.expire(...); ...; await p.execAsPipeline()` (a pipeline, not a transaction).
+  - Choose the jitter as a share of the base. The right number is a product choice, not a Redis fact: it depends on how much
+    follow-up work each expiry causes. Too small a jitter still leaves a spike.
+
+  The reverse is also true: a TTL on an entry is a promise that it will be recomputed. When you spread the deadlines you spread the
+  recomputes, which is also what you wanted from the cache in Chapter 2.
+
+task: |
+  Fill in `expireWithJitter(deps, keys, baseSeconds, jitterSeconds)` in `workspace/ch4/sessions-jitter.js`. It gives every key in
+  `keys` an expiry and returns how many keys it set one on.
+
+  - Each key gets `baseSeconds` plus a random whole number from 0 to `jitterSeconds`, so the expiries differ.
+  - Send the `EXPIRE` commands in one pipeline, not one await per key.
+  - Return the number of keys that got an expiry (`EXPIRE` answers 1).
+
+  The game created fifty keys `storm:1` .. `storm:50` with no expiry. The check calls your function with those fifty, a base of 600
+  and a jitter of 120, expects 50 back, and then reads every key's remaining time: all of them must be at least 600 and at most 720,
+  and the shortest and the longest must be at least 40 seconds apart. Tick "Run my code in the app" to send the same call through
+  `POST /app/ops/expire-batch`.
+
+hints:
+  - "Math.floor(Math.random() * (jitterSeconds + 1)) is a whole number from 0 to jitterSeconds, a different one for every key."
+  - "redis.multi() then .expire(key, seconds) for each key, then await pipeline.execAsPipeline(): one round trip and no transaction."
+  - "EXPIRE answers 1 for a key that exists. Count the replies that are 1."
+
+verify:
+  - type: behavior
+    slot: sessions.expireWithJitter
+    fixtures: fixtures/13-storm.yaml
+    assertions:
+      - call:
+          args:
+            - [storm:1, storm:2, storm:3, storm:4, storm:5, storm:6, storm:7, storm:8, storm:9, storm:10, storm:11, storm:12, storm:13, storm:14, storm:15, storm:16, storm:17, storm:18, storm:19, storm:20, storm:21, storm:22, storm:23, storm:24, storm:25, storm:26, storm:27, storm:28, storm:29, storm:30, storm:31, storm:32, storm:33, storm:34, storm:35, storm:36, storm:37, storm:38, storm:39, storm:40, storm:41, storm:42, storm:43, storm:44, storm:45, storm:46, storm:47, storm:48, storm:49, storm:50]
+            - 600
+            - 120
+        expect: 50
+        message: "All fifty keys exist, so expireWithJitter should give each of them an expiry and return 50."
+        sideEffect:
+          - cmd:
+              - EVAL_RO
+              - "local m = 1000000 for i = 1, 50 do local t = redis.call('TTL', 'storm:' .. i) if t < m then m = t end end return m"
+              - 0
+            gte: 599
+            message: "Every key should live at least baseSeconds, 600 s. One of them has less: the random extra must only add time."
+          - cmd:
+              - EVAL_RO
+              - "local m = 0 for i = 1, 50 do local t = redis.call('TTL', 'storm:' .. i) if t > m then m = t end end return m"
+              - 0
+            lte: 720
+            message: "No key should live longer than base + jitter, 720 s. One of them has more."
+          - cmd:
+              - EVAL_RO
+              - "local lo = 1000000 local hi = 0 for i = 1, 50 do local t = redis.call('TTL', 'storm:' .. i) if t < lo then lo = t end if t > hi then hi = t end end return hi - lo"
+              - 0
+            gte: 40
+            message: "The shortest and the longest expiry are less than 40 seconds apart. When the keys all die at nearly the same second, that is the storm: give each key its own random extra."
+  - type: quiz
+    question: "Forty thousand session keys were written within a minute and each got a 30 minute expiry. What happens at the 30 minute mark?"
+    options:
+      - id: spread-by-redis
+        label: "Redis spreads the removals over the following half hour by itself, so nothing happens"
+      - id: only-first-expires
+        label: "Only the first key expires: the others wait for it"
+      - id: keys-last-longer
+        label: "The keys stay for 30 minutes and then for as long as they are being read"
+      - id: all-due-together
+        label: "They all become due together, so the removal work and the forty thousand re-logins arrive in the same second"
+    correct: all-due-together
+    explanation: "A TTL is a deadline. Keys written together with the same TTL have deadlines that coincide, and Redis removes them when they are accessed or found by its background scan, all of them at about the same time. Whatever has to happen when a session is gone (a login, a recompute, an OTP) happens for all of them at once. Adding a random extra to each TTL spreads the deadlines and the work."
+  - type: quiz
+    question: "How large should the jitter be?"
+    options:
+      - id: always-one-second
+        label: "Always one second: any jitter is enough"
+      - id: a-share-of-the-base
+        label: "A share of the base TTL, wide enough to spread the load that each expiry causes into something the system can absorb: a product choice, not a fixed Redis number"
+      - id: equal-to-base
+        label: "Always as large as the base, so the TTL is between 1x and 2x"
+      - id: none-needed
+        label: "None: Redis already randomises expiry times"
+    correct: a-share-of-the-base
+    explanation: "The jitter has to be wide enough that the work arriving at expiry (re-logins, recomputes) is a stream the rest of the system can absorb, which depends on how expensive the follow-up is. A second of jitter on forty thousand keys is still a spike. Redis does not randomise the deadline you give it."
+
+show_me:
+  component: ttl_timer
+  keys: ["storm:1"]
+docs:
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+  - https://redis.io/docs/latest/develop/using-commands/pipelining/
+  - https://redis.io/docs/latest/develop/pubsub/keyspace-notifications/
+
+reward:
+  xp: 40
+  badge: "Spread the deadlines"
+
+solutions:
+  reference: solutions/13-reference.js
+  wrong:
+    - path: solutions/13-wrong-same-ttl.js
+      expect: wrong
+      because: "Every key gets exactly baseSeconds, so all fifty expire in the same second: the spread between the shortest and the longest expiry is 0, and that is the storm."

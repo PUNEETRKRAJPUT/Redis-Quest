@@ -1,0 +1,5 @@
+# Wrong: the lobby expires, but notifications are off (their default), so nobody is told and the game waits for nothing.
+# The first line puts the setting back to the default, so this file behaves the same on a stack where an earlier run turned
+# notifications on, and it leaves them off for the levels after this one.
+CONFIG SET notify-keyspace-events ""
+SET lobby:m-043 open EX 2

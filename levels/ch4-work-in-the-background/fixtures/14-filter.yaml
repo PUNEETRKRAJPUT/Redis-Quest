@@ -1,0 +1,8 @@
+# bf:usernames is a fresh Bloom filter (error rate 0.001, capacity 1,000,000) holding two handles:
+#   tariq.bhat75   the handle of seed user u-000010, who really is in the users table
+#   quest.ghost99  a handle a signup wrote into the filter but never saved to Postgres: to the filter it is "taken",
+#                  to the database it is free. A Bloom filter answering yes may be wrong, and this is what that looks like.
+steps:
+  - cmd: [DEL, "bf:usernames"]
+  - cmd: [BF.RESERVE, "bf:usernames", 0.001, 1000000]
+  - cmd: [BF.MADD, "bf:usernames", tariq.bhat75, quest.ghost99]

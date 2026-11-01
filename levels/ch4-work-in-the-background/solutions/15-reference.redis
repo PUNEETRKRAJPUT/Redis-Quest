@@ -1,0 +1,5 @@
+# Reference: an index over the JSON contests. The tags are an array, so the path ends in [*]: one TAG value per element.
+# In a TAG query a hyphen must be escaped with a backslash, and single quotes keep the backslashes as typed.
+FT.CREATE idx:contest ON JSON PREFIX 1 contest: SCHEMA $.name AS name TEXT $.hostel AS hostel TAG $.entry AS entry NUMERIC SORTABLE $.tags[*] AS tags TAG
+FT.SEARCH idx:contest '@hostel:{h\-c\-02\-2} @entry:[0 50]' RETURN 2 name entry
+FT.AGGREGATE idx:contest "*" GROUPBY 1 @hostel REDUCE AVG 1 @entry AS avg_entry

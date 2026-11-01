@@ -68,11 +68,11 @@ done
 pass "@quest/shared built"
 if bash -n scripts/grade/grade.sh && bash -n scripts/check/G-01.sh && node --check scripts/grade/grade.mjs; then pass "grade.sh, G-01.sh and grade.mjs parse"; else fail "syntax"; exit 1; fi
 
-say "scratch levels: levels/_examples/example-{cli,code,decision,ops}, ch0-boot, ch1-keyspace, ch2-everyone-showed-up, ch3-compete-and-talk"
+say "scratch levels: levels/_examples/example-{cli,code,decision,ops}, ch0-boot, ch1-keyspace, ch2-everyone-showed-up, ch3-compete-and-talk, ch4-work-in-the-background"
 rm -rf "$CHECK_DIR"
 mkdir -p "$G01_WORKSPACE" "$G01_LOGS" "$G01_PROGRESS" "$G01_LEVELS"
 for d in example-cli example-code example-decision example-ops; do cp -R "levels/_examples/$d" "$G01_LEVELS/"; done
-for d in ch0-boot ch1-keyspace ch2-everyone-showed-up ch3-compete-and-talk; do [ -d "levels/$d" ] || continue; cp -R "levels/$d" "$G01_LEVELS/"; done
+for d in ch0-boot ch1-keyspace ch2-everyone-showed-up ch3-compete-and-talk ch4-work-in-the-background; do [ -d "levels/$d" ] || continue; cp -R "levels/$d" "$G01_LEVELS/"; done
 v="$(node packages/shared/dist/levels/cli.js "$G01_LEVELS" 2>&1)"
 if [ $? -eq 0 ]; then pass "scratch levels valid: $v"; else fail "scratch levels invalid"; printf '%s\n' "$v"; exit 1; fi
 
@@ -100,7 +100,7 @@ while [ $i -lt 40 ]; do
 done
 if [ "$TRAFFIC" = 1 ]; then pass "app healthy: $a"; else fail "app did not answer /app/health (last: ${a:-none}); traffic levels cannot be graded"; exit 1; fi
 
-say "grade: examples, ch0, ch1, ch2, ch3 (traffic levels take minutes; progress lines follow)"
+say "grade: examples, ch0, ch1, ch2, ch3, ch4 (traffic levels take minutes; progress lines follow)"
 JSONS=""
 grade() {
   name="$1"; shift
@@ -119,6 +119,7 @@ grade ch0 "$G01_LEVELS/ch0-boot"
 grade ch1 "$G01_LEVELS/ch1-keyspace"
 grade ch2 "$G01_LEVELS/ch2-everyone-showed-up"
 [ -d "$G01_LEVELS/ch3-compete-and-talk" ] && grade ch3 "$G01_LEVELS/ch3-compete-and-talk"
+[ -d "$G01_LEVELS/ch4-work-in-the-background" ] && grade ch4 "$G01_LEVELS/ch4-work-in-the-background"
 
 say "summary per chapter, and every mismatch"
 # shellcheck disable=SC2086

@@ -1,0 +1,10 @@
+# Six balls with explicit ids 1700000000001-0 .. 1700000000006-0, so the check can name them. No consumer group exists: the
+# learner's function creates it. Points per batter once all six are done: p-028 = 4 + 1 + 0 + 6 = 11, p-034 = 6 + 2 = 8.
+steps:
+  - cmd: [DEL, "match:m-041:balls", "match:m-041:balls:dead", "lb:match:m-041"]
+  - cmd: [XADD, "match:m-041:balls", "1700000000001-0", over, 1, ball, 1, batter, p-028, runs, 4]
+  - cmd: [XADD, "match:m-041:balls", "1700000000002-0", over, 1, ball, 2, batter, p-028, runs, 1]
+  - cmd: [XADD, "match:m-041:balls", "1700000000003-0", over, 1, ball, 3, batter, p-034, runs, 6]
+  - cmd: [XADD, "match:m-041:balls", "1700000000004-0", over, 1, ball, 4, batter, p-028, runs, 0]
+  - cmd: [XADD, "match:m-041:balls", "1700000000005-0", over, 1, ball, 5, batter, p-034, runs, 2]
+  - cmd: [XADD, "match:m-041:balls", "1700000000006-0", over, 1, ball, 6, batter, p-028, runs, 6]

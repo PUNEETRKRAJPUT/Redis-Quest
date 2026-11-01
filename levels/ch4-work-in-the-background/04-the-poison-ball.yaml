@@ -1,0 +1,124 @@
+id: ch4-04-the-poison-ball
+chapter: ch4
+title: "The poison ball"
+mode: code
+
+story: |
+  It is 10:36 pm and the sweeper works, until ball 4 of the over. Somebody's scorer app sent `runs x`, a ball whose runs are
+  the letter x. The sweep claims it, tries to add it to a batter's score, fails, and does not acknowledge it. Ten seconds later
+  the sweep claims it again, fails again. By now ball 4 has been delivered five times. It will be delivered five hundred if
+  nobody stops it, and meanwhile the log of errors is longer than the match.
+
+  "Why is it still trying?" Teja asks, reading the console. Because it was never told to stop. A ball that fails every time
+  is not a ball that needs another worker, it is a ball that needs a human, and the only thing the system has to tell it apart
+  from an ordinary dead worker's ball is how many times it has been tried.
+
+  The group counts. You are going to read that count and move the ball out of the way.
+
+brainstorm:
+  prompt: "One ball can never be processed and keeps coming back. The good balls after it are waiting. What should the sweeper do with it?"
+  options:
+    - id: dead-letter-it
+      label: "Count how many times it has been delivered, and past a limit move it to a dead-letter stream for a human and acknowledge it on the original"
+      is_reasonable: true
+    - id: retry-forever
+      label: "Keep retrying it: it might work next time"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: delete the ball from the stream with XDEL as soon as it fails once"
+      is_reasonable: false
+
+teach: |
+  The delivery counter you met in the last level is in the extended `XPENDING` reply, and the streaming guide says what it is
+  for: it goes up on every claim, so it is the signal for a poison message. The usual shape is the dead-letter pattern in the
+  guide: when an entry has been delivered at least N times, move it to a dead-letter stream and `XACK` it on the original group.
+
+  - The dead-letter stream is just another stream, here `match:<id>:balls:dead`. Copy the fields of the poison entry into it
+    with `XADD ... *`, add a `reason` (and, useful for a human, the original id), and look at it later.
+  - `XACK` on the original removes the entry from the PEL. Without the acknowledge the ball is both dead-lettered and still
+    pending, and the next sweep finds it again.
+  - Do the check before you process: a ball that is already over the limit should not be tried again.
+
+  A delivery count is the number of times an entry has been handed to a consumer: by `XREADGROUP` the first time, by `XCLAIM` or
+  `XAUTOCLAIM` each time after. Here the poison ball was read once and claimed four more times, so its counter is 5, and the
+  sweep's own claim makes it 6. With `maxDeliveries` 5, "at or over" catches it whether you read the counter before the claim
+  or after.
+
+  The same function handles the good balls: the other five still need their runs added.
+
+task: |
+  Extend `sweep(deps, matchId, consumer, minIdleMs, maxDeliveries)` in `workspace/ch4/points-sweep.js` (and keep `consume`).
+
+  - Claim the idle pending entries as before.
+  - For each one, read its delivery count. If it is at or over `maxDeliveries`, `XADD` it to `match:<matchId>:balls:dead` with
+    all its fields plus a `reason` field, `XACK` it on `match:<matchId>:balls`, and list its id in `deadLettered`.
+  - Every other entry is processed (add the runs, `XACK`) and listed in `reclaimed`.
+
+  The check has six balls: ball 4 is `runs x`, and it has been delivered five times. It calls `sweep("m-041", "w1", 0, 5)` and
+  expects ball 4 in `deadLettered`, the other five in `reclaimed`, one entry in the dead-letter stream, and nothing pending. The
+  poison ball must not be processed: adding `x` to a score is an error.
+
+hints:
+  - "Read the count with xPendingRange(key, 'points', id, id, 1): the first item has deliveriesCounter."
+  - "Check the delivery count first. Only entries under the limit go to the part that adds the runs."
+  - "A dead-letter entry needs an XADD to match:m-041:balls:dead and an XACK on the original: both, or the sweep will find it again."
+
+verify:
+  - type: behavior
+    slot: points.sweep
+    fixtures: fixtures/04-poison.yaml
+    assertions:
+      - call: { args: ["m-041", "w1", 0, 5] }
+        expect:
+          reclaimed: ["1700000000001-0", "1700000000002-0", "1700000000003-0", "1700000000005-0", "1700000000006-0"]
+          deadLettered: ["1700000000004-0"]
+        message: "Ball 4 has been delivered at least 5 times, so it belongs in deadLettered. The other five balls are claimed, processed and listed in reclaimed, in stream order."
+        sideEffect:
+          - cmd: [XLEN, "match:m-041:balls:dead"]
+            equals: 1
+            message: "The dead-letter stream match:m-041:balls:dead should hold exactly one entry, the poison ball."
+          - cmd:
+              - EVAL_RO
+              - "return redis.call('XPENDING', KEYS[1], ARGV[1])[1]"
+              - 1
+              - "match:m-041:balls"
+              - points
+            equals: 0
+            message: "Nothing may stay pending: acknowledge the poison ball on the original stream after dead-lettering it, and acknowledge the processed ones."
+          - cmd: [ZSCORE, "lb:match:m-041", "p-028"]
+            equals: 11
+            message: "p-028 has balls 1, 2 and 6: 4 + 1 + 6 = 11. Ball 4 (runs x) must not be added."
+          - cmd: [ZSCORE, "lb:match:m-041", "p-034"]
+            equals: 8
+            message: "p-034 has balls 3 and 5: 6 + 2 = 8."
+  - type: quiz
+    question: "Why is the delivery counter, and not the entry's age, the signal for a poison ball?"
+    options:
+      - id: counter-counts-attempts
+        label: "A poison ball fails every time it is delivered, so its counter climbs, while a dead worker's ball is delivered once or twice and then finished; age alone cannot tell them apart"
+      - id: age-is-not-stored
+        label: "Redis does not store how long an entry has been in the stream"
+      - id: counter-is-faster
+        label: "Reading the counter is faster than reading the clock"
+      - id: counter-is-global
+        label: "The counter is shared by every group, so it sees every attempt by every consumer"
+    correct: counter-counts-attempts
+    explanation: "An old entry may only mean its worker is slow or dead. An entry that has been handed out five times and is still not acknowledged has failed five times. That is the dead-letter signal in the streaming guide: when deliveries reach a limit, move it to a dead-letter stream and acknowledge it on the original."
+
+show_me:
+  component: stream_log
+  keys: ["match:m-041:balls", "match:m-041:balls:dead"]
+docs:
+  - https://redis.io/docs/latest/develop/data-types/streams/
+  - https://redis.io/docs/latest/develop/use-cases/streaming
+
+reward:
+  xp: 60
+  badge: "Dead letter office"
+
+solutions:
+  reference: solutions/04-reference.js
+  wrong:
+    - path: solutions/04-wrong-retry-for-ever.js
+      expect: wrong
+      because: "The poison ball is retried at every sweep and never dead-lettered: it stays pending, deadLettered comes back empty and the dead-letter stream has nothing in it. The five good balls were fine, but ball 4 will be tried for ever."
