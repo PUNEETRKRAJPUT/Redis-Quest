@@ -12,7 +12,9 @@ if [ ! -f "$LOG" ]; then
 fi
 
 status=0
-bash scripts/check/all.sh || status=1
+# all.sh also runs P0-12.sh; clear the flag so that nested run only validates the workflow instead of
+# starting this script again (it did, once).
+P0_12_RUN_LOCAL= bash scripts/check/all.sh || status=1
 
 # ---- HOOK (P0-10): Playwright run of Chapter 0 in the browser goes here. ----
 # On failure set status=1, e.g.: pnpm --filter @quest/ui e2e || status=1
