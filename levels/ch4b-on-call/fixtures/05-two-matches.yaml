@@ -1,0 +1,7 @@
+# Two finished matches with known scores. m-901 has three scores of 50 or more (50, 62, 75), m-902 has four (50, 55, 99, 100).
+# CONFIG RESETSTAT is last, so INFO commandstats shows only what the learner's recomputeBadges did (no eval, if it is the fix).
+steps:
+  - cmd: [DEL, "badges:fifties", "lb:match:m-901", "lb:match:m-902"]
+  - cmd: [ZADD, "lb:match:m-901", 10, "p-001", 49, "p-002", 50, "p-003", 62, "p-004", 75, "p-005"]
+  - cmd: [ZADD, "lb:match:m-902", 1, "p-011", 20, "p-012", 50, "p-013", 55, "p-014", 99, "p-015", 100, "p-016"]
+  - cmd: [CONFIG, RESETSTAT]

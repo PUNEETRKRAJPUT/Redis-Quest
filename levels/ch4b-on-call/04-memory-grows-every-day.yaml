@@ -1,0 +1,167 @@
+id: ch4b-04-memory-grows-every-day
+chapter: ch4b
+title: "Memory grows every day"
+mode: code
+
+story: |
+  `PAGER 02:12  redis memory: warning  (higher than yesterday, higher than the day before)`
+
+  This one is not a spike, it is a slope. Nothing is slow, nothing is blocked, nobody is waiting. Teja drew the graph of
+  Redis memory over the last week on the back of a mess token, and it is a staircase that only goes up: a little higher every
+  morning than it was the morning before.
+
+  The suspect is the thing Harry Bhaiya added in the first week, "so the fest dashboard can say how many fans watched
+  which match". Every time a fan opens a match page the app writes a key, `view:<user>:<match>`. A fan who opens the page
+  fifty times writes it fifty times, onto the same key, which is fine. A new fan writes a new key. Nobody reads these keys.
+
+  Nobody ever deletes them either. Mukul sends one line: "your Redis looks well fed, bhai".
+
+scenario: oncall-views-100   # drives the live pain panel and the "Run traffic" button
+
+brainstorm:
+  prompt: "Redis memory is a little higher every day and no command is slow. A page-view key is written for every fan and match and never read again. What do you do?"
+  options:
+    - id: ttl-on-write
+      label: "Give every view a lifetime when it is written, and give the ones already there a deadline too"
+      is_reasonable: true
+    - id: bigger-box
+      label: "Add more memory to the Redis machine and check again next month"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: write views to Postgres, where an old row costs disk and not memory"
+      is_reasonable: true
+
+setup:
+  - cmd:
+      - EVAL
+      - "local c = '0' repeat local r = redis.call('SCAN', c, 'MATCH', 'oncall:user:*', 'COUNT', 1000) c = r[1] for _, k in ipairs(r[2]) do redis.call('UNLINK', k) end until c == '0' return 1"
+      - 0
+  - cmd: [CONFIG, SET, latency-monitor-threshold, "0"]
+  - cmd:
+      - EVAL
+      - "for i = 1, 5000 do redis.call('SET', string.format('view:u-%06d:m-041', i), '2026-11-01T02:05:00.000Z') end return 5000"
+      - 0
+
+teach: |
+  A key with no expiry lives until something deletes it. Each one is small, which is the trap: memory does not spike, it climbs.
+  On this stack one view key (`view:u-000001:m-041`, name plus a 24-character timestamp) is 64 bytes by `MEMORY USAGE`, and 80 once
+  it has a TTL. A million fans over sixty matches is sixty million keys, about 3.8 GB of those 64 bytes (arithmetic on the
+  measured size, not a measurement), written once and never read.
+
+  The three views of it, from the terminal:
+
+  - `INFO keyspace` prints one line per database, `db0:keys=<n>,expires=<m>,avg_ttl=<ms>,subexpiry=0` on this stack. `keys` is how many
+    keys exist, `expires` how many of them have a TTL. A leak looks like `keys` climbing while `expires` stays put. A cache that is
+    working looks like the two moving together.
+  - `INFO memory` carries `used_memory_human`, the total in human units: the number on the graph.
+  - `docker compose exec redis redis-cli --bigkeys` (by size) or `--memkeys` (by memory used) scan with `SCAN` and summarise by type;
+    look for the biggest keys. No view is big (each is 64 bytes): that is what separates this from the last pages.
+
+  The fix has two halves, because the damage is already done. The cause: write every view with its lifetime in one command, `SET key value EX 86400`,
+  so no view exists without a deadline. The backlog: walk the keyspace with `SCAN` (never `KEYS`) and `EXPIRE` what has none. `EXPIRE key seconds NX`
+  sets the deadline only when the key has none, so keys that already have one are left alone, and a pipeline sends a whole page of them in one round trip.
+
+task: |
+  The game seeded 5,000 views with no TTL (`view:u-000001:m-041` .. `view:u-005000:m-041`).
+
+  **Step 1, see it.** Press "Run traffic" (100 connections, 8 seconds, `POST /app/oncall/views` for 20,000 different fans on match
+  `m-041`). Leave "Run my code in the app" off for this run: it is the planted code you are watching. Then in the game terminal:
+  `INFO keyspace` (`keys=` is higher, `expires=` has not moved), `INFO memory` (`used_memory_human`), and `MEMORY USAGE view:u-000001:m-041`.
+  In your own terminal: `docker compose exec redis redis-cli --memkeys`.
+
+  **Step 2, name it.** The first question in Verify asks what this fault is.
+
+  **Step 3, fix it.** Two files in `workspace/ch4b/`:
+
+  - `recordView(deps, userId, matchId)` in `record-view.js` stores the view under `view:<userId>:<matchId>` (the value is up to you, the
+    planted one is the time) **with a TTL of 86400 seconds written in the same command**.
+  - `addTtls(deps, pattern, seconds)` in `add-ttls.js` finds the keys matching `pattern` with `SCAN` (`MATCH`, `COUNT: 1000`), gives
+    `seconds` of life to the ones that have none, and returns how many it changed. Send each page's `EXPIRE`s as one pipeline.
+
+  Verify gives you a clean slate: exactly 1,000 views with no TTL (`view:u-000011:m-041` .. `view:u-001010:m-041`) and no
+  `view:u-000010:m-041`. It calls `recordView("u-000010", "m-041")` and checks the key exists. It calls `addTtls("view:*", 86400)` and
+  expects 1000, then counts the `view:*` keys whose `TTL` is still -1: none. A separate check looks at the TTL `recordView` wrote.
+  It also needs to have seen you run the `oncall-views-100` traffic during this level.
+
+hints:
+  - "TTL answers -1 for a key that exists and has no expiry, and -2 for a key that does not exist. INFO keyspace's expires= is how many keys have one."
+  - "node-redis: redis.set(key, value, { EX: 86400 }) writes the value and the deadline in one command. A SET and an EXPIRE as two awaits can leave a view with no TTL if the process stops between them."
+  - "EXPIRE key seconds NX answers 1 when it set the deadline and 0 when the key already had one. Count the 1s. For a page of keys: const p = redis.multi(); for (const k of page.keys) p.expire(k, seconds, 'NX'); const replies = await p.execAsPipeline();"
+
+verify:
+  - type: quiz
+    question: "INFO keyspace shows keys= higher every day while expires= stays flat. MEMORY USAGE of any one view is 64 bytes, --memkeys finds no big key, the slow log is empty and nothing is blocked. What is this?"
+    options:
+      - id: no-ttl-leak
+        label: "Keys written with no expiry: nothing ever removes them, so memory only climbs"
+      - id: big-key
+        label: "A big key: one key holding too much"
+      - id: hot-key
+        label: "A hot key: one key taking most of the traffic"
+      - id: slow-command
+        label: "A slow command: one command holding Redis for milliseconds"
+    correct: no-ttl-leak
+    explanation: "keys climbing while expires stays flat is the signature: every key is small, none is hot and no command is slow, and none of them is ever removed. The fix is a TTL on every write, plus a sweep (SCAN and EXPIRE) over what is already there."
+  - type: behavior
+    slot: oncall.recordView
+    fixtures: fixtures/04-seed-views.yaml
+    assertions:
+      - call: { args: ["u-000010", "m-041"] }
+        message: "recordView('u-000010', 'm-041') should store the view under the key view:u-000010:m-041."
+        sideEffect:
+          - cmd: [EXISTS, "view:u-000010:m-041"]
+            equals: 1
+            message: "view:u-000010:m-041 does not exist after recordView. The key is view:<userId>:<matchId>."
+  - type: behavior
+    slot: oncall.addTtls
+    fixtures: fixtures/04-seed-views.yaml
+    assertions:
+      - call: { args: ["view:*", 86400] }
+        expect: 1000
+        message: "There are exactly 1,000 view:* keys with no TTL. addTtls('view:*', 86400) should give each of them one and return 1000."
+        sideEffect:
+          - cmd:
+              - EVAL_RO
+              - "local c = '0' local n = 0 repeat local r = redis.call('SCAN', c, 'MATCH', 'view:*', 'COUNT', 1000) c = r[1] for _, k in ipairs(r[2]) do if redis.call('TTL', k) == -1 then n = n + 1 end end until c == '0' return n"
+              - 0
+            equals: 0
+            message: "Some view:* keys still have no TTL after addTtls. It must reach every key that matches the pattern, page after page, until the SCAN cursor is 0."
+          - cmd: [TTL, "view:u-000011:m-041"]
+            between: [1, 86400]
+            message: "view:u-000011:m-041 should now expire within 86400 seconds."
+  - type: antipattern
+    slot: oncall.recordView
+    fixtures: fixtures/04-seed-views.yaml
+    assertions:
+      - call: { args: ["u-000010", "m-041"] }
+        message: "This passes today, but recordView still writes a view with no expiry, so tomorrow's fans leak all over again: the sweep only emptied the bucket once. Write the TTL in the same SET (EX 86400)."
+        sideEffect:
+          - cmd: [TTL, "view:u-000010:m-041"]
+            between: [1, 86400]
+            message: "This passes today, but recordView still writes a view with no expiry, so tomorrow's fans leak all over again: the sweep only emptied the bucket once. Write the TTL in the same SET (EX 86400)."
+  - type: event
+    kind: custom
+    match: { name: load_finished, scenario: oncall-views-100 }
+    timeoutMs: 60000
+    message: "The game has not seen you run the oncall-views-100 traffic during this level. Press \"Run traffic\" and compare INFO keyspace before and after: that is the observation this level is about."
+
+show_me:
+  component: ttl_timer
+  keys: ["view:u-000010:m-041"]
+docs:
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/memory-optimization/
+
+reward:
+  xp: 60
+  badge: "Every key gets a deadline"
+
+solutions:
+  reference: solutions/04-reference.js
+  wrong:
+    - path: solutions/04-wrong-no-ttl.js
+      expect: wrong
+      because: "recordView still writes without an expiry and addTtls answers 0 without touching anything, so the thousand old views stay immortal: the check that counts view:* keys without a TTL finds all 1,000, and the count returned is 0, not 1000."
+    - path: solutions/04-works-but-wrong-sweep-only.js
+      expect: works_but_wrong
+      because: "The sweep is right and every old view gets its deadline, but recordView is still the planted fault: the next fan's view is written with no expiry. The leak is paused until tomorrow's traffic, not fixed."

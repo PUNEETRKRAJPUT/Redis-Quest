@@ -1,0 +1,131 @@
+id: ch4b-03-a-cron-runs-keys
+chapter: ch4b
+title: "A cron runs KEYS"
+mode: code
+
+story: |
+  `PAGER 02:10  redis latency: warning  (every minute, on the minute)`
+
+  The comb is back, and this time it has a rhythm: a spike at the top of every minute. Teja checks the clock and says what
+  you were both thinking, which is that nobody types commands at exactly the top of every minute. Something is on a timer.
+
+  There is one. Harry Bhaiya wrote a small cron last season for the fest dashboard, "how many fans are registered", and
+  it calls `GET /app/oncall/users/count`. The route is three lines long. It asks Redis for every key that starts with
+  `oncall:user:`, counts them, and answers. It has run every minute since August and nobody has looked at it since.
+
+  The keyspace is half a million keys bigger tonight than it was in August.
+
+brainstorm:
+  prompt: "A spike at the top of every minute, and something on a timer counts the keys that start with a prefix. What do you expect, and how do you count them instead?"
+  options:
+    - id: scan-in-pages
+      label: "The command that lists matching keys walks the whole keyspace in one go and blocks Redis. Count them with an incremental scan, a page at a time"
+      is_reasonable: true
+    - id: faster-box
+      label: "Nothing is wrong with the command, the machine is just too small. Give Redis a faster one"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: keep a counter in Postgres and add one whenever a user registers"
+      is_reasonable: true
+
+setup:
+  - cmd:
+      - EVAL
+      - "for i = 1, 500000 do redis.call('SET', 'oncall:user:' .. i, '1') end return 500000"
+      - 0
+  - cmd: [SLOWLOG, RESET]
+  - cmd: [LATENCY, RESET]
+  - cmd: [CONFIG, SET, latency-monitor-threshold, "10"]
+
+teach: |
+  A command that blocks the server for 60 milliseconds is 60 milliseconds in which every other client waits, however fast the
+  commands around it are. `KEYS <pattern>` visits every key in the keyspace to find the matches, in one command. The keyspace
+  page says it plainly: do not use `KEYS` in application code, it blocks the server, and `SCAN` is the one that is safe for
+  production. `SCAN` hands back a cursor and a page of keys, and you call it again with the cursor until the
+  cursor is `0`; its guarantees are limited while keys come and go (a key can be seen twice), which a count can live with.
+
+  Three tools tell you which command it is, and they are standard Redis commands, measured here:
+
+  - `SLOWLOG GET 5` lists the slowest recent commands with their time in microseconds. With the default threshold of 10,000
+    microseconds the entries that matter here read `keys` and `oncall:user:*`; on this stack, each call took between
+    45,446 and 72,189 microseconds over half a million keys (24 calls in eight runs).
+  - `LATENCY LATEST` summarises latency events by name, and shows something only once the monitor has a threshold: the game
+    set `latency-monitor-threshold` to 10 for you. After the cron's calls it lists one event, `command`, with the time of the
+    last spike and its length in milliseconds (72 in the run that measured it).
+  - `LATENCY DOCTOR` writes the same events as a short report with advice. The admin page lists it, next to `MEMORY DOCTOR`.
+
+  On this stack the half-million keys were written in about half a second by one setup script. The fix does not change what the
+  route answers, only how it asks: `SCAN 0 MATCH oncall:user:* COUNT 1000`, until the cursor is `0`. The same walk, a thousand
+  keys at a time, with Redis free to serve everyone else between pages.
+
+task: |
+  The game seeded `oncall:user:1` .. `oncall:user:500000`, cleared the slow log and turned the latency monitor on.
+
+  **Step 1, see it.** Be the cron. From your own terminal, three times:
+
+  `curl 'localhost:3000/app/oncall/users/count?prefix=oncall:user:'`
+
+  Then in the game terminal: `SLOWLOG GET 5` (find the `keys` entries and their microseconds), `LATENCY LATEST`, `LATENCY DOCTOR`.
+
+  **Step 2, name it.** The first question in Verify asks what this fault is.
+
+  **Step 3, fix it.** Fill in `countUsers(deps, prefix)` in `workspace/ch4b/count-users.js`. It returns how many keys start with
+  `prefix`, as a number, using `SCAN` with `MATCH <prefix>*` and `COUNT: 1000`, from cursor `0` until the cursor comes back as
+  `0`. node-redis's `scanIterator` is fine. Never call `KEYS`.
+
+  Verify clears the counters and the slow log, calls `countUsers("oncall:user:")` and expects 500000, then reads `INFO commandstats`:
+  there must be no `keys` line and at least one `scan` call. Tick "Run my code in the app" and run the curl again to see the
+  route use your function (read `x-quest-slots` on the answer).
+
+hints:
+  - "KEYS and SCAN both take a glob pattern. With node-redis: const page = await redis.scan(cursor, { MATCH: `${prefix}*`, COUNT: 1000 }); page.cursor is a number or a string, page.keys the matches."
+  - "Loop: start with cursor '0', add page.keys.length to a total, stop when String(page.cursor) === '0'. COUNT is a hint for how many keys to look at per call, not a promise of how many come back."
+  - "The slow log is in microseconds: 60051 is 60 ms. Verify clears it first, so your own SCAN calls cannot be mistaken for the cron's."
+
+verify:
+  - type: quiz
+    question: "A spike at the top of every minute. SLOWLOG GET shows an entry for keys oncall:user:* of about 60,000 microseconds each time, and LATENCY LATEST shows a command event. Nothing else is slow. What is this?"
+    options:
+      - id: slow-command
+        label: "A slow command: one O(N) command that walks everything holds Redis for tens of milliseconds, on a timer"
+      - id: hot-key
+        label: "A hot key: one key takes most of the traffic"
+      - id: big-key
+        label: "A big key: one value so large that commands on it are expensive"
+      - id: connection-leak
+        label: "A connection leak: clients that never close"
+    correct: slow-command
+    explanation: "The slow log is the tool that names the command, and here it names KEYS, which visits every key in the keyspace in one go. A hot key would show in INFO commandstats as one cheap command with climbing calls and an empty slow log, a big key as one key with a large MEMORY USAGE, a leak as connected_clients climbing."
+  - type: behavior
+    slot: oncall.countUsers
+    fixtures: fixtures/03-reset-stats.yaml
+    assertions:
+      - call: { args: ["oncall:user:"] }
+        expect: 500000
+        message: "The game seeded 500,000 keys that start with oncall:user:. countUsers should return 500000, as a number."
+  - type: redis
+    checks:
+      - cmd: [INFO, commandstats]
+        notContains: cmdstat_keys
+        message: "INFO commandstats still shows the keys command. countUsers must never call KEYS: it walks the whole keyspace in one command."
+      - cmd: [INFO, commandstats]
+        matches: "cmdstat_scan:calls=[1-9]"
+        message: "INFO commandstats shows no scan call. Count the keys with SCAN, a page at a time, until the cursor is 0."
+
+show_me:
+  component: cache_stats
+  keys: []
+docs:
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/admin/
+
+reward:
+  xp: 50
+  badge: "Scan, do not keys"
+
+solutions:
+  reference: solutions/03-reference.js
+  wrong:
+    - path: solutions/03-wrong-keys.js
+      expect: wrong
+      because: "KEYS <prefix>* gives the right count, and it is the planted fault: one command that walks the whole keyspace and blocks Redis for tens of milliseconds, which INFO commandstats shows as cmdstat_keys."

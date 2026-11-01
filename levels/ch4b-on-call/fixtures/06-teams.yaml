@@ -1,0 +1,11 @@
+# The eight franchises as hashes team:t-01 .. team:t-08 (id and name), the way the level's setup writes them; team:t-99 does not exist.
+steps:
+  - cmd: [HSET, "team:t-01", id, "t-01", name, "Mumbai Monsoon"]
+  - cmd: [HSET, "team:t-02", id, "t-02", name, "Chennai Lighthouse"]
+  - cmd: [HSET, "team:t-03", id, "t-03", name, "Kolkata Riverhawks"]
+  - cmd: [HSET, "team:t-04", id, "t-04", name, "Delhi Dust Devils"]
+  - cmd: [HSET, "team:t-05", id, "t-05", name, "Bengaluru Gulmohars"]
+  - cmd: [HSET, "team:t-06", id, "t-06", name, "Hyderabad Charminars"]
+  - cmd: [HSET, "team:t-07", id, "t-07", name, "Jaipur Havelis"]
+  - cmd: [HSET, "team:t-08", id, "t-08", name, "Pune Sahyadris"]
+  - cmd: [DEL, "team:t-99"]

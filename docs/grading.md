@@ -108,8 +108,11 @@ declared `right` or `works_but_wrong`, and produces nothing for one declared `wr
 - **custom `load_finished`** (`match.scenario`, E-02). The learner "ran the traffic". Before verify the harness POSTs
   `/api/load/start { scenario, durationSec: 5 }` (a 409 means a verification or another run is going: it waits 2 s
   and retries, up to 15 times) and polls `GET /api/load/status` every 500 ms until `running` is false (cap 40 s). The
-  engine's own `load_finished` is what the level then sees; the harness never posts it. The note carries the run's
-  requests, req/s, p99 and errors.
+  engine's own `load_finished` is what the level then sees; the harness never posts it. The run goes against the
+  solution's code: the harness puts the level's slots on first (`PUT /api/slots`, 2.5 s for the app to pick it up) and
+  puts the previous list back after, as a learner's own "run traffic again after the fix" would; with the slots off the
+  traffic would exercise the planted fault and the level's checks would then see that damage (ch4b-06's leaked
+  connections). The note carries the slots and the run's requests, req/s, p99 and errors.
 - **custom `script_killed` and `redis_busy`** (E-02; one dance covers both, and a level with both gets it once). The
   harness POSTs A-04's `/app/oncall/badges/recompute` (a Lua loop that holds Redis) without awaiting it, waits 5.5 s
   (past `busy-reply-threshold`, 5 s by default), runs `PING` through `/api/cli` (Redis answers `BUSY`, so the engine emits

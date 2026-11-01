@@ -1,0 +1,3 @@
+# Run before the behavior verifier, every time, so the first call for p-028 is always a miss in Redis.
+steps:
+  - cmd: [DEL, "cache:player:p-028", "cache:player:p-999"]

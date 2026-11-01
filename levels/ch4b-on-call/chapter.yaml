@@ -1,0 +1,32 @@
+id: ch4b
+title: "On call"
+incident:
+  - from: roommate
+    time: "02:05"
+    text: "bhai the PAGER went off. on my phone. at 2 am. the semi-final is still on and Chengappa's page is everyone's page right now. I am screenshotting it, ONE second"
+  - from: you
+    time: "02:06"
+    text: "do not touch anything. nothing is down, so it is not an outage yet. what does the page say?"
+  - from: rival-college
+    time: "02:11"
+    text: "Still awake? So are we. Your Redis looks a little tired from here 😏"
+  - from: roommate
+    time: "02:13"
+    text: "yaar it is not slow, it is not full, it is not... I do not even have the word for what it is"
+  - from: you
+    time: "02:14"
+    text: "good, that is the whole job. we do not guess and we do not restart. first look, then name it, then fix it. one page at a time"
+  - from: roommate
+    time: "02:17"
+    text: "writing that on a mess token. Mukul just sent: 'your Redis looks well fed, bhai'. he KNOWS something"
+  - from: senior
+    time: "02:20"
+    text: "Sab theek? Forty notifications and I was asleep. Please tell me the trophy is safe 🙏"
+levels:
+  - ch4b-01-one-celebrity-player
+  - ch4b-02-one-hash-with-three-lakh-fields
+  - ch4b-03-a-cron-runs-keys
+  - ch4b-04-memory-grows-every-day
+  - ch4b-05-everything-froze
+  - ch4b-06-connections-climbing
+  - ch4b-07-the-on-call-checklist

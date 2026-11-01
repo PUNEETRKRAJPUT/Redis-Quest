@@ -1,0 +1,17 @@
+# Chapter 4b, level 4: every fan opening a match page records a view. 100 connections for 8 s on
+# POST /app/oncall/views, 20,000 users spread uniformly, one match (m-041). A recordView without a TTL leaves a
+# view:<user>:m-041 key behind for every distinct user: keys climbs, expires does not.
+id: oncall-views-100
+description: "100 connections, 8 s, POST /app/oncall/views { userId, matchId: m-041 } for 20,000 users."
+durationSec: 8
+connections: 100
+pipelining: 1
+seed: 20260404
+users:
+  count: 20000
+  distribution: uniform
+requests:
+  - method: POST
+    path: /app/oncall/views
+    weight: 1
+    body: { userId: "{user}", matchId: "m-041" }

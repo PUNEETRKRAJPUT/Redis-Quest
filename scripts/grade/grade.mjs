@@ -512,15 +512,34 @@ async function tickerGapDance() {
  */
 async function loadDance(lv, scenarioTemplate) {
   const scenario = renderTemplate(String(scenarioTemplate), ctxOf(lv));
+  // The run goes against the solution's code, as a learner's own "run traffic again after the fix" does: with
+  // the level's slots off, the traffic would exercise the planted fault (ch4b-06's leaked connections) and the
+  // level's own checks would then see that damage. Put the level's slots on for the run, and put them back after.
+  const own = [...new Set(lv.level.verify.map((v) => v.slot).filter((x) => typeof x === 'string'))];
+  let before = null;
+  if (own.length) {
+    const cur = await api('GET', '/api/slots', undefined, 5000);
+    before = Array.isArray(cur.body?.active) ? cur.body.active : [];
+    await api('PUT', '/api/slots', { active: [...new Set([...before, ...own])] }, 5000);
+    await sleep(2500); // the app polls the engine's config every 2 s
+  }
+  const restore = async () => {
+    if (before) await api('PUT', '/api/slots', { active: before }, 5000);
+  };
   let started = null;
   for (let attempt = 0; attempt < 15 && !started; attempt++) {
     const r = await api('POST', '/api/load/start', { scenario, durationSec: 5 }, 15_000);
     if (r.status === 202) started = r.body;
     else if (r.status === 409) await sleep(2000);
-    else
+    else {
+      await restore();
       return `NOTE load_finished: POST /api/load/start answered ${r.status} ${JSON.stringify(r.body)}`;
+    }
   }
-  if (!started) return 'NOTE load_finished: POST /api/load/start stayed 409 for 30 s';
+  if (!started) {
+    await restore();
+    return 'NOTE load_finished: POST /api/load/start stayed 409 for 30 s';
+  }
   const deadline = Date.now() + 40_000;
   let last = null;
   while (Date.now() < deadline) {
@@ -531,8 +550,9 @@ async function loadDance(lv, scenarioTemplate) {
       break;
     }
   }
+  await restore();
   return last
-    ? `load dance: ran ${scenario} for 5 s (${last.requests} requests, ${Math.round(last.rps)} req/s, p99 ${last.p99Ms} ms, ${last.errors} errors)`
+    ? `load dance: ran ${scenario} for 5 s with slots ${own.join(', ') || '(none)'} on (${last.requests} requests, ${Math.round(last.rps)} req/s, p99 ${last.p99Ms} ms, ${last.errors} errors)`
     : `NOTE load_finished: the ${scenario} run did not report within 40 s`;
 }
 

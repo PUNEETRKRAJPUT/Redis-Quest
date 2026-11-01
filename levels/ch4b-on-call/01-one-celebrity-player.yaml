@@ -1,0 +1,160 @@
+id: ch4b-01-one-celebrity-player
+chapter: ch4b
+title: "One celebrity player"
+mode: code
+
+story: |
+  `PAGER 02:05  stats page: warning  redis commands per second: warning`
+
+  The phone on Teja's desk buzzes itself across the wood and wakes both of you. It is the semi-final, second innings,
+  and Ganapathi Chengappa, "Anna Express", is on 94. Every phone in the hostel, and every phone in Lucknow, has just
+  opened the same page: his stats.
+
+  Nothing is down. Chapter 2's cache is doing its job, so Postgres is almost idle and the page answers from Redis. But the
+  Metrics panel's redis commands line is climbing like a staircase, and all of those commands are about one player. This is
+  the first page of the night, and the rule of the night is the same for every page: before you change a line, find out
+  which of the classic faults this is.
+
+  Mukul is awake, of course. He has been refreshing that page since the 18th over.
+
+scenario: celebrity-100   # drives the live pain panel and the "Run traffic" button
+
+brainstorm:
+  prompt: "Most of the country is opening the same player page, and every open costs Redis one command for the same key. Where do you cut the cost?"
+  options:
+    - id: local-memo
+      label: "Keep a very short-lived copy of that one page in the app's own memory, so most requests never reach Redis"
+      is_reasonable: true
+    - id: bigger-redis
+      label: "Give Redis a bigger machine: the same commands, more CPU to run them"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: publish that one page as a static file that is rebuilt every second"
+      is_reasonable: true
+
+teach: |
+  A **hot key** is one key that takes most of the traffic. Nothing about it is slow: each `HGETALL` is cheap. The cost is that
+  every request, from every phone, is still one command and one round trip for the same few bytes.
+
+  How to see it, in the order you would on a real night:
+
+  - `INFO commandstats` lists every command with its `calls`, the total `usec` and `usec_per_call`. A hot key looks like one
+    command whose `calls` climb with every request (here `cmdstat_hgetall`) at a tiny, flat `usec_per_call`. Run
+    `CONFIG RESETSTAT` first and the counters start from zero, so you only see the traffic you are looking at.
+  - `INFO stats` carries `instantaneous_ops_per_sec`, the commands per second right now. The Metrics panel's redis commands line
+    is the same number, per request, from the app's side.
+  - What you do not see is a slow query: the slow log stays quiet. Slow and frequent are different faults.
+
+  The client-side caching page describes the cure: keep a copy next to the code and let it go stale for a short, chosen time.
+  node-redis has it built in (`RESP: 3` and `clientSideCache`, which lets Redis tell the client when a key changes), but the
+  game's client does not turn RESP 3 on, so the exercise is the plain form: a `Map` in this process, keyed by player id, that
+  trusts its copy for one second. The page's own rules apply to a memo as much as to the built-in cache: bound the memory and
+  evict. A memo moves the staleness budget from "30 seconds in Redis" to "one more second in each app process".
+
+task: |
+  **Step 1, see it.** Put Chapter 2's cache in `workspace/ch2/cache.js`. If you do not have it any more, this is a working
+  cache-aside (key `cache:player:<id>`, a hash, a 30 second TTL) and it is the fault of this level, not the fix:
+
+  ```js
+  export default async function getPlayerStats({ redis, db }, playerId) {
+    const key = `cache:player:${playerId}`;
+    const cached = await redis.hGetAll(key);
+    if (Object.keys(cached).length > 0) return cached;
+    const { rows } = await db.query('SELECT * FROM player_stats($1)', [playerId]);
+    if (!rows[0]) return null;
+    const fields = Object.fromEntries(Object.entries(rows[0]).map(([k, v]) => [k, v === null ? '' : String(v)]));
+    await redis.multi().hSet(key, fields).expire(key, 30).exec();
+    return rows[0];
+  }
+  ```
+
+  Tick "Run my code in the app", press "Run traffic" (100 connections, 10 seconds, every request is
+  `GET /app/players/p-028/stats`) and, while it runs, in the game terminal:
+
+  - `CONFIG RESETSTAT`, then `INFO commandstats` a few seconds into the run: `cmdstat_hgetall` is the line that moves.
+  - `INFO stats`: read `instantaneous_ops_per_sec`.
+  - Look at the Metrics panel's redis commands line: about one command for every request.
+
+  **Step 2, name it.** The first question in Verify asks what this fault is. It will not let you skip it.
+
+  **Step 3, fix it** in the same file, `getPlayerStats(deps, playerId)` in `workspace/ch2/cache.js`: keep the Redis cache-aside, and in
+  front of it a `Map` (player id to an entry with a deadline) that answers for one second without touching Redis. Do not
+  remember a missing player; empty the `Map` if it grows past a thousand entries. Press "Run traffic" again and read `INFO commandstats`:
+  `hgetall` barely moves.
+
+  Verify checks that the function still caches p-028 in Redis and returns `null` for p-999, that you pressed "Run traffic" for
+  `celebrity-100` during this level, and then runs the same traffic itself: at most 0.2 Redis commands per request, no errors,
+  p99 under 100 ms.
+
+hints:
+  - "Step 1 is observation: CONFIG RESETSTAT, run the traffic, INFO commandstats. If hgetall climbs by about one per request, Redis is not slow, it is asked too often."
+  - "A memo is a Map: memo.set(playerId, { until: Date.now() + 1000, row }). On entry, if memo.get(playerId)?.until is in the future, return that row and do nothing else."
+  - "A hundred requests can arrive in the same millisecond just after the memo expires, and each one misses. Store the promise of the read instead of the row (memo.set(id, { until, pending })) and they share one read, the way Chapter 2's stampede level taught."
+  - "Keep Chapter 2's cache-aside below the memo; the memo only decides whether to go there. Fill the memo after both a Redis hit and a Postgres miss."
+
+verify:
+  - type: quiz
+    question: "INFO commandstats shows cmdstat_hgetall:calls climbing by about one per request, every call on the same cache:player key, at a few microseconds each. The slow log is empty and Postgres is idle. What is this?"
+    options:
+      - id: hot-key
+        label: "A hot key: one key takes most of the traffic. Nothing is slow, there is just too much of it"
+      - id: big-key
+        label: "A big key: one value so large that every command on it is expensive"
+      - id: slow-command
+        label: "A slow command: something O(N) running too long and holding the server"
+      - id: connection-leak
+        label: "A connection leak: clients that opened a connection and never closed it"
+    correct: hot-key
+    explanation: "The signature is many cheap calls to one key. A big key shows up as a large MEMORY USAGE and slow, large replies; a slow command as entries in the slow log; a connection leak as connected_clients climbing. Here commandstats, the slow log and the client count each say something different, and only commandstats says anything. The fix is to ask Redis for that key less often."
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/01-cold.yaml
+    assertions:
+      - call: { args: ["p-028"] }
+        repeat: 2
+        message: "Calling getPlayerStats for p-028 twice should leave the player's stats in the Redis hash cache:player:p-028 and return the same player both times."
+        sideEffect:
+          - cmd: [TYPE, "cache:player:p-028"]
+            equals: hash
+            message: "cache:player:p-028 should still be a hash: the memo goes in front of Redis, it does not replace it."
+          - cmd: [HGET, "cache:player:p-028", player_id]
+            equals: "p-028"
+            message: "The cached hash for p-028 should hold p-028's own stats, with a player_id field of p-028."
+      - call: { args: ["p-999"] }
+        expect: null
+        message: "p-999 is not a player. getPlayerStats should return null for it, with or without a memo."
+        sideEffect:
+          - cmd: [EXISTS, "cache:player:p-999"]
+            equals: 0
+            message: "An id that is not a player should not leave a cache:player key behind."
+  - type: event
+    kind: custom
+    match: { name: load_finished, scenario: celebrity-100 }
+    timeoutMs: 60000
+    message: "The game has not seen you run the celebrity-100 traffic during this level. Press \"Run traffic\" in the live panel and watch INFO commandstats while it runs: that is the observation this level is about."
+  - type: traffic
+    scenario: celebrity-100
+    baseline: false
+    assertions:
+      redis_per_request_lte: 0.2
+      error_rate_lte: 0
+      p99_ms_lte: 100
+    message: "Under the celebrity traffic Redis is still being asked too often (more than 0.2 commands per request), or the page is slow or failing. Is the memo really answering before Redis, and does it fill after a hit as well as after a miss?"
+
+show_me:
+  component: cache_stats
+  keys: []
+docs:
+  - https://redis.io/docs/latest/develop/clients/client-side-caching/
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+
+reward:
+  xp: 50
+  badge: "Found the hot key"
+
+solutions:
+  reference: solutions/01-reference.js
+  wrong:
+    - path: solutions/01-wrong-plain-cache.js
+      expect: wrong
+      because: "Chapter 2's cache is correct and it is the fault of this level: every request still costs one HGETALL on the same key. At a hundred connections that is about one Redis command per request, far over the limit of 0.2, which only the traffic run can see."

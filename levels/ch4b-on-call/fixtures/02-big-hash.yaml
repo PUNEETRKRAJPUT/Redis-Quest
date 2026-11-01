@@ -1,0 +1,9 @@
+# Rebuilds the big hash exactly as the level's setup does, so a second try starts from three lakh fields again: one EVAL
+# removes any buckets (fans:t-01:*, found with SCAN, freed with UNLINK), then writes fans:t-01 with fields u1 .. u300000 (value 1).
+# CONFIG RESETSTAT comes last so the commandstats the level checks (cmdstat_unlink) count only what the learner's code did.
+steps:
+  - cmd:
+      - EVAL
+      - "local c = '0' repeat local r = redis.call('SCAN', c, 'MATCH', 'fans:t-01:*', 'COUNT', 1000) c = r[1] for _, k in ipairs(r[2]) do redis.call('UNLINK', k) end until c == '0' redis.call('UNLINK', 'fans:t-01') for i = 1, 300000 do redis.call('HSET', 'fans:t-01', 'u' .. i, '1') end return redis.call('HLEN', 'fans:t-01')"
+      - 0
+  - cmd: [CONFIG, RESETSTAT]

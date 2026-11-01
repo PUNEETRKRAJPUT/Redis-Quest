@@ -1,0 +1,17 @@
+# Chapter 4b, level 1: the semi-final's star batter. 100 connections for 10 s, every request on one player page
+# (p-028). No warmup on purpose: the stampede of a cold key is part of the incident. Used by the live pain panel
+# and the "Run traffic" button of ch4b-01, and by its traffic verifier (absolute Redis calls per request).
+id: celebrity-100
+description: "100 connections, 10 s, no warmup, all on GET /app/players/p-028/stats."
+durationSec: 10
+connections: 100
+pipelining: 1
+seed: 20260401
+users:
+  count: 100
+  distribution: uniform
+requests:
+  - method: GET
+    path: /app/players/p-028/stats
+    weight: 1
+    userIdHeader: x-user-id

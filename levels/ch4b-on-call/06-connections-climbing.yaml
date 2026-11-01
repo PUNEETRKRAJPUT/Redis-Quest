@@ -1,0 +1,141 @@
+id: ch4b-06-connections-climbing
+chapter: ch4b
+title: "Connections climbing"
+mode: code
+
+story: |
+  `PAGER 02:18  redis connections: warning  (number keeps going up, never down)`
+
+  The last page before the match ends, and the quietest. Nothing is slow and nothing is frozen. Teja has found one number on
+  the Redis Insight screen that only ever climbs: connected clients. It was a handful at nine in the evening. It is in the
+  hundreds now, and it does not come down when the traffic does.
+
+  The only code written this week that opens connections is the team page, `GET /app/oncall/teams/<id>`, which Teja added for the
+  franchise fan clubs. It reads one hash. It works. It has worked every single time anybody called it.
+
+  Redis accepts a lot of connections, but not an unlimited number: there is a limit, and a number that only climbs gets there.
+
+scenario: oncall-teams-100   # drives the live pain panel and the "Run traffic" button
+
+brainstorm:
+  prompt: "The number of connected clients to Redis climbs with traffic and never comes back down. One recent route reads a single hash. What do you suspect, and what do you change?"
+  options:
+    - id: one-shared-client
+      label: "The route opens a connection of its own for every request and never closes it. Use the one client the app already shares"
+      is_reasonable: true
+    - id: raise-maxclients
+      label: "Raise Redis's limit on connections so the number can go on climbing"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: team names almost never change, so keep them in a file loaded when the app starts"
+      is_reasonable: true
+
+setup:
+  - cmd: [HSET, "team:t-01", id, "t-01", name, "Mumbai Monsoon"]
+  - cmd: [HSET, "team:t-02", id, "t-02", name, "Chennai Lighthouse"]
+  - cmd: [HSET, "team:t-03", id, "t-03", name, "Kolkata Riverhawks"]
+  - cmd: [HSET, "team:t-04", id, "t-04", name, "Delhi Dust Devils"]
+  - cmd: [HSET, "team:t-05", id, "t-05", name, "Bengaluru Gulmohars"]
+  - cmd: [HSET, "team:t-06", id, "t-06", name, "Hyderabad Charminars"]
+  - cmd: [HSET, "team:t-07", id, "t-07", name, "Jaipur Havelis"]
+  - cmd: [HSET, "team:t-08", id, "t-08", name, "Pune Sahyadris"]
+
+teach: |
+  Every client of Redis holds a connection, and the server keeps a record of each one. node-redis is built to share: one client
+  object holds one connection and sends every command down it, many at a time. The node guide and the patterns in this course
+  are all one shared client per process, with `client.duplicate()` for the two jobs that need a connection of their own: a
+  blocking command such as `BLMOVE` or `XREADGROUP ... BLOCK`, and a subscriber.
+
+  A route that calls `createClient()` and `connect()` inside the request handler is the opposite: it is a new connection for every
+  request, and if it never calls `close()` it is a connection that stays for as long as the app does. A hundred people opening the
+  team page is a hundred connections, and it works every single time, which is why nobody notices.
+
+  The diagnosis is three commands and a curl, measured on this stack:
+
+  - `INFO clients` carries `connected_clients` (and `maxclients`, 10000 here). Idle, with the game's own services and no Redis Insight
+    open, it read 6 to 9. Under 200 lookups, 100 at a time, against the planted team route it went from 9 to 208 and stayed there.
+  - `CLIENT LIST` prints one line per connection. Count the lines, then read a few: `age` and `idle` in seconds, and `cmd`, the last
+    command that connection ran. Hundreds of lines with `cmd=hgetall` and a growing `idle` are the leak's fingerprint.
+  - `curl localhost:3000/app/oncall/status` answers `{ leakedClients, instance }`, the app's own count of the connections it opened for
+    team lookups and never closed.
+
+  The fix is one line shorter than the bug: read from `deps.redis`, the app's shared client, and open nothing. A leaked connection
+  belongs to the process that opened it, so the pile goes away only when the app does: `docker compose restart app` takes it from
+  208 back to 6 on this stack.
+
+task: |
+  The game wrote `team:t-01` .. `team:t-08` (fields `id` and `name`, the eight franchises).
+
+  **Step 1, see it.** Leave "Run my code in the app" off. In the game terminal run `INFO clients` and note `connected_clients`.
+  Press "Run traffic" (100 connections, 8 seconds, `GET /app/oncall/teams/<one of t-01 .. t-08>`), then read it again. Run `CLIENT LIST`
+  and look at a few lines (`age`, `idle`, `cmd=hgetall`); in your own terminal run `curl localhost:3000/app/oncall/status`.
+
+  **Step 2, name it.** The first question in Verify asks what this fault is.
+
+  **Step 3, fix it.** Fill in `lookupTeam(deps, teamId)` in `workspace/ch4b/lookup-team.js`. Read the hash `team:<teamId>` with
+  `deps.redis` and return `{ id, name }`, or `null` if there is no such team. Create no client.
+
+  **Step 4, prove it.** Tick "Run my code in the app". The leaked connections are the old code's, and only the app process can drop
+  them: `docker compose restart app` in your own terminal. Then `INFO clients` (a handful), "Run traffic" again, `INFO clients` again:
+  it stays flat.
+
+  Verify calls `lookupTeam("t-01")` and expects `{ id: "t-01", name: "Mumbai Monsoon" }`, and `null` for `t-99`. It needs to have
+  seen you run the `oncall-teams-100` traffic, then it reads `INFO clients`: `connected_clients` must be under 60. That is
+  a fair bar only after the restart; the idle number on this stack is 6 to 9, and Redis Insight and your own terminals add a few.
+
+hints:
+  - "INFO clients first, then the traffic, then INFO clients again. If the second number is two hundred higher and still there a minute later, nothing is closing."
+  - "The shared client is deps.redis: await redis.hGetAll(`team:${teamId}`). HGETALL on a missing key answers an empty object: that is your null."
+  - "If connected_clients is still high after your fix, the old connections belong to the app process: docker compose restart app, wait for it to come back, and check again."
+
+verify:
+  - type: quiz
+    question: "connected_clients climbs by about one per request and never falls. CLIENT LIST shows hundreds of connections from the app's host, idle for minutes, each with cmd=hgetall. The slow log is empty and every command is fast. What is this?"
+    options:
+      - id: connection-leak
+        label: "A connection leak: the code opens a client for every request and never closes it"
+      - id: hot-key
+        label: "A hot key: one key takes most of the traffic"
+      - id: slow-script
+        label: "A slow script: one Lua script is holding the server"
+      - id: big-key
+        label: "A big key: one value so large that every command on it is expensive"
+    correct: connection-leak
+    explanation: "The client count is the only number out of line. A hot key would show as one command's calls climbing, a slow script as BUSY, a big key as MEMORY USAGE. Every connection in CLIENT LIST is idle with the same cmd, because each belongs to one finished request that never closed it. The fix is a single shared client, with duplicate() only for blocking commands and subscriptions."
+  - type: behavior
+    slot: oncall.lookupTeam
+    fixtures: fixtures/06-teams.yaml
+    assertions:
+      - call: { args: ["t-01"] }
+        expect: { id: "t-01", name: "Mumbai Monsoon" }
+        message: "lookupTeam('t-01') should return { id: 't-01', name: 'Mumbai Monsoon' }, read from the hash team:t-01."
+      - call: { args: ["t-99"] }
+        expect: null
+        message: "There is no team t-99. lookupTeam should return null for it."
+  - type: event
+    kind: custom
+    match: { name: load_finished, scenario: oncall-teams-100 }
+    timeoutMs: 60000
+    message: "The game has not seen you run the oncall-teams-100 traffic during this level. Press \"Run traffic\" and compare INFO clients before and after: that is the observation this level is about."
+  - type: redis
+    checks:
+      - cmd: [INFO, clients]
+        matches: "connected_clients:([0-9]|[1-5][0-9])\\b"
+        message: "Redis still holds 60 or more connections. After your fix, restart the app (docker compose restart app) so the old leaked connections go away, run the traffic again, and read INFO clients: it should stay near the idle number."
+
+show_me:
+  component: cache_stats
+  keys: []
+docs:
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+
+reward:
+  xp: 60
+  badge: "One client"
+
+solutions:
+  reference: solutions/06-reference.js
+  wrong:
+    - path: solutions/06-wrong-client-per-call.js
+      expect: wrong
+      because: "It creates a client for every call and reads only the name, so the answer has no id and the behavior check fails. The real sin is the first line: a client per call. This file closes it, which is why the game's sandbox cannot show the leak here; the planted baseline never closes its clients, and that is what climbs connected_clients."

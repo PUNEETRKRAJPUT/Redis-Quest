@@ -1,0 +1,4 @@
+# The cron and the learner's curl calls ran KEYS earlier; clear the counters and the slow log so the checks only see the repair.
+steps:
+  - cmd: [CONFIG, RESETSTAT]
+  - cmd: [SLOWLOG, RESET]

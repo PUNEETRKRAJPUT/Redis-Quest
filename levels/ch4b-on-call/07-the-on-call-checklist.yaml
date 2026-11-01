@@ -1,0 +1,183 @@
+id: ch4b-07-the-on-call-checklist
+chapter: ch4b
+title: "The on-call checklist"
+mode: decision
+
+story: |
+  `PAGER 02:20  all clear  (nothing to report)`
+
+  The semi-final ends at 02:19. Chengappa is out for 96, the Dust Devils win by four runs, and your phone is quiet for the first time
+  tonight. Harry Bhaiya wakes up, reads forty notifications in a row, and asks the only question he knows: "Sab theek?"
+
+  It is, and you have six pages' worth of proof. Mukul is awake too. He sends a last line: "next time I will find a different door,
+  bhai". You believe him, and you do not mind, because you wrote down what you did. No code in this level. It is the checklist
+  an interviewer asks about, and the one Teja will tape to the monitor: for each symptom, the first command you run, and what you do.
+
+brainstorm:
+  prompt: "It is 2 am and Redis is slow, full or frozen. You may run one command before you change anything. What kind of command is it?"
+  options:
+    - id: look-first
+      label: "A read-only look: INFO, SLOWLOG GET, CLIENT LIST, something that tells me which of the classic faults this is"
+      is_reasonable: true
+    - id: restart-first
+      label: "A restart: whatever it is, a restart clears it"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: read the app's own logs and traces first, because the fault may not be in Redis at all"
+      is_reasonable: true
+
+teach: |
+  Every page this chapter went the same way, and it is the whole method: **observe, name it, then fix it**.
+
+  - Observe with commands that cost the server almost nothing: `INFO` (its commandstats, keyspace, clients and memory sections),
+    `SLOWLOG GET`, `LATENCY LATEST`, `CLIENT LIST`, `MEMORY USAGE`, and `SCAN` with a small `COUNT`.
+  - Name it: hot key, big key, slow command, memory with no TTL, a script that holds the server, a leaked connection. Six faults, six
+    different instruments, and usually only one of them says anything.
+  - Fix the cause in the code, then repair what the cause already did (the backlog of keys, the leaked connections), then watch the
+    same instrument go back to normal.
+  - Do not fix by changing the machine first. A bigger Redis, more memory or a restart hides a design problem for a week.
+
+  There are seven questions. Six map a symptom to the first command and to the fix, one for each page. The seventh is about the
+  commands you should never run on a busy server while you are looking.
+
+task: |
+  Answer the seven questions and press Verify. There is nothing to type in the terminal. Read each as an interviewer would ask it, in
+  one breath: "Redis latency spiked at 2 am. What do you run first, and what do you do?"
+
+hints:
+  - "Match the instrument to the fault: commandstats for who is asking too often, MEMORY USAGE for what is too big, the slow log for what is too slow, INFO keyspace for what never expires, INFO clients for what never closes."
+  - "A fix has two halves when the damage is done: the cause in the code, and a sweep over what it already left behind."
+  - "The safe commands are the ones that take microseconds or work in pages. The ones to keep away from either walk the whole keyspace in one go, delete everything, or copy every command the server runs."
+
+verify:
+  - type: quiz
+    question: "Redis commands per second have tripled during the semi-final. The Metrics panel shows one player's page opened by everyone, Postgres is idle and the slow log is empty. What do you run first, and what do you do?"
+    options:
+      - id: q1-commandstats-memo
+        label: "INFO commandstats (after CONFIG RESETSTAT) to see which command's calls climb with every request. It is a hot key: put a short-lived copy of that page in the app's memory in front of Redis"
+      - id: q1-keys-and-delete
+        label: "KEYS * to look at everything in Redis, then DEL the player's cache key to make it start fresh"
+      - id: q1-bigger-redis
+        label: "Move to a bigger Redis machine: the commands are cheap but there are a lot of them"
+      - id: q1-slowlog-script
+        label: "SLOWLOG GET to find the slow command, then rewrite it as a Lua script"
+    correct: q1-commandstats-memo
+    explanation: "Many cheap calls on one key, an empty slow log and an idle Postgres make a hot key, and commandstats is the instrument that shows it. The cure is to ask Redis less often: a short in-process memo (or node-redis's client-side cache with RESP 3) so most requests never reach it."
+  - type: quiz
+    question: "One command on a certain key (a DEL, an HGETALL) makes Redis stall for about ten milliseconds, and clients queue behind it. MEMORY USAGE of that one key is in the megabytes. What do you run first, and what do you do?"
+    options:
+      - id: q2-bigkeys-split-unlink
+        label: "MEMORY USAGE, HLEN and redis-cli --bigkeys to find the biggest key. It is a big key: split it into smaller hashes with HSCAN and remove the original with UNLINK"
+      - id: q2-ttl-one-second
+        label: "Set a one second TTL on the key so Redis removes it by itself"
+      - id: q2-raise-listpack
+        label: "Raise hash-max-listpack-entries so that the hash stays in its compact form"
+      - id: q2-hgetall-in-app
+        label: "HGETALL it into the app, process it there and write it back in one go"
+    correct: q2-bigkeys-split-unlink
+    explanation: "A big key is found by size, and the damage is done by commands that visit every field. Splitting spreads the fields over many keys so that no single command touches them all, and UNLINK instead of DEL stops the removal itself from being a ten millisecond block."
+  - type: quiz
+    question: "Redis latency spiked at 2 am, and again at the top of every minute after that. Nothing is down and the Metrics panel looks normal. What do you run first, and what do you do?"
+    options:
+      - id: q3-slowlog-scan
+        label: "SLOWLOG GET (then LATENCY LATEST) to see which command takes tens of milliseconds. If it is KEYS in a cron, replace it with SCAN in pages"
+      - id: q3-monitor-all-night
+        label: "MONITOR, left running all night so that you can read every command later"
+      - id: q3-restart-redis
+        label: "Restart Redis: a restart clears the spikes"
+      - id: q3-faster-box
+        label: "Move Redis to a faster machine so that the same commands finish sooner"
+    correct: q3-slowlog-scan
+    explanation: "The slow log names the slow command and its time in microseconds, and a spike on a timer points at a job. KEYS walks the whole keyspace in one command; SCAN does the same walk a page at a time and leaves Redis free in between. MONITOR is a cost on a busy server, a restart hides the job, and a faster box only makes the same block shorter."
+  - type: quiz
+    question: "Redis memory is higher every morning than the morning before. No command is slow and nothing is blocked. What do you run first, and what do you do?"
+    options:
+      - id: q4-keyspace-ttl-sweep
+        label: "INFO keyspace: keys climbs while expires stays flat. Give every write a TTL, then SCAN the old keys and EXPIRE the ones that have none"
+      - id: q4-add-memory
+        label: "Add memory to the machine and look again next month"
+      - id: q4-keys-del
+        label: "KEYS * and DEL everything that looks old"
+      - id: q4-flushall-nightly
+        label: "FLUSHALL every night after the match traffic ends"
+    correct: q4-keyspace-ttl-sweep
+    explanation: "keys rising with expires flat means keys are being written with no deadline. The cause is fixed in the writer (SET ... EX), and the backlog by a SCAN sweep using EXPIRE ... NX, so keys that already have a TTL are left alone. KEYS would block the server, FLUSHALL deletes data you meant to keep, and more memory only delays the day."
+  - type: quiz
+    question: "Every command from the app times out and Redis answers BUSY to everything but SCRIPT KILL and SHUTDOWN NOSAVE. What do you run first, and what do you do?"
+    options:
+      - id: q5-script-kill-batches
+        label: "SCRIPT KILL straight away (it only works while the script has not written), then SLOWLOG GET to find the script. Rewrite its work as small commands from the app instead of one script"
+      - id: q5-restart-redis-now
+        label: "Restart Redis at once, before it gets worse"
+      - id: q5-flushall-first
+        label: "FLUSHALL so that the script has nothing left to loop over"
+      - id: q5-wait-it-out
+        label: "Wait: a script always ends by itself, and killing it can only lose data"
+    correct: q5-script-kill-batches
+    explanation: "BUSY means a script has outrun busy-reply-threshold. SCRIPT KILL is the allowed way out while it has not written; the slow log then names it. The lasting fix is the shape of the work: small steps from the application, so no single command holds every client. Restarting loses the question of what ran, and waiting is an outage."
+  - type: quiz
+    question: "connected_clients on Redis is in the hundreds and only climbs. CLIENT LIST shows hundreds of idle connections from the app host, all with the same last command. What do you run first, and what do you do?"
+    options:
+      - id: q6-clients-shared-client
+        label: "INFO clients and CLIENT LIST to count and read the connections. It is a connection leak: stop creating a client per request, use the one shared client, and restart the app to drop the leaked ones"
+      - id: q6-raise-maxclients
+        label: "Raise maxclients so that the number can go on climbing"
+      - id: q6-add-replica
+        label: "Add a replica and send the lookups there"
+      - id: q6-client-kill-loop
+        label: "Run CLIENT KILL in a loop every minute from a cron"
+    correct: q6-clients-shared-client
+    explanation: "The client count and CLIENT LIST name it: connections that were opened for finished requests and never closed. The cure is in the code, one shared client per process with duplicate() only for blocking commands and subscriptions. The leaked connections belong to the app process, so a restart is what removes them. A higher limit and a killing cron only hide a fault that keeps growing."
+  - type: quiz
+    question: "You are on a busy production Redis during an incident and need to look around. Which of these is safe to run?"
+    options:
+      - id: q7-info-slowlog-scan
+        label: "INFO, SLOWLOG GET, CLIENT LIST, LATENCY LATEST, and SCAN with a small COUNT"
+      - id: q7-keys-star
+        label: "KEYS * to see what is in there"
+      - id: q7-monitor-long
+        label: "MONITOR, left running while you read the stream of commands"
+      - id: q7-flushall-debug
+        label: "FLUSHALL to start from a clean slate, DEBUG to poke at what is left"
+    correct: q7-info-slowlog-scan
+    explanation: "The first group answers in microseconds or a page at a time. KEYS walks the whole keyspace in one command and blocks the server (the keyspace page says to keep it out of application code, for debugging only). FLUSHALL deletes all the data. DEBUG is a debugging command, not a looking one. MONITOR copies every command the server runs to your screen, which is useful for a few seconds and a cost if you leave it on a busy box."
+
+docs:
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/admin/
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+
+reward:
+  xp: 40
+  badge: "On call"
+
+solutions:
+  reference:
+    - q1-commandstats-memo
+    - q2-bigkeys-split-unlink
+    - q3-slowlog-scan
+    - q4-keyspace-ttl-sweep
+    - q5-script-kill-batches
+    - q6-clients-shared-client
+    - q7-info-slowlog-scan
+  wrong:
+    - option: q1-keys-and-delete
+      expect: wrong
+      because: "KEYS * walks the whole keyspace in one command, and deleting the cache key makes every phone miss at once. The fault is that one key is asked for too often, not that it is wrong."
+    - option: q2-ttl-one-second
+      expect: wrong
+      because: "A TTL only moves the removal to a later moment, and the removal of a hash this size is the stall. Splitting the key and UNLINKing the original is what removes it."
+    - option: q3-monitor-all-night
+      expect: wrong
+      because: "MONITOR costs the server something on every command, and its output is a stream nobody can read at 2 am. The slow log already holds the slow command and its time."
+    - option: q4-flushall-nightly
+      expect: wrong
+      because: "FLUSHALL deletes everything, including the data you wanted to keep and the game's own keys. The leak is views that never expire; the fix is a TTL on the writer and a SCAN sweep over what is already there."
+    - option: q5-restart-redis-now
+      expect: wrong
+      because: "A restart ends the freeze and also the chance to learn what caused it, and the job will run again at 02:15 tomorrow. SCRIPT KILL stops the script, the slow log names it, and the fix is in how the work is done."
+    - option: q6-raise-maxclients
+      expect: wrong
+      because: "A higher limit lets the leak grow for longer. The connections are opened by a route that never closes them: fix the route to use the shared client."
+    - option: q7-keys-star
+      expect: wrong
+      because: "KEYS * visits every key in one command and blocks the server while it does. SCAN with a small COUNT is the same walk in pages."

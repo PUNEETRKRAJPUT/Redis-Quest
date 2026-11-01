@@ -1,0 +1,21 @@
+# Chapter 4b, level 6: the team pages. 100 connections for 8 s on GET /app/oncall/teams/{team}, the eight
+# franchises uniformly. A lookup that opens a new Redis connection per request leaves one connection behind per
+# request: connected_clients climbs by hundreds and stays up until the app restarts.
+id: oncall-teams-100
+description: "100 connections, 8 s, GET /app/oncall/teams/{team} over t-01 .. t-08."
+durationSec: 8
+connections: 100
+pipelining: 1
+seed: 20260406
+users:
+  count: 100
+  distribution: uniform
+params:
+  team:
+    values: [t-01, t-02, t-03, t-04, t-05, t-06, t-07, t-08]
+    distribution: uniform
+requests:
+  - method: GET
+    path: /app/oncall/teams/{team}
+    weight: 1
+    userIdHeader: x-user-id

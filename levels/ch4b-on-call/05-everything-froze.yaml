@@ -1,0 +1,162 @@
+id: ch4b-05-everything-froze
+chapter: ch4b
+title: "Everything froze"
+mode: code
+
+story: |
+  `PAGER 02:15  app: critical  every page that needs Redis is failing`
+
+  This is the page you wake up for. The match pages, the leaderboard, the login: all of it times out together, and nothing
+  has been deployed tonight. The only page that still answers is the player's profile, the one that reads Postgres and never
+  touches Redis. Teja is typing "RESTART EVERYTHING" in capitals and you ask him, kindly, to put the phone down.
+
+  Redis is not down. Redis is busy, and busy is a different thing. Somewhere in the last minute something started that takes a
+  long time and cannot be interrupted by the other clients, and the other clients are queueing behind it. There is exactly
+  one job in the repo that fits, because Warden Sir's nephew Bunty asked for fifty-run badges last week and the person who wrote
+  them wanted them "atomic". It is the nightly badge job. It runs at 02:15. It always has.
+
+  You are going to run it, on purpose, and watch it freeze Redis.
+
+brainstorm:
+  prompt: "At 02:15 every Redis command from the app times out, Redis is up, nothing was deployed. What is your first move?"
+  options:
+    - id: find-and-stop
+      label: "Ask Redis what it is busy with and stop that one thing, before restarting anything"
+      is_reasonable: true
+    - id: restart-redis
+      label: "Restart Redis: it has frozen, and a restart always unfreezes it"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: a badge job should never have run in the request path or on the shared Redis at all"
+      is_reasonable: true
+
+teach: |
+  A Lua script runs as one uninterrupted piece of work. The programmability page puts the cost plainly: the script's execution
+  blocks all server activity for as long as it runs, so a slow script blocks every client. That is what makes scripts atomic and
+  what makes a long one an outage.
+
+  What the page says Redis does about it, and what this stack showed:
+
+  - After `busy-reply-threshold` (5 seconds by default) Redis starts answering other clients with `BUSY`. On this stack a `PING`
+    sent one second after the script started waited about four more seconds and then answered
+    `BUSY Redis is busy running a script. You can only call SCRIPT KILL or SHUTDOWN NOSAVE.` Run `CONFIG GET busy-reply-threshold`: 5000.
+  - The way out the page names: `SCRIPT KILL`, which works only if the script has not written anything yet, and otherwise
+    `SHUTDOWN NOSAVE`, shutting Redis down without saving. Which of the two you are in depends on whether the script has written yet.
+  - On this stack `SCRIPT KILL` answered `OK`, the client that had sent the script got `ERR Script killed by user with SCRIPT KILL`, and
+    `PING` worked again at once. `SLOWLOG GET 3` then holds the script as an `EVAL` entry with the whole time it ran (5,009,668 to 5,164,480
+    microseconds in eight runs), and `INFO commandstats` shows `cmdstat_eval` with `failed_calls=1` and `cmdstat_ping` with
+    `rejected_calls=1`.
+  - The app does not hang for ever: its Redis client gives up on each command after two seconds, so the route that started the job
+    answered `500` after about two seconds while the script went on inside Redis. Every route that needs Redis fails the same way; the
+    one that reads only Postgres keeps answering.
+
+  The fix is not a shorter script. It is to do the work in small steps from the app, so Redis serves everybody between them: `SCAN`
+  the `lb:match:*` sorted sets a page at a time, `ZCOUNT key 50 +inf` for each, `HSET badges:fifties <matchId> <count>`. A script that
+  does the same walk inside one `EVAL` is correct at two matches and an outage at two thousand.
+
+task: |
+  **Step 1, freeze it.** In your own terminal run the nightly badge job as it is written:
+
+  `curl -X POST localhost:3000/app/oncall/badges/recompute`
+
+  It answers `500` after about two seconds. That is only the app giving up: the script is still running inside Redis, for about twenty
+  seconds if nobody stops it.
+
+  **Step 2, see it.** In the game terminal, straight away: `PING`. It waits, then answers `BUSY ...` about five seconds after the job
+  started. Try another command, such as `GET x`: BUSY at once.
+
+  **Step 3, stop it.** `SCRIPT KILL` (answers `OK`), then `PING` (answers `PONG`), `SLOWLOG GET 3` (the `eval` and how long it ran) and
+  `CONFIG GET busy-reply-threshold`. If the script ends by itself before you got the `BUSY`, run step 1 again: Verify wants to have seen
+  both the `BUSY` and the kill.
+
+  **Kill the script before you press Verify or Start.** While it runs, Redis refuses the game's own commands too: Start answers an error,
+  and every Verify check reports `BUSY` and counts as an attempt.
+
+  **Step 4, name it.** Two questions in Verify: what this fault is, and what Redis lets you do about it.
+
+  **Step 5, fix it.** Fill in `recomputeBadges(deps)` in `workspace/ch4b/recompute-badges.js`. For every sorted set `lb:match:<matchId>`
+  (find them with `SCAN`, `MATCH lb:match:*`, `COUNT: 100`), count the members with a score of 50 or more (`ZCOUNT`) and store the
+  count in the hash `badges:fifties`, field `<matchId>`. **Do not call `EVAL`.** Tick "Run my code in the app" and run the curl again: it
+  answers in milliseconds.
+
+  Verify creates two finished matches, `lb:match:m-901` and `lb:match:m-902`, calls `recomputeBadges()`, expects `badges:fifties` field `m-901` to be 3 and
+  `m-902` to be 4, and reads `INFO commandstats`: no `eval` line.
+
+hints:
+  - "Order matters on the night: PING (BUSY), then SCRIPT KILL (OK). If you press Verify while the script is still running, every check fails with BUSY and burns an attempt."
+  - "The page's cure is the shape of the work: many small commands from JavaScript, not one big script. SCAN a page, then for each key ZCOUNT and HSET."
+  - "redis.scan(cursor, { MATCH: 'lb:match:*', COUNT: 100, TYPE: 'zset' }), then redis.zCount(key, 50, '+inf') and redis.hSet('badges:fifties', matchId, String(n)). The match id is the key without the 'lb:match:' prefix."
+
+verify:
+  - type: event
+    kind: custom
+    match: { name: redis_busy }
+    timeoutMs: 300000
+    message: "The game has not seen a command answered with BUSY since you started this level. Run the badge job (curl -X POST localhost:3000/app/oncall/badges/recompute), then PING in the game terminal within the next few seconds."
+  - type: event
+    kind: custom
+    match: { name: script_killed }
+    timeoutMs: 300000
+    message: "The game has not seen SCRIPT KILL answer OK since you started this level. While the script is running, type SCRIPT KILL in the game terminal."
+  - type: quiz
+    question: "Every Redis command except SCRIPT KILL and SHUTDOWN NOSAVE answers BUSY. SLOWLOG GET shows an EVAL that ran for seconds, and the app's Redis routes time out while its Postgres-only route is fine. What is this?"
+    options:
+      - id: long-script
+        label: "A long-running script: one Lua script holds the server, so every other client waits or gets BUSY"
+      - id: hot-key
+        label: "A hot key: one key takes most of the traffic"
+      - id: connection-leak
+        label: "A connection leak: clients that never close"
+      - id: no-ttl-leak
+        label: "Keys with no TTL: memory climbs until Redis is full"
+    correct: long-script
+    explanation: "BUSY is Redis telling the other clients that a script has run longer than busy-reply-threshold and nothing but SCRIPT KILL or SHUTDOWN NOSAVE is accepted. The slow log names the script after it ends. A hot key, a leak and missing TTLs do not stop Redis from answering."
+  - type: quiz
+    question: "A script has been running for ten seconds and Redis is answering BUSY. How long does Redis wait before that, and what can you do?"
+    options:
+      - id: five-seconds-kill-or-shutdown
+        label: "It waits busy-reply-threshold, 5 seconds by default. SCRIPT KILL works if the script has not written anything yet, otherwise SHUTDOWN NOSAVE is the only way out"
+      - id: thirty-seconds-flushall
+        label: "It waits 30 seconds. FLUSHALL clears the script and everything it holds"
+      - id: no-limit
+        label: "There is no limit: a script runs until it finishes, and you can only wait"
+      - id: kill-always
+        label: "It waits 5 seconds. SCRIPT KILL always works, even after the script has written, because Redis undoes the writes"
+    correct: five-seconds-kill-or-shutdown
+    explanation: "The programmability page: the default maximum execution time is 5 seconds (busy-reply-threshold), after which other clients get BUSY and only SCRIPT KILL (or FUNCTION KILL), if the script has not written yet, or SHUTDOWN NOSAVE are accepted. Redis has no rollbacks (the transactions page says so), which is why a script that has already written cannot simply be killed."
+  - type: behavior
+    slot: oncall.recomputeBadges
+    fixtures: fixtures/05-two-matches.yaml
+    assertions:
+      - call: { args: [] }
+        message: "Two matches, lb:match:m-901 and lb:match:m-902, each with some scores of 50 or more. recomputeBadges should store the count of those scores in badges:fifties, one field per match id."
+        sideEffect:
+          - cmd: [HGET, "badges:fifties", "m-901"]
+            equals: 3
+            message: "badges:fifties field m-901 should be 3: lb:match:m-901 holds the scores 10, 49, 50, 62 and 75, and three of them are 50 or more."
+          - cmd: [HGET, "badges:fifties", "m-902"]
+            equals: 4
+            message: "badges:fifties field m-902 should be 4: lb:match:m-902 holds 1, 20, 50, 55, 99 and 100, and four of them are 50 or more."
+  - type: redis
+    checks:
+      - cmd: [INFO, commandstats]
+        notContains: "cmdstat_eval:"
+        message: "INFO commandstats shows an eval call. recomputeBadges must do its work from JavaScript in small commands: a script holds Redis for as long as it runs, however short the loop looks at two matches."
+
+show_me:
+  component: hash_card
+  keys: ["badges:fifties"]
+docs:
+  - https://redis.io/docs/latest/develop/programmability/
+  - https://redis.io/docs/latest/develop/programmability/eval-intro/
+
+reward:
+  xp: 70
+  badge: "Kill the script"
+
+solutions:
+  reference: solutions/05-reference.js
+  wrong:
+    - path: solutions/05-wrong-lua-loop.js
+      expect: wrong
+      because: "The result is right and the loop is bounded, but the whole walk runs inside one EVAL, so INFO commandstats shows cmdstat_eval. It works at two matches and freezes Redis at two thousand: a script holds every other client for as long as it runs."
