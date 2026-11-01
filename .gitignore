@@ -12,3 +12,4 @@ postgres/init/*.tmp
 .env.*
 !.env.example
 !docs/ci-local.log
+ui/e2e/test-results/

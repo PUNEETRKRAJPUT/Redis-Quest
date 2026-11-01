@@ -14,3 +14,4 @@ ui/e2e/screenshots/
 *.yaml
 *.yml
 .github/
+ui/e2e/test-results/
