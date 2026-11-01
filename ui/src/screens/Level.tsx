@@ -4,6 +4,7 @@ import { IdealWay } from '../level/IdealWay';
 import { Stage } from '../level/Stage';
 import { Thread } from '../level/Thread';
 import { ChecksList, VerdictBanner } from '../level/VerifyPanel';
+import { SlotToggle } from '../level/SlotToggle';
 import { Workbench } from '../level/Workbench';
 import { Countdown, hintButtonLabel, hintCostCopy, rebuiltIn } from '../level/interview';
 import { IconBulb, IconCheck, IconSpinner } from '../icons';
@@ -108,6 +109,16 @@ export function LevelScreen({ id }: { id: string }) {
     if (level) void load();
     // `stamp` is the dependency on purpose: it changes exactly when this level's progress entry changes.
   }, [stamp]);
+
+  // The traffic verifier switches slots on and puts them back, so the "run my code in the app" switch is
+  // re-read whenever a verification ends.
+  const lastEvent = useQuest((s) => s.events[s.events.length - 1]);
+  const seenEvent = useRef<number>(lastEvent?.seq ?? 0);
+  useEffect(() => {
+    if (!lastEvent || lastEvent.seq === seenEvent.current) return;
+    seenEvent.current = lastEvent.seq;
+    if (lastEvent.kind === 'custom' && lastEvent.name === 'verify_finished' && level) void load();
+  }, [lastEvent, level, load]);
 
   // The prompt opens on the safe choice, so Enter or Space keeps the XP.
   useEffect(() => {
@@ -458,6 +469,7 @@ export function LevelScreen({ id }: { id: string }) {
       >
         <Markdown source={level.task} className="task" />
         <Workbench initial={benchStart} chapter={level.chapter} />
+        <SlotToggle levelId={id} slots={level.slots} reload={load} />
         {quizzes.map((q) => (
           <fieldset key={q.index} className="options quiz" data-testid={`quiz-${q.index}`}>
             <legend>{q.question}</legend>

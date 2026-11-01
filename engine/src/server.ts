@@ -10,7 +10,7 @@ import { renderTemplates, SLOT_NAME, TemplateError } from '@quest/shared';
 import { etagOf, matchesEtag, type AppConfig } from './appconfig.js';
 import { DANGEROUS_COMMANDS, runCli } from './cli.js';
 import type { Config } from './config.js';
-import type { EventBus } from './events.js';
+import type { EventBus, LevelEventData } from './events.js';
 import { renderLevel, templateContext, type LevelIndexEntry, type LevelService } from './levels.js';
 import { LOG_SERVICES, type LogService, type LogTail } from './logtail.js';
 import {
@@ -164,6 +164,18 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
   });
   verifier.startCommandCheck();
 
+  // E-01: tell levels when the number of live app instances changes (`--scale app=2`). The timer notices an
+  // instance that went quiet; pushes notice one that appeared.
+  metrics.onScale((prev, now, ids) =>
+    bus.emit('level.event', {
+      kind: 'service_scaled',
+      data: { service: 'app', instances: now, previous: prev, ids },
+    } satisfies LevelEventData),
+  );
+  const scaleTimer = setInterval(() => metrics.checkScale(), 2000);
+  scaleTimer.unref();
+  app.addHook('onClose', async () => clearInterval(scaleTimer));
+
   // ---- helpers -------------------------------------------------------------------------------
   const redisUrl = () => store.current?.target.redisUrl ?? runtime.redisUrl;
   const activeSlots = () => store.current?.activeSlots ?? runtime.activeSlots;
@@ -172,6 +184,13 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
     activeSlots: [...activeSlots()],
     dbExtraLatencyMs: runtime.dbExtraLatencyMs,
   });
+
+  /** The slots a level's own code lives in, and whether all of them are in the app's active list now. */
+  function slotsView(entry: LevelIndexEntry): { own: string[]; active: boolean } {
+    const own = levelSlots(entry.level.level.verify);
+    const live = activeSlots();
+    return { own, active: own.length > 0 && own.every((s) => live.includes(s)) };
+  }
 
   function needPlayer(): ProgressFile {
     if (!store.current)
@@ -404,12 +423,35 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         return {
           ...renderLevel(entry, templateContext(cfg, p, entry), lp),
           ...timing,
+          slots: slotsView(entry),
           status: lp.status,
           attempts: lp.attempts,
           brainstormAnswer: lp.brainstorm ?? null,
           startedAt: lp.startedAt ?? null,
           completedAt: lp.completedAt ?? null,
         };
+      });
+
+      // E-01: put the learner's own code into the app (or take it out) for this level's slots.
+      api.post<{ Params: { id: string } }>('/levels/:id/slots', async (req) => {
+        const { entry, p } = activeEntry(req.params.id, ['in_progress', 'passed']);
+        const want = isObject(req.body) ? req.body.active : undefined;
+        if (typeof want !== 'boolean')
+          throw new HttpError(400, 'invalid_active', 'active must be true or false');
+        const own = levelSlots(entry.level.level.verify);
+        // A verification switches slots itself (the traffic check puts them back), so never race it.
+        const done = verifier.begin(p.player.id); // 409 verify_in_progress
+        try {
+          const current = activeSlots();
+          const next = want
+            ? [...new Set([...current, ...own])]
+            : current.filter((s) => !own.includes(s));
+          runtime.activeSlots = next;
+          await commit('slots', undefined, (draft) => void (draft.activeSlots = next));
+          return { active: next, own };
+        } finally {
+          done();
+        }
       });
 
       api.post<{ Params: { id: string } }>('/levels/:id/start', async (req) => {

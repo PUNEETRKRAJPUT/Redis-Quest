@@ -74,6 +74,33 @@ single-slot level. After each solution the shims and the bundle are restored (de
 the API, which cannot delete; an empty file has no default export). A bundle that lacks an export a slot needs leaves that
 slot's default `undefined`, which the engine reports as the slot failing, so name exports exactly.
 
+## Events the harness produces
+
+A level can wait for something that happens while it verifies. The harness produces that event for a solution
+declared `right` or `works_but_wrong`, and produces nothing for one declared `wrong` (the same rule `answer` and
+`quiz` follow). Levels without these event kinds are graded exactly as before. Three rules (E-01):
+
+- **`service_scaled`** (`match.instances: N`, N is 2 in Chapter 3). Before calling verify the harness POSTs
+  `/internal/metrics` once a second for 3 s as a second instance, id `grader-instance-2` (`routes: {}`,
+  `windowMs: 1000`, `at` on a second boundary). The engine's own emitter then fires: the harness never posts the
+  event itself. It reads `GET /api/events` afterwards and prints whether the engine emitted it. Run the stack with
+  exactly N-1 real app instances (the default `app=1` for N = 2): with two real instances running the fake one makes
+  three and no `instances: 2` event happens. Because the fake instance stays live for 5 s after its last push, a
+  second good solution of the same level waits until it has expired (about 8 s) before pushing again.
+- **`channel_message`** (`match.channel`). The engine only sees a message while its check is waiting (it SUBSCRIBEs
+  during the check), so the harness starts verify without awaiting it, watches the `verify_check_started` WebSocket
+  event for that verifier's index, and then runs `PUBLISH <channel> <message>` through `/api/cli`, first after 300 ms
+  and then once a second until `verify_check_finished` for that index (at most 10 times). The message is
+  `{"matchId":"m-041","seq":1,"over":1,"ball":1,"runs":4,"batter":"p-028"}` unless the verifier has `match.message`,
+  which wins. The harness needs the engine's WebSocket; without it the check just times out.
+- **custom `ticker_gap`** (the app's ticker worker posts it when a subscriber sees a gap in `seq`). Before verify the
+  harness PUBLISHes `score:match:m-041` seq 1, POSTs `/app/ticker/resubscribe` `{ matchId: m-041, pauseMs: 1000 }`
+  (not awaited), sleeps 200 ms, PUBLISHes seq 2 and 3, awaits the resubscribe answer, then PUBLISHes seq 4. If the
+  route answers 404 it prints `NOTE ticker_gap: /app/ticker/resubscribe not available (A-02 not merged)` and carries
+  on; the level then shows as a mismatch, which is correct.
+
+Each rule adds one line to the row's `note`.
+
 ## Reading the table
 
 ```

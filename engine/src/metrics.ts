@@ -1,6 +1,10 @@
 // Per-second route metrics pushed by app instances (POST /internal/metrics). Kept for 5 minutes in memory.
 
 export const METRICS_WINDOW_MS = 5 * 60 * 1000;
+/** An app instance is live while its newest sample is at most this old. */
+export const LIVE_INSTANCE_MS = 5000;
+
+export type ScaleListener = (prev: number, now: number, ids: string[]) => void;
 
 export interface RouteStat {
   count: number;
@@ -91,11 +95,47 @@ const round = (n: number) => Math.round(n * 100) / 100;
 export class MetricsStore {
   private byInstance = new Map<string, Sample[]>();
   private pushListeners = new Set<(p: MetricsPush, now: number) => void>();
+  private scaleListeners = new Set<ScaleListener>();
+  private liveCount = 0;
 
   /** Called after every accepted push (the verifier sums a load run's exact window from these). */
   onPush(fn: (p: MetricsPush, now: number) => void): () => void {
     this.pushListeners.add(fn);
     return () => this.pushListeners.delete(fn);
+  }
+
+  /** Called whenever the number of live instances changes (see `checkScale`). */
+  onScale(fn: ScaleListener): () => void {
+    this.scaleListeners.add(fn);
+    return () => this.scaleListeners.delete(fn);
+  }
+
+  /** Ids of the instances whose newest sample is at most LIVE_INSTANCE_MS old, sorted. */
+  liveInstances(now = Date.now()): string[] {
+    const ids: string[] = [];
+    for (const [id, list] of this.byInstance) {
+      const newest = list.reduce((m, s) => Math.max(m, s.at), 0);
+      if (now - newest <= LIVE_INSTANCE_MS) ids.push(id);
+    }
+    return ids.sort();
+  }
+
+  /**
+   * Compares the live count with the last one seen and tells the scale listeners when it changed. Runs on every
+   * push and on a timer the server starts, so an instance that went quiet is noticed without another push.
+   */
+  checkScale(now = Date.now()): void {
+    const ids = this.liveInstances(now);
+    if (ids.length === this.liveCount) return;
+    const prev = this.liveCount;
+    this.liveCount = ids.length;
+    for (const l of this.scaleListeners) {
+      try {
+        l(prev, ids.length, ids);
+      } catch {
+        // a listener must never break metric ingestion
+      }
+    }
   }
 
   push(p: MetricsPush, now = Date.now()): void {
@@ -113,6 +153,7 @@ export class MetricsStore {
         // a listener must never break metric ingestion
       }
     }
+    this.checkScale(now);
   }
 
   private prune(now: number): void {

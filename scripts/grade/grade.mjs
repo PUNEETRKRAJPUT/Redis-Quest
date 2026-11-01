@@ -9,7 +9,7 @@
 // It reads levels with the @quest/shared loader (built output in packages/shared/dist) and never parses
 // YAML itself. The engine must already be running with the same level files mounted. Exit codes:
 // 0 every graded solution matches its declaration, 1 at least one MISMATCH, 2 the tool could not run.
-/* global fetch, setTimeout, setInterval, clearInterval, WebSocket, AbortSignal, process, console */
+/* global fetch, setTimeout, clearTimeout, setInterval, clearInterval, WebSocket, AbortSignal, process, console */
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -342,6 +342,157 @@ async function buildAnswers(lv, good) {
   return answers;
 }
 
+// ---- events that happen during the wait (E-01) ---------------------------------------------------
+// A solution declared right or works_but_wrong gets the live event its level waits for; a wrong one gets
+// nothing (the same rule `answer` and `quiz` follow). docs/grading.md, "Events the harness produces".
+
+const eventVerifiers = (lv) =>
+  lv.level.verify.map((v, index) => ({ v, index })).filter(({ v }) => v.type === 'event');
+
+const GRADER_INSTANCE = 'grader-instance-2';
+let lastFakePushAt = 0;
+
+async function pushFakeInstance() {
+  const at = Math.floor(Date.now() / 1000) * 1000;
+  lastFakePushAt = Date.now();
+  return api(
+    'POST',
+    '/internal/metrics',
+    {
+      instance: GRADER_INSTANCE,
+      instanceId: GRADER_INSTANCE,
+      at,
+      windowMs: 1000,
+      routes: {},
+    },
+    5000,
+  );
+}
+
+/** service_scaled: a second app instance appears (fake pushes), and the engine's real emitter fires. */
+async function simulateScale(lv, wanted) {
+  // A previous good solution's fake instance stays "live" for 5 s after its last push and the engine notices it
+  // going quiet on a 2 s timer, so wait until it is gone or the 1 to N event would not fire again.
+  const quiet = 8000 - (Date.now() - lastFakePushAt);
+  if (lastFakePushAt && quiet > 0) {
+    log(`      ... waiting ${Math.ceil(quiet / 1000)} s for ${GRADER_INSTANCE} to expire`);
+    await sleep(quiet);
+  }
+  const since = new Date().toISOString();
+  const before = await api('GET', '/api/metrics?seconds=5', undefined, 5000);
+  const seen = before.body?.instances ?? [];
+  for (let i = 0; i < 3; i++) {
+    const r = await pushFakeInstance();
+    if (r.status !== 200)
+      return `fake push to /internal/metrics -> ${r.status} ${JSON.stringify(r.body)}`;
+    await sleep(1000);
+  }
+  const ev = await api('GET', `/api/events?since=${encodeURIComponent(since)}`, undefined, 5000);
+  const hit = (ev.body?.events ?? ev.body ?? []).find?.(
+    (e) =>
+      e?.data?.kind === 'service_scaled' &&
+      (wanted === undefined || String(e.data.data?.instances) === String(wanted)),
+  );
+  return hit
+    ? `fake pushes as ${GRADER_INSTANCE} (instances the engine already knew: ${seen.join(', ') || 'none'}); engine emitted service_scaled instances ${hit.data.data?.instances}`
+    : `NOTE service_scaled: engine did not emit service_scaled${wanted === undefined ? '' : ` with instances ${wanted}`} after fake pushes (instances the engine already knew: ${seen.join(', ') || 'none'}; run with exactly ${Math.max(0, Number(wanted ?? 2) - 1)} app instance(s))`;
+}
+
+const DEFAULT_CHANNEL_MESSAGE =
+  '{"matchId":"m-041","seq":1,"over":1,"ball":1,"runs":4,"batter":"p-028"}';
+
+/**
+ * channel_message: the engine only sees a message while it waits (it SUBSCRIBEs during the check), so the
+ * harness acts during verify: when verify_check_started arrives for that verifier's index it PUBLISHes once a
+ * second until the check finishes (at most 10 times).
+ */
+async function verifyWithChannelPublisher(lv, id, answers, channels) {
+  const ctx = ctxOf(lv);
+  const jobs = new Map(); // verifier index -> { channel, message, delay, timer, started, sent }
+  for (const { v, index } of channels) {
+    const channel = renderTemplate(String(v.match.channel), ctx);
+    const m = v.match.message;
+    const message =
+      m === undefined
+        ? DEFAULT_CHANNEL_MESSAGE
+        : renderTemplate(typeof m === 'string' ? m : JSON.stringify(m), ctx);
+    jobs.set(index, { channel, message, timer: null, delay: null, started: false, sent: 0 });
+  }
+  const stop = (job) => {
+    clearTimeout(job.delay);
+    clearInterval(job.timer);
+    job.delay = null;
+    job.timer = null;
+  };
+  const listener = (name, d) => {
+    if (d.levelId !== id) return;
+    const job = jobs.get(d.index);
+    if (!job) return;
+    if (name === 'verify_check_started' && !job.started) {
+      job.started = true;
+      const publish = () => {
+        if (job.sent >= 10) return stop(job);
+        job.sent += 1;
+        cli(`PUBLISH ${quoteArg(job.channel)} ${quoteArg(job.message)}`).catch(() => undefined);
+      };
+      // SUBSCRIBE needs a moment to land after the check starts, so the first PUBLISH is not immediate.
+      job.delay = setTimeout(() => {
+        publish();
+        if (job.sent < 10) job.timer = setInterval(publish, 1000);
+      }, 300);
+    } else if (name === 'verify_check_finished') {
+      stop(job);
+    }
+  };
+  progressListeners.add(listener);
+  let out;
+  try {
+    out = await verify(id, answers);
+  } finally {
+    progressListeners.delete(listener);
+    for (const job of jobs.values()) stop(job);
+  }
+  const sent = [...jobs.values()].map((j) => `${j.sent} on ${j.channel}`).join(', ');
+  return { out, note: `harness published ${sent}` };
+}
+
+/** custom ticker_gap: a subscriber that was paused sees seq jump from 1 to 4. A-02's route does the pausing. */
+async function tickerGapDance() {
+  const channel = 'score:match:m-041';
+  const msg = (seq) =>
+    JSON.stringify({ matchId: 'm-041', seq, over: 1, ball: seq, runs: 1, batter: 'p-028' });
+  const publish = (seq) => cli(`PUBLISH ${channel} ${quoteArg(msg(seq))}`);
+  await publish(1);
+  const resub = api('POST', '/app/ticker/resubscribe', { matchId: 'm-041', pauseMs: 1000 }, 15_000);
+  await sleep(200);
+  await publish(2);
+  await publish(3);
+  const r = await resub;
+  if (r.status === 404) {
+    log('NOTE ticker_gap: /app/ticker/resubscribe not available (A-02 not merged)');
+    return 'NOTE ticker_gap: /app/ticker/resubscribe not available (A-02 not merged)';
+  }
+  await publish(4);
+  return `ticker_gap dance: resubscribe -> ${r.status}, published seq 1, 2, 3, 4`;
+}
+
+/** verify() plus whatever live events a good solution's level waits for. Returns { out, note }. */
+async function verifyWithEvents(lv, id, answers, good) {
+  const evs = good ? eventVerifiers(lv) : [];
+  const notes = [];
+  const scaled = evs.find(({ v }) => v.kind === 'service_scaled');
+  if (scaled) notes.push(await simulateScale(lv, scaled.v.match?.instances));
+  if (evs.some(({ v }) => v.kind === 'custom' && v.match?.name === 'ticker_gap'))
+    notes.push(await tickerGapDance());
+  const channels = evs.filter(({ v }) => v.kind === 'channel_message' && v.match?.channel);
+  if (channels.length) {
+    const r = await verifyWithChannelPublisher(lv, id, answers, channels);
+    notes.push(r.note);
+    return { out: r.out, note: notes.join('; ') };
+  }
+  return { out: await verify(id, answers), note: notes.join('; ') };
+}
+
 // ---- code solutions: slot -> workspace file -------------------------------------------------------
 
 const touched = new Map(); // rel -> original content (string) or null when it did not exist
@@ -575,7 +726,9 @@ async function gradeLevel(lv) {
       if (ui.length) note = [note, ...ui].filter(Boolean).join('; ');
     }
     const answers = await buildAnswers(lv, good);
-    const out = await verify(id, answers);
+    const live = await verifyWithEvents(lv, id, answers, good);
+    const out = live.out;
+    if (live.note) note = [note, live.note].filter(Boolean).join('; ');
     record(lv, label, s.expect, out, { because: s.because, note });
     // Bundle shims and the bundle are removed (or emptied through the API) after each solution.
     if (touched.size > 1) await restoreWorkspace();
@@ -599,6 +752,8 @@ async function gradeLevel(lv) {
 
 let busySince = 0;
 let ticker = null;
+// Everything that wants the engine's verify_* progress events as they arrive (E-01: the channel_message rule).
+const progressListeners = new Set();
 function watchProgress() {
   try {
     const ws = new WebSocket(`${opts.engine.replace(/^http/, 'ws')}/ws`);
@@ -611,6 +766,13 @@ function watchProgress() {
       }
       if (e.type !== 'level.event' || !String(e.data?.name ?? '').startsWith('verify_')) return;
       const d = e.data.data ?? {};
+      for (const fn of progressListeners) {
+        try {
+          fn(e.data.name, d);
+        } catch {
+          // a listener must not stop the progress lines
+        }
+      }
       switch (e.data.name) {
         case 'verify_started':
           busySince = Date.now();

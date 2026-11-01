@@ -1393,3 +1393,70 @@ a.level-link:hover {
   color: var(--bad);
   font-weight: 600;
 }
+
+/* ---- "Run my code in the app" switch (E-01) ---- */
+.slot-toggle {
+  margin: 12px 0;
+}
+.slot-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.switch:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.switch-knob {
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--line);
+  position: relative;
+  flex: none;
+}
+.switch-knob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: left 0.12s;
+}
+.switch.on {
+  border-color: var(--ok);
+}
+.switch.on .switch-knob {
+  background: var(--ok);
+}
+.switch.on .switch-knob::after {
+  left: 16px;
+}
+.slot-toggle-msg {
+  color: var(--warn);
+  font-weight: 600;
+}
+.slot-toggle-copy {
+  margin: 6px 0 0;
+}
+.slot-toggle-note {
+  margin: 2px 0 0;
+  color: var(--muted);
+}

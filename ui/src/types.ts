@@ -89,6 +89,12 @@ export interface InterviewInfo {
   elapsedMs: number | null;
 }
 
+/** The app slots a level's code lives in, and whether all of them are active in the app right now. */
+export interface LevelSlots {
+  own: string[];
+  active: boolean;
+}
+
 export interface LevelData {
   id: string;
   chapter: string;
@@ -113,6 +119,8 @@ export interface LevelData {
   startedAt: string | null;
   completedAt: string | null;
   interview: InterviewInfo | null;
+  /** Absent on an engine older than E-01. */
+  slots?: LevelSlots;
   /** Milliseconds left on the interview clock when the response was made; null on other levels or before the start. */
   remainingMs: number | null;
 }
