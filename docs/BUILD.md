@@ -14,7 +14,7 @@ Then five testers, then Chapters 2 (rest) to 5 and the finale.
 `.claude-session-cache.md`. 4. Continue from the first task that is `in progress`, then `todo`, in
 wave order. Specs are in `docs/specs/`, handoffs in `docs/handoffs/`.
 
-## Phase 0: platform
+## Phase 0: platform (complete on 2026-11-01; every check run by the orchestrator)
 
 | id | task | wave | status | model | spec | check | handoff |
 |---|---|---|---|---|---|---|---|
@@ -57,6 +57,7 @@ start early if everything it depends on is `done`.
 | T1 | Five-tester playtest, findings, fixes | todo |
 
 ## Decisions log (newest first)
+- 2026-11-01 Phase 0 complete: 12/12 tasks done, CI green, Chapter 0 playable end to end in a browser with real verdicts. Next: C2a, fresh-clone run, ci-local log, F-04/F-05, then the five-tester playtest (T1).
 - 2026-11-01 Default Redis now persists (RDB 60/1000 + AOF everysec) so Chapter 0.5 is honest; the `crash` profile is the no-persistence instance for Chapter 5. Verifier grades traffic relative to an engine-recorded baseline; traffic runs last and only after behavior passed on the runner.
 - 2026-11-01 CI green on GitHub (fast job with redis/postgres service containers; mac job self-skips). Lockfile rule: HEAD's lockfile must match committed manifests; commit package.json and lockfile together; never commit via plumbing without resetting the index afterwards.
 - 2026-11-01 Engine refuses to start on invalid levels by design; content agents must keep chapters valid at every save (write level files before listing them in chapter.yaml).
