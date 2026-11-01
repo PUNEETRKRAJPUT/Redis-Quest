@@ -132,7 +132,7 @@ if [ "$HINTS_TOTAL" -gt 0 ]; then
   call GET "/api/levels/$LEVEL"; expect_js "GET level now shows 1 hint" 'j.hints.length===1&&j.brainstormAnswer.optionId!==undefined&&j.status==="in_progress"'
 fi
 call POST "/api/levels/$LEVEL/verify" '{"answers":{"0":"x"}}'; expect_status "POST verify" 200
-expect_js "verify returns not_implemented, attempts 1" 'j.verdict==="not_implemented"&&j.attempts===1'
+expect_js "verify returns a real verdict on attempt 1 (verifier wired in P0-09)" '["wrong","works_but_wrong","right"].includes(j.verdict)&&j.attempt===1'
 call POST "/api/levels/$LEVEL/verify" '{"answers":{"x":1}}'; expect_status "verify with bad answers" 400
 call POST "/api/levels/$LEVEL/complete"; expect_status "POST complete (ENGINE_DEV=1)" 200
 expect_js "complete: passed" 'j.status==="passed"&&j.xp>0'
