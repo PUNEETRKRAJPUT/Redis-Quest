@@ -18,6 +18,32 @@ jobs:
   fast:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Unit tests for the runner and the shared learner module talk to a real Redis and Postgres. These
+    # are amd64 service containers, fine for unit tests; the arm64 stack is proven by ci-local.sh.
+    services:
+      redis:
+        image: redis:8
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli PING"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quest
+          POSTGRES_PASSWORD: quest
+          POSTGRES_DB: quest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U quest -d quest"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+    env:
+      REDIS_URL: redis://localhost:6379
+      DATABASE_URL: postgres://quest:quest@localhost:5432/quest
     steps:
       - uses: actions/checkout@v4
 

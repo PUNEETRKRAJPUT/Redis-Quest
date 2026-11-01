@@ -20,3 +20,11 @@ minutes and starts Docker stacks.
 
 `scripts/check/P0-12.sh` validates the workflow (actionlint if installed, else a YAML parse) and runs
 `ci-local.sh` only when `P0_12_RUN_LOCAL=1`.
+
+
+## Service containers on the `fast` job
+
+The runner and shared-learner unit tests need a live Redis and Postgres, so the job starts `redis:8` and
+`postgres:16` as GitHub service containers (amd64, which is fine for unit tests) and exports `REDIS_URL`
+and `DATABASE_URL`. The schema is not loaded there; tests only use `SELECT` expressions. Anything that
+needs the seeded database or arm64 images runs through `scripts/check/ci-local.sh`.
