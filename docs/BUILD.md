@@ -59,6 +59,7 @@ start early if everything it depends on is `done`.
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md; fresh-clone run verified 2026-11-01) | todo |
 
 ## Decisions log (newest first)
+- 2026-11-01 Full local run (ci-local) surfaced four stale check assumptions and one real app bug (bind-mount poller lag; fixed with a throttled request-path stat). Content proven by the grading harness: ch1 52/52, ch2a 13/13, ch0 cli levels, examples. Fresh-clone `./scripts/start` verified.
 - 2026-11-01 Phase 0 complete: 12/12 tasks done, CI green, Chapter 0 playable end to end in a browser with real verdicts. Next: C2a, fresh-clone run, ci-local log, F-04/F-05, then the five-tester playtest (T1).
 - 2026-11-01 Default Redis now persists (RDB 60/1000 + AOF everysec) so Chapter 0.5 is honest; the `crash` profile is the no-persistence instance for Chapter 5. Verifier grades traffic relative to an engine-recorded baseline; traffic runs last and only after behavior passed on the runner.
 - 2026-11-01 CI green on GitHub (fast job with redis/postgres service containers; mac job self-skips). Lockfile rule: HEAD's lockfile must match committed manifests; commit package.json and lockfile together; never commit via plumbing without resetting the index afterwards.
