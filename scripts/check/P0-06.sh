@@ -96,6 +96,9 @@ BOOTS1=$(js "$BODY" 'j.boots')
 [ -f "$ROOT/logs/engine/engine.log" ] && ok "logs/engine/engine.log exists" || bad "logs/engine/engine.log missing"
 
 section "first run: player, chapters"
+# The default Redis persists between runs (decision 2026-11-01) and the welcome gift is created only when absent,
+# so a gift left by an earlier run would carry an old TTL. Start this check from no gift.
+docker compose exec -T redis redis-cli DEL game:welcome:gift >/dev/null 2>&1 || true
 call GET /api/progress; expect_status "GET /api/progress before a player" 404
 call POST /api/player '{"name":"  "}'; expect_status "POST /api/player blank name" 400
 call POST /api/player '{"name":"Asha"}'; expect_status "POST /api/player" 201

@@ -67,6 +67,7 @@ start early if everything it depends on is `done`.
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)
+- 2026-11-01 Tag v0.3.0: Chapter 3 complete; full local run GREEN (docs/ci-local.log, the PASS on 7f664a5 plus the two check fixes in the tagged commit). Two environmental lessons: the preflight needs 10 GB free (prune Docker build cache and per-check images), and checks that use the default project must not assume a fresh Redis, because it persists now (P0-06 deletes the welcome gift first). Runner vitest gets a 20 s test timeout like the app (a CI runner took 5.07 s on a 5 s default).
 - 2026-11-01 Chapter 3 complete (15 levels). New plumbing: `service_scaled` event, "Run my code in the app" switch (POST /api/levels/:id/slots), harness produces live events for good solutions only. The grading harness now SKIPs levels that need a real Redis outage (ch2-10) instead of reporting a mismatch; they are graded by hand. Fixed a timer leak in createLearnerDeps' closeRedis (ClientClosedError after every closed duplicate).
 - 2026-11-01 Tag v0.2.0: Chapter 2 complete; full local run GREEN at fb09c79 (docs/ci-local.log).
 - 2026-11-01 Chapter 2 complete (13 levels). Live grading found: 4xx must count as answered in the traffic verifier; ops levels must restore Redis config; a cli level cannot depend on a workspace file from an earlier level.
