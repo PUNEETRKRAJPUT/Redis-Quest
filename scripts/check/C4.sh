@@ -161,7 +161,7 @@ const count = (s, re) => (s.match(re) ?? []).length;
   ok(sideEffects(b).every((c) => c.cmd[0] === 'ZSCORE'), '02 behavior has no XPENDING check (the antipattern owns it, 2.2 rule)');
   const a = vs(l, 'antipattern')[0];
   ok(a.checks && a.checks[0].cmd[0] === 'EVAL_RO' && /XPENDING/.test(a.checks[0].cmd[1]) && a.checks[0].equals === 0, '02 antipattern: pending count equals 0');
-  ok(vs(l, 'quiz').length === 2 && l.show_me.component === 'stream_log', '02 two quizzes, stream_log');
+  ok(vs(l, 'quiz').length === 2 && l.show_me.component === 'stream_groups', '02 two quizzes, stream_groups (F-13)');
   ok(wrongs(l) === '02-wrong-xread.js:wrong,02-works-but-wrong-no-ack.js:works_but_wrong', '02 solutions as bound');
   ok(count(read('fixtures/02-six-balls.yaml'), /\[XADD,/g) === 6, '02 fixture: six XADD with explicit ids');
 }
@@ -283,7 +283,7 @@ const count = (s, re) => (s.match(re) ?? []).length;
   ok(JSON.stringify(b.assertions.map((a) => [a.call.args[0], a.expect.taken, a.expect.checkedDb])) === '[["tariq.bhat75",true,true],["quest.ghost99",false,true],["nobody.has.this.name",false,false]]', '14 behavior: real handle, filter false positive, unknown name');
   ok(/tariq\.bhat75/.test(read('fixtures/14-filter.yaml')) && /BF\.RESERVE/.test(read('fixtures/14-filter.yaml')), '14 fixture: BF.RESERVE and the seed handle');
   ok(wrongs(l) === '14-wrong-postgres-always.js:wrong,14-wrong-trust-the-filter.js:wrong' && /14\.378/.test(l.teach) && vs(l, 'quiz').length === 2, '14 solutions, teach quotes 14.378 bits, two quizzes');
-  ok(l.show_me.component === 'kv_card' && l.show_me.keys[0] === 'bf:usernames', '14 show_me kv_card on bf:usernames');
+  ok(l.show_me.component === 'bf_card' && l.show_me.keys[0] === 'bf:usernames', '14 show_me bf_card on bf:usernames (F-13)');
 }
 // ---- 15
 {
@@ -291,7 +291,7 @@ const count = (s, re) => (s.match(re) ?? []).length;
   const r = vs(l, 'redis')[0].checks;
   ok(l.mode === 'cli' && l.setup.length === 9 && /FT\.DROPINDEX/.test(l.setup[0].cmd[1]) && /pcall/.test(l.setup[0].cmd[1]) && l.setup.slice(1).every((s) => s.cmd[0] === 'JSON.SET'), '15 cli: setup drops the index (guarded with pcall) and writes eight JSON contests');
   ok(JSON.stringify(r.map((c) => c.equals)) === '[[8],[3],[4]]', '15 redis: FT.SEARCH counts [8], [3], [4]');
-  ok(vs(l, 'answer').length === 1 && vs(l, 'quiz').length === 2 && l.show_me.component === 'json_tree', '15 answer verifier (avg entry), two quizzes, json_tree');
+  ok(vs(l, 'answer').length === 1 && vs(l, 'quiz').length === 2 && l.show_me.component === 'ft_card', '15 answer verifier (avg entry), two quizzes, ft_card (F-13)');
   ok(wrongs(l) === '15-wrong-hostel-as-text.redis:wrong' && /\$\.tags\[\*\]/.test(l.teach), '15 solutions as bound (the spec\'s tags-without-star wrong does not fail on this Redis: see the handoff)');
 }
 // ---- 16

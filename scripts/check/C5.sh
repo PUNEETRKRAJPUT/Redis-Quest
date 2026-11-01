@@ -305,7 +305,7 @@ ok(ch && ch.levels.length === 14, 'chapter ch5 loads with 14 levels');
   ok(cs.some((c) => cmdText(c) === 'ACL GETUSER worker' && c.contains === '-@all +@read +@write -@dangerous') && cs.some((c) => cmdText(c) === 'ACL GETUSER worker' && c.contains === '~queue:*') && cs.some((c) => cmdText(c) === 'ACL USERS' && c.contains === 'worker'), '10 redis: ACL GETUSER commands and keys, ACL USERS contains worker (ACL LIST is a list of whole lines, which contains cannot match)');
   ok(task(l, 'CONFIG GET protected-mode', 'CONFIG GET bind', 'ACL LIST', 'ACL SETUSER worker on >hostelpass ~queue:* +@read +@write -@dangerous', 'AUTH worker hostelpass', 'SET queue:x 1', 'SET other 1', 'FLUSHALL', 'AUTH default anything', 'ACL GETUSER worker'), '10 task: protected-mode, bind, ACL LIST, ACL SETUSER worker, AUTH worker, SET queue:x, SET other, FLUSHALL, AUTH default anything, ACL GETUSER');
   ok(l.task.indexOf('ACL WHOAMI') < l.task.indexOf('FLUSHALL') && /do not run the next two lines/.test(l.task), '10 the task has the learner prove who they are (ACL WHOAMI) before FLUSHALL');
-  ok(l.setup.some((s) => s.cmd.join(' ') === 'ACL DELUSER worker') && l.show_me.component === 'kv_card', '10 setup removes worker; show_me kv_card');
+  ok(l.setup.some((s) => s.cmd.join(' ') === 'ACL DELUSER worker') && l.show_me.component === 'acl_users', '10 setup removes worker; show_me acl_users (F-13)');
   ok(/left to right/.test(l.teach) && /requirepass/.test(l.teach) && /@search/.test(l.teach) && /nopass/.test(l.teach), '10 teach: left to right, requirepass, Redis 8 categories, nopass');
   ok(wrongs(l) === '10-wrong-all-commands.redis:wrong', '10 solutions: reference + +@all');
 }
