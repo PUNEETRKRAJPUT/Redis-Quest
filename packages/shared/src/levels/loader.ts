@@ -35,7 +35,7 @@ export const CANONICAL_CHAPTER_DIRS = [
   'ch1-keyspace',
   'ch2-everyone-showed-up',
   'ch3-compete-and-talk',
-  'ch4-background',
+  'ch4-work-in-the-background',
   'ch4b-on-call',
   'ch5-survive',
   'finale',
