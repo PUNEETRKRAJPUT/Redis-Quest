@@ -56,7 +56,7 @@ start early if everything it depends on is `done`.
 | C1 | Chapter 1 levels (16) (spec: specs/C1, handoff: handoffs/C1) | done (graded through the engine by G-01: 52/52) |
 | C2a | Chapter 2 levels 2.1 to 2.4 (spec: specs/C2a, handoff: handoffs/C2a) | done (graded by G-01: 13/13 including traffic) |
 | G-01 | Level grading harness: plays every declared solution through the engine, prints the truth table (spec: specs/G-01, handoff: handoffs/G-01) | done (all three bugs fixed; ch1 re-graded 52/52) |
-| T1 | Five-tester playtest, findings, fixes | todo |
+| T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md; fresh-clone run verified 2026-11-01) | todo |
 
 ## Decisions log (newest first)
 - 2026-11-01 Phase 0 complete: 12/12 tasks done, CI green, Chapter 0 playable end to end in a browser with real verdicts. Next: C2a, fresh-clone run, ci-local log, F-04/F-05, then the five-tester playtest (T1).

@@ -22,7 +22,7 @@ cd Redis-Quest
 ./scripts/start
 ```
 
-The first start downloads images and builds the game; expect a few minutes. The script first runs a
+The first start downloads images and builds the game; expect a few minutes on a fast connection (with images already present it takes about twenty seconds). The script first runs a
 preflight that tells you, in plain words, anything that is missing (Docker not running, too little
 memory, a port already in use) and how to fix it. Read it. If it says a port is taken by `redis-server`
 or `postgres`, you have a local Redis or Postgres running: either stop it (`brew services stop redis`)
@@ -63,6 +63,12 @@ tail -50 logs/engine/engine.log
 ```
 
 Send it all to Puneet. Do not fix anything yourself first; the raw experience is the data.
+
+## Verified
+
+This exact flow (fresh clone, `.env` with only the Redis port changed, `./scripts/start`) was run on an
+M-series Mac on 2026-11-01: preflight passed, the game answered on 3000, Redis Insight on 5540 already
+showed the `Redis Quest` database, and the stats route served from Postgres.
 
 ## Known limits in this round
 
