@@ -6,12 +6,19 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyBaseLogger, type FastifyInstance, type FastifyReply } from 'fastify';
 import type { Logger } from 'pino';
-import { parseTarget, renderTemplates, SLOT_NAME, TemplateError } from '@quest/shared';
+import { parseTarget, SLOT_NAME, TemplateError } from '@quest/shared';
 import { etagOf, matchesEtag, type AppConfig } from './appconfig.js';
 import { cliCommandLabel, DANGEROUS_COMMANDS, isBusyReply, isScriptKilled, runCli } from './cli.js';
 import type { Config } from './config.js';
 import type { EventBus, LevelEventData } from './events.js';
-import { renderLevel, templateContext, type LevelIndexEntry, type LevelService } from './levels.js';
+import {
+  levelHints,
+  renderLevel,
+  templateContext,
+  type DrawnPart,
+  type LevelIndexEntry,
+  type LevelService,
+} from './levels.js';
 import { LOG_SERVICES, type LogService, type LogTail } from './logtail.js';
 import {
   chargeHint,
@@ -22,19 +29,42 @@ import {
   verifyTiming,
 } from './interview.js';
 import { KEY_BOOTS, type Mirror } from './mirror.js';
+import {
+  blankStartOf,
+  chooseDraw,
+  drawnByOthers,
+  effectiveLevel,
+  poolEntries,
+  type Effective,
+} from './pool.js';
+import { buildPortfolio, PORTFOLIO_FILE } from './portfolio.js';
+import { verdictMetrics } from './verdict-metrics.js';
 import { MetricsStore, parsePush } from './metrics.js';
-import { newProgress, reconcileLevels, type ProgressFile, type ProgressStore } from './progress.js';
+import {
+  newProgress,
+  reconcileLevels,
+  type LevelProgress,
+  type ProgressFile,
+  type ProgressStore,
+} from './progress.js';
 import type { RedisManager } from './redis.js';
 import { runSetup, SetupRefusedError } from './setup.js';
 import { runVerification, type Answers } from './verify.js';
 import { loadVerifyConfig } from './verify/config.js';
 import { levelSlots, Verifier, VerifyBusyError } from './verify/index.js';
+import { slotFile } from './verify/slots.js';
 import { ScenarioError } from './load/scenario.js';
 import { LoadRequestError, OnDemandLoad } from './load/ondemand.js';
 import { runLoad as defaultRunLoad, type LoadRunner } from './load/run.js';
 import { TrafficError } from './verify/traffic.js';
 import { buildIdeal, idealAccess } from './verify/ideal.js';
-import { listTree, readWorkspaceFile, WorkspaceError, writeWorkspaceFile } from './workspace.js';
+import {
+  listTree,
+  moveAside,
+  readWorkspaceFile,
+  WorkspaceError,
+  writeWorkspaceFile,
+} from './workspace.js';
 
 export interface Deps {
   cfg: Config;
@@ -201,9 +231,17 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
     dbExtraLatencyMs: runtime.dbExtraLatencyMs,
   });
 
+  const effectiveOf = (entry: LevelIndexEntry, lp: LevelProgress | undefined): Effective =>
+    effectiveLevel(entry, lp, (id) => levels.get(id));
+  const drawnPart = (p: ProgressFile, eff: Effective): DrawnPart | null =>
+    eff.drawn
+      ? { entry: eff.drawn, ctx: templateContext(cfg, p, eff.drawn), questions: eff.questions }
+      : null;
+
   /** The slots a level's own code lives in, and whether all of them are in the app's active list now. */
   function slotsView(entry: LevelIndexEntry): { own: string[]; active: boolean } {
-    const own = levelSlots(entry.level.level.verify);
+    const eff = effectiveOf(entry, store.current?.levels[entry.level.level.id]);
+    const own = levelSlots(eff.verifyLevel.level.verify);
     const live = activeSlots();
     return { own, active: own.length > 0 && own.every((s) => live.includes(s)) };
   }
@@ -433,11 +471,35 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         if (!lp || lp.status === 'locked')
           throw new HttpError(409, 'level_locked', `${req.params.id} is locked`);
         const iv = interviewSpec(entry.level);
+        const eff = effectiveOf(entry, lp);
         const timing = iv
-          ? interviewView(iv, lp, Date.now(), levels.get(iv.rebuildOf)?.level.level.title ?? null)
+          ? interviewView(
+              iv,
+              lp,
+              Date.now(),
+              (iv.rebuildOf ? levels.get(iv.rebuildOf) : undefined)?.level.level.title ?? null,
+              {
+                pool: eff.pool,
+                drawn: eff.drawn
+                  ? {
+                      id: eff.drawn.level.level.id,
+                      title: eff.drawn.level.level.title,
+                      chapter: eff.drawn.chapter.id,
+                      chapterTitle: eff.drawn.chapter.chapter.title,
+                    }
+                  : null,
+                blanked: lp.blanked ?? [],
+                questionsFrom: eff.drawn ? eff.drawn.level.level.verify.length : null,
+              },
+            )
           : { interview: null, remainingMs: null };
         return {
-          ...renderLevel(entry, templateContext(cfg, p, entry), lp),
+          ...renderLevel(
+            entry,
+            templateContext(cfg, p, entry),
+            lp,
+            eff.pool ? { drawn: drawnPart(p, eff) } : undefined,
+          ),
           ...timing,
           slots: slotsView(entry),
           status: lp.status,
@@ -454,7 +516,9 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const want = isObject(req.body) ? req.body.active : undefined;
         if (typeof want !== 'boolean')
           throw new HttpError(400, 'invalid_active', 'active must be true or false');
-        const own = levelSlots(entry.level.level.verify);
+        const own = levelSlots(
+          effectiveOf(entry, p.levels[entry.level.level.id]).verifyLevel.level.verify,
+        );
         // A verification switches slots itself (the traffic check puts them back), so never race it.
         const done = verifier.begin(p.player.id); // 409 verify_in_progress
         try {
@@ -487,17 +551,73 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
             'redis_unavailable',
             'Redis is down, so the level setup cannot run',
           );
+        // E-04: a pool level draws its use case at the first start; a later start keeps it (like the clock).
+        const pool = poolEntries(entry.level);
+        if (pool) {
+          const valid = (d: string | undefined) =>
+            d !== undefined && pool.some((e) => e.rebuild_of === d) && levels.get(d) !== undefined;
+          if (!valid(lp.drawn)) {
+            await commit('interview_draw', id, (draft) => {
+              const l = draft.levels[id] as LevelProgress;
+              if (valid(l.drawn)) return;
+              l.drawn = chooseDraw(pool, draft.player.id, id, drawnByOthers(draft, id)).rebuild_of;
+              delete l.blanked; // a new draw has its own files to blank
+            });
+          }
+        }
+        const lpNow = (store.current as ProgressFile).levels[id] as LevelProgress;
+        const eff = effectiveOf(entry, lpNow);
+        // E-04: blank start. The files the drawn (or rebuilt) level's code lives in are moved aside once, so the
+        // learner starts from an empty file; a re-start never blanks again.
+        let blanked: { file: string; backup: string }[] | undefined;
+        const spec = interviewSpec(entry.level);
+        if (spec && blankStartOf(entry.level) && lpNow.blanked === undefined) {
+          const target = eff.drawn ?? (spec.rebuildOf ? levels.get(spec.rebuildOf) : undefined);
+          blanked = [];
+          if (target) {
+            const files = new Set<string>();
+            for (const slot of levelSlots(target.level.level.verify)) {
+              const f = slotFile(slot);
+              if (f) files.add(f);
+            }
+            for (const file of files) {
+              const backup = await moveAside(cfg.workspaceDir, file, `.before-${id}`);
+              // The learner's editor needs a file to open; a missing one is created empty.
+              if (
+                backup ||
+                !(await readWorkspaceFile(cfg.workspaceDir, file).then(
+                  () => true,
+                  () => false,
+                ))
+              )
+                await writeWorkspaceFile(cfg.workspaceDir, file, '');
+              if (backup) blanked.push({ file, backup });
+            }
+          }
+        }
         const setup = await runSetup(entry.level, templateContext(cfg, p, entry), redis);
+        if (eff.drawn) {
+          const more = await runSetup(eff.drawn.level, templateContext(cfg, p, eff.drawn), redis);
+          setup.ran += more.ran;
+          setup.skipped.push(...more.skipped);
+        }
         const now = new Date().toISOString();
         const level = await commit('level_started', id, (draft) => {
           const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]>;
           if (l.status === 'available') l.status = 'in_progress';
           l.startedAt = now;
           if (interviewSpec(entry.level)) startInterview(l, now);
+          if (blanked !== undefined) l.blanked ??= blanked;
           return l;
         });
         bus.emit('level.event', { kind: 'custom', name: 'level_started', data: { levelId: id } });
-        return { status: level.status, startedAt: now, setup, level };
+        return {
+          status: level.status,
+          startedAt: now,
+          setup,
+          level,
+          ...(pool ? { drawn: level.drawn ?? null, blanked: level.blanked ?? [] } : {}),
+        };
       });
 
       api.post<{ Params: { id: string } }>('/levels/:id/brainstorm', async (req) => {
@@ -533,9 +653,10 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
       api.post<{ Params: { id: string } }>('/levels/:id/hint', async (req) => {
         const { entry, p } = activeEntry(req.params.id, ['in_progress', 'passed']);
         const id = entry.level.level.id;
-        const hints = renderTemplates(
-          entry.level.level.hints ?? [],
+        const hints = levelHints(
+          entry,
           templateContext(cfg, p, entry),
+          drawnPart(p, effectiveOf(entry, p.levels[id])),
         );
         const revealed = p.levels[id]?.hintsRevealed ?? 0;
         if (revealed >= hints.length)
@@ -586,6 +707,15 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           }
         }
         const lp = p.levels[id] as NonNullable<ProgressFile['levels'][string]>;
+        const eff = effectiveOf(entry, lp);
+        if (eff.pool && !eff.drawn)
+          throw new HttpError(
+            409,
+            'not_drawn',
+            `${id} has not drawn its use case: POST /api/levels/${id}/start first`,
+          );
+        // The drawn level's templates (player, level, chapter) are the ones its checks were written for.
+        const gradedCtx = templateContext(cfg, p, eff.drawn ?? entry);
         const requestedAtMs = Date.now();
         const iv = interviewSpec(entry.level);
         // Interview levels: grade as usual, but note whether the deadline had passed when it was asked for.
@@ -594,9 +724,9 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         let outcome;
         try {
           outcome = await runVerification(
-            entry.level,
+            eff.verifyLevel,
             {
-              templateCtx: templateContext(cfg, p, entry),
+              templateCtx: gradedCtx,
               redis,
               events: bus,
               startedAt: lp.startedAt,
@@ -610,11 +740,15 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         }
         const now = new Date().toISOString();
         // Compact record in progress.json; the full feedback is in the response (and the WS events).
+        const metrics = verdictMetrics(outcome.metrics);
         const record = {
           at: now,
           verdict: outcome.verdict,
           durationMs: outcome.durationMs,
           ...(timing?.overtime ? { overtime: true as const } : {}),
+          // E-04: what the traffic check measured, and (interview levels) how far into the clock this verify was.
+          ...(metrics ? { metrics } : {}),
+          ...(timing && timing.elapsedMs !== null ? { elapsedMs: timing.elapsedMs } : {}),
           checks: outcome.checks.map((c) => ({
             index: c.index,
             type: c.type,
@@ -623,7 +757,7 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           })),
         };
         // "The ideal way" rides along once allowed (passed, or 3 attempts); read before the commit.
-        const ideal = await buildIdeal(entry.level, templateContext(cfg, p, entry));
+        const ideal = await buildIdeal(eff.drawn?.level ?? entry.level, gradedCtx);
         const result = await commit('verify', id, (draft) => {
           const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]> & {
             idealRevealedAt?: string;
@@ -650,7 +784,14 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const id = entry.level.level.id;
         const lp = p.levels[id] as NonNullable<ProgressFile['levels'][string]>;
         const access = idealAccess(lp.status, lp.attempts);
-        const ideal = await buildIdeal(entry.level, templateContext(cfg, p, entry));
+        // A pool level shows the ideal way of the level it drew.
+        const eff = effectiveOf(entry, lp);
+        if (eff.pool && !eff.drawn)
+          throw new HttpError(409, 'not_drawn', `${id} has not drawn its use case yet`);
+        const ideal = await buildIdeal(
+          eff.drawn?.level ?? entry.level,
+          templateContext(cfg, p, eff.drawn ?? entry),
+        );
         const now = new Date().toISOString();
         await commit('ideal', id, (draft) => {
           const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]> & {
@@ -781,6 +922,31 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         return writeWorkspaceFile(cfg.workspaceDir, req.query.path, content);
       });
 
+      // ---- E-04: the learner's story ------------------------------------------------------------
+      const portfolioNow = async () =>
+        buildPortfolio({
+          progress: needPlayer(),
+          chapters: levels.chapters,
+          tree: await listTree(cfg.workspaceDir),
+        });
+      api.get('/portfolio', async () => portfolioNow());
+      api.post('/portfolio/write', async () => {
+        const { markdown, stats } = await portfolioNow();
+        const w = await writeWorkspaceFile(cfg.workspaceDir, PORTFOLIO_FILE, markdown);
+        bus.emit('level.event', {
+          kind: 'custom',
+          name: 'portfolio_written',
+          data: { bytes: w.size, levels: stats.levelsTotal, passed: stats.levelsPassed },
+        } satisfies LevelEventData);
+        return {
+          path: `workspace/${w.path}`,
+          file: w.path,
+          bytes: w.size,
+          levels: stats.levelsTotal,
+          passed: stats.levelsPassed,
+        };
+      });
+
       // ---- events, metrics, logs --------------------------------------------------------------
       api.get<{ Querystring: { since?: string } }>('/events', async (req) => ({
         events: bus.since(req.query.since),
@@ -808,7 +974,10 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         let keep: string[] | null = null;
         if (body.levelId !== undefined) {
           const entry = needLevel(String(body.levelId));
-          const own = levelSlots(entry.level.level.verify);
+          const own = levelSlots(
+            effectiveOf(entry, store.current?.levels[entry.level.level.id]).verifyLevel.level
+              .verify,
+          );
           keep = activeSlots().filter((s) => !own.includes(s));
         }
         const owner = store.current?.player.id ?? 'no-player';

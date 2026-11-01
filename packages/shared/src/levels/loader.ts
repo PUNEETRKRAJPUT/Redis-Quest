@@ -334,10 +334,11 @@ export async function loadLevel(file: string, opts: LoadLevelOptions = {}): Prom
   }
 
   // Referenced files.
-  if (level.mode !== 'decision') {
+  if (level.mode !== 'decision' && level.solutions) {
+    const solutions = level.solutions;
     const refs: { rel: string; path: PathSegment[] }[] = [
-      { rel: level.solutions.reference, path: ['solutions', 'reference'] },
-      ...level.solutions.wrong.map((w, i) => ({ rel: w.path, path: ['solutions', 'wrong', i, 'path'] as PathSegment[] })),
+      { rel: solutions.reference, path: ['solutions', 'reference'] },
+      ...solutions.wrong.map((w, i) => ({ rel: w.path, path: ['solutions', 'wrong', i, 'path'] as PathSegment[] })),
     ];
     for (const r of refs) {
       const abs = await resolveRef(source, r.path, r.rel, root, errors);
@@ -542,32 +543,53 @@ export async function loadAllLevels(root: string, opts: { skipInterviewCheck?: b
  * earlier chapter, by the chapter order of `chapters`. Needs the whole tree, so it runs here and not in the
  * level schema. Validating one chapter on its own therefore cannot resolve a reference into another one:
  * pass both directories to the validator.
+ *
+ * E-04: the same rule for every `interview.pool[].rebuild_of`, plus: a pool entry must name a `code` level that
+ * is not itself a pool level (a pool level has no checks to draw).
  */
 export async function interviewReferenceErrors(chapters: readonly LoadedChapter[]): Promise<LevelError[]> {
-  const position = new Map<string, { chapter: number; level: number }>();
-  chapters.forEach((c, ci) => c.levels.forEach((l, li) => position.set(l.level.id, { chapter: ci, level: li })));
+  const position = new Map<string, { chapter: number; level: number; loaded: LoadedLevel }>();
+  chapters.forEach((c, ci) => c.levels.forEach((l, li) => position.set(l.level.id, { chapter: ci, level: li, loaded: l })));
   const errors: LevelError[] = [];
   for (const [ci, c] of chapters.entries()) {
     for (const [li, l] of c.levels.entries()) {
       if (l.level.mode !== 'code' || !l.level.interview) continue;
-      const target = l.level.interview.rebuild_of;
-      const found = position.get(target);
-      let message: string | undefined;
-      if (!found) {
-        message = `${target} is not a level that was loaded; rebuild_of must name an existing level in this chapter or an earlier one (when validating one chapter alone, pass the chapter holding it too)`;
-      } else if (found.chapter > ci || (found.chapter === ci && found.level >= li)) {
-        message = `${target} comes ${found.chapter === ci ? 'after this level in its chapter' : 'in a later chapter'}; rebuild_of must name a level in this chapter (listed before this one) or an earlier chapter`;
+      const iv = l.level.interview;
+      const targets: { id: string; path: PathSegment[]; pool: boolean }[] = iv.pool
+        ? iv.pool.map((e, i) => ({ id: e.rebuild_of, path: ['interview', 'pool', i, 'rebuild_of'], pool: true }))
+        : iv.rebuild_of
+          ? [{ id: iv.rebuild_of, path: ['interview', 'rebuild_of'], pool: false }]
+          : [];
+      let source: YamlSource | undefined;
+      const where = async (path: PathSegment[]) => {
+        if (source === undefined) {
+          try {
+            const parsed = parseYaml(l.file, await readFile(l.file, 'utf8'));
+            if (!parsed.errors.length) source = parsed.source;
+          } catch {
+            // keep 1:1; the message still names the problem
+          }
+        }
+        return source ? positionOf(source, path) : { line: 1, col: 1 };
+      };
+      for (const t of targets) {
+        const target = t.id;
+        const found = position.get(target);
+        const field = t.pool ? 'pool[].rebuild_of' : 'rebuild_of';
+        let message: string | undefined;
+        if (!found) {
+          message = `${target} is not a level that was loaded; ${field} must name an existing level in this chapter or an earlier one (when validating one chapter alone, pass the chapter holding it too)`;
+        } else if (found.chapter > ci || (found.chapter === ci && found.level >= li)) {
+          message = `${target} comes ${found.chapter === ci ? 'after this level in its chapter' : 'in a later chapter'}; ${field} must name a level in this chapter (listed before this one) or an earlier chapter`;
+        } else if (t.pool) {
+          const tl = found.loaded.level;
+          if (tl.mode !== 'code') message = `${target} is a ${tl.mode} level; a pool entry must name a code level (the learner rebuilds it from a blank file)`;
+          else if (tl.interview?.pool) message = `${target} is itself a pool level; a pool entry must name a level that has its own checks`;
+        }
+        if (!message) continue;
+        const pos = await where(t.path);
+        errors.push({ file: l.file, line: pos.line, col: pos.col, path: formatPath(t.path), message });
       }
-      if (!message) continue;
-      const path: PathSegment[] = ['interview', 'rebuild_of'];
-      let pos = { line: 1, col: 1 };
-      try {
-        const parsed = parseYaml(l.file, await readFile(l.file, 'utf8'));
-        if (!parsed.errors.length) pos = positionOf(parsed.source, path);
-      } catch {
-        // keep 1:1; the message still names the problem
-      }
-      errors.push({ file: l.file, line: pos.line, col: pos.col, path: formatPath(path), message });
     }
   }
   return errors;

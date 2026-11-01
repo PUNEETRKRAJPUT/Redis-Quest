@@ -72,6 +72,8 @@ start early if everything it depends on is `done`.
 | E-03 | Engine for Chapter 5: sentinel:// and cluster:// targets (shared `target.ts` helper), cluster routing in the CLI and checks, target switcher in the UI, `redis_target_changed` and `sentinel_failover` events, harness skips profile levels (spec: specs/E-03, handoff: handoffs/E-03) | done (check 69 PASS; failover 8.3 s, failback 7.1 s; committed together with A-05 because the shared learner index binds them) |
 | A-05 | App and runner follow replica, sentinel and cluster targets; `deps.redisCached` (RESP3 client-side cache) (spec: specs/A-05, handoff: handoffs/A-05) | done (check 121 PASS twice; READONLY, CROSSSLOT and MOVED texts measured; no WATCH on sentinel or cluster clients) |
 | C5 | Chapter 5 "Survive and scale" (14 levels) (spec: specs/C5, handoff: handoffs/C5) | done (static check 293 PASS; G-01: 40/40 on the single node; the four profile levels (crash, replica, sentinel, cluster) played by hand on the default stack: all right, the wrong cluster join wrong; tag v0.5.0) |
+| E-04 | Engine for the Finale: interview pools (random draw, blank start, follow-up questions), verdict metrics kept in progress, portfolio page route and button, harness rules (spec: specs/E-04, handoff: handoffs/E-04) | done (check 112 PASS; the draw is sha256(player:level) over the entries not yet drawn; blank files backed up as <file>.before-<level>) |
+| CF | Finale "The architect": three drawn mock interviews, the gauntlet, the neighbours, the code review, your story (spec: specs/CF) | in progress |
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)

@@ -1,0 +1,44 @@
+id: scratch-e04-03-write-story
+chapter: scratch-e04
+title: "Your story"
+mode: ops
+
+story: |
+  Last level: the game writes your story from your save.
+
+brainstorm:
+  prompt: "What belongs on a page you show a hiring manager?"
+  options:
+    - id: numbers-from-the-save
+      label: "Only numbers the game measured, each with its level"
+      is_reasonable: true
+    - id: round-up
+      label: "Round the numbers up a little"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not a page: a conversation"
+      is_reasonable: true
+
+teach: |
+  The page is built from `progress.json` and the workspace, never from memory.
+
+task: |
+  Press "Write my story" on the What you built page, or `POST /api/portfolio/write`.
+
+verify:
+  - type: event
+    kind: custom
+    match:
+      name: portfolio_written
+    timeoutMs: 20000
+    message: "The game has not written your story since you started this level."
+
+reward:
+  xp: 80
+
+solutions:
+  reference: solutions/03-reference.redis
+  wrong:
+    - path: solutions/03-wrong-no-page.redis
+      expect: wrong
+      because: "Reads a key and never asks for the story, so the event never fires."

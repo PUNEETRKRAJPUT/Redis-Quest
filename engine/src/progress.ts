@@ -4,10 +4,34 @@ import { join } from 'node:path';
 
 export type LevelStatus = 'locked' | 'available' | 'in_progress' | 'passed';
 
+/**
+ * E-04: what a traffic check measured, kept on the verdict record so the portfolio can quote it from the save
+ * alone ("p99 4,100 ms to 11 ms"). Only the numbers the check produced are present.
+ */
+export interface VerdictMetrics {
+  p99Ms?: number;
+  baselineP99Ms?: number;
+  dbPerRequest?: number;
+  baselineDbPerRequest?: number;
+  redisPerRequest?: number;
+  hitRatio?: number;
+  rps?: number;
+}
+
+export interface VerdictRecord {
+  at: string;
+  verdict: string;
+  overtime?: true;
+  /** E-04: from the traffic check, when the level has one and it ran. */
+  metrics?: VerdictMetrics;
+  /** E-04, interview levels: ms from the start of the interview clock to the verify request. */
+  elapsedMs?: number;
+}
+
 export interface LevelProgress {
   status: LevelStatus;
   attempts: number;
-  verdicts: { at: string; verdict: string; overtime?: true }[];
+  verdicts: VerdictRecord[];
   brainstorm?: { optionId: string; text: string; at: string };
   completedAt?: string;
   /** Additive to the P0-06 spec: set by POST /levels/:id/start (the event verifier looks back to this). */
@@ -21,6 +45,10 @@ export interface LevelProgress {
   /** F-12: set on the first pass: the time it took, and whether the deadline had passed by then. */
   interviewElapsedMs?: number;
   overtime?: boolean;
+  /** E-04, pool levels: the `rebuild_of` the engine drew at the first start. The first start wins. */
+  drawn?: string;
+  /** E-04, blank-start levels: slot files moved aside at the first start (`[]` when nothing needed moving). */
+  blanked?: { file: string; backup: string }[];
 }
 
 export interface ProgressFile {

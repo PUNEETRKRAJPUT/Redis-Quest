@@ -1,0 +1,13 @@
+id: scratch-e04
+title: "Scratch: the finale plumbing"
+incident:
+  - from: senior
+    time: "09:00"
+    text: "Interview loop starts now. Blank files, a clock, and I pick the question."
+  - from: you
+    time: "09:01"
+    text: "Okay. Ready."
+levels:
+  - scratch-e04-01-mock-one
+  - scratch-e04-02-mock-two
+  - scratch-e04-03-write-story

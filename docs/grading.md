@@ -131,6 +131,34 @@ graded by hand)` and the level is completed so later levels unlock, exactly like
 `redis_reconnect`: `SKIPPED (needs a real Redis outage: graded by hand)`). Grade them by hand once per release, with the
 profiles up.
 
+## Pool levels and the portfolio event (E-04)
+
+**A pool level** (`interview.pool`, see `levels/README.md`) has no `verify` and no `solutions` of its own. The harness
+plays it like this, once per solution of the level that was drawn:
+
+1. `ensureUnlocked`, then `POST /api/levels/:id/start`: the first start draws (and blanks the drawn level's slot
+   files; the harness's own restore puts them back to what they were then, an empty file).
+2. `GET /api/levels/:id`, take `interview.drawn.id`, find that level (among the chapters asked for, then everything
+   under `--levels`) and grade with **that** level's `solutions`: the reference declared `right`, each wrong entry as
+   declared. File paths resolve from the **drawn level's** directory, the slots, bundle shims and events are the drawn
+   level's, exactly as if the harness were grading it. The pool level is `start`ed again before every solution (the
+   draw is kept; `setup` of the drawn level re-runs).
+3. Answers: the drawn level's `answer` and `quiz` verifiers as usual, then the pool entry's follow-up questions at the
+   indices that continue after them. A solution declared `right` or `works_but_wrong` gets every question right; one
+   declared `wrong` gets the first question wrong (and the drawn level's own checks are what fail it anyway).
+4. `POST /api/levels/:id/verify` on the **pool** level. The row's `LEVEL` is the pool level, `DECLARED` the drawn
+   level's declaration, and the `note` says what was drawn (`drew <id> (<title>), N follow-up questions`).
+
+A drawn level that needs a real outage or the compose profiles is `SKIPPED` like any other. A pool level is completed
+afterwards (`/complete`) so the next one unlocks and, because the draw excludes use cases already drawn by other pool
+levels, a chapter with several pool levels shows a different drawn level per row.
+
+**`portfolio_written`** (custom event). A level that waits for the
+learner's story is graded like the others, and for a solution declared `right` or `works_but_wrong` the harness posts
+`POST /api/portfolio/write` after the solution ran and before it verifies (what pressing "Write my story" does); the
+engine's own `portfolio_written` is what the level then sees, the harness never posts the event itself. A solution
+declared `wrong` does not write the story, so the event never comes and the level is wrong.
+
 ## Reading the table
 
 ```
@@ -163,4 +191,4 @@ Do not edit a level just to make the harness green if the level is right and the
   `SKIPPED` unless you use `--run-ops`.
 - The tool feeds correct answers to `works_but_wrong` and wrong answers to `wrong` solutions. A wrong solution that
   passes every `redis` check and relies on a missing answer is graded as the learner would see it (the wrong answer fails it).
-- It does not test hints, brainstorm, story text, XP, or the UI.
+- It does not test hints, brainstorm, story text, XP, or the UI (a pool level's clock and hint cost are covered by the engine's own tests).

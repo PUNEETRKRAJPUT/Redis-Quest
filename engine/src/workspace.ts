@@ -1,4 +1,14 @@
-import { lstat, mkdir, readdir, readFile, realpath, stat } from 'node:fs/promises';
+import {
+  link,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  stat,
+  unlink,
+} from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { writeFileAtomic } from './progress.js';
 
@@ -172,6 +182,53 @@ export async function writeWorkspaceFile(
   await resolveInside(root, clean);
   await writeFileAtomic(abs, content);
   return { path: clean, size };
+}
+
+/**
+ * E-04: moves a non-empty file next to itself as `<file><suffix>` (`<file><suffix>-2`, `-3` when that name is
+ * taken: a backup is never overwritten) and returns the backup's path. A missing or empty file is left alone and
+ * the answer is null. The new name is made with a hard link first, which refuses to replace anything.
+ */
+export async function moveAside(
+  root: string,
+  rel: unknown,
+  suffix: string,
+): Promise<string | null> {
+  const clean = validateRelative(rel);
+  const abs = await resolveInside(root, clean);
+  let st;
+  try {
+    st = await lstat(abs);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+  if (!st.isFile() || st.size === 0) return null;
+  for (let n = 1; n < 1000; n++) {
+    const candidate = n === 1 ? `${clean}${suffix}` : `${clean}${suffix}-${n}`;
+    const candidateAbs = await resolveInside(root, candidate);
+    try {
+      await link(abs, candidateAbs);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST') continue;
+      // A file system without hard links (some bind mounts): check the name is free, then rename.
+      if (code !== 'EPERM' && code !== 'ENOSYS' && code !== 'EXDEV' && code !== 'EOPNOTSUPP')
+        throw err;
+      if (
+        await lstat(candidateAbs).then(
+          () => true,
+          () => false,
+        )
+      )
+        continue;
+      await rename(abs, candidateAbs);
+      return candidate;
+    }
+    await unlink(abs);
+    return candidate;
+  }
+  throw new WorkspaceError('invalid_path', `no free backup name for ${clean}`);
 }
 
 export { sep };

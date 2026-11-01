@@ -592,25 +592,87 @@ const showMeSchema = z
  * F-12. A timed blank rebuild: the level is graded like any other, but there is no teaching, a countdown
  * runs, hints cost XP, and the elapsed time is recorded. `rebuild_of` must name a level in the same chapter
  * (earlier) or an earlier chapter; that needs the whole tree, so the loader checks it, not this schema.
+ *
+ * E-04. `pool` is the alternative to `rebuild_of`: 2 to 12 earlier code levels, one of which the engine draws
+ * for the learner at the first start. Each entry carries 1 to 5 follow-up quiz questions in the interviewer's
+ * voice, asked after the drawn level's own checks. A pool level has no `verify` of its own and no `solutions`.
  */
 export const INTERVIEW_MINUTES_MIN = 5;
 export const INTERVIEW_MINUTES_MAX = 60;
 export const INTERVIEW_DEFAULT_HINT_XP_COST = 10;
-export const interviewSchema = z.strictObject({
-  minutes: z
-    .number({ error: 'must be a whole number of minutes' })
-    .int('must be a whole number of minutes')
-    .min(INTERVIEW_MINUTES_MIN, `must be at least ${INTERVIEW_MINUTES_MIN} minutes`)
-    .max(INTERVIEW_MINUTES_MAX, `must be at most ${INTERVIEW_MINUTES_MAX} minutes`),
-  rebuild_of: levelId,
-  hint_xp_cost: z
-    .number({ error: 'must be a whole number of XP' })
-    .int('must be a whole number of XP')
-    .min(0, 'must not be negative')
-    .max(1000, 'must be at most 1000')
-    .default(INTERVIEW_DEFAULT_HINT_XP_COST),
-});
+export const POOL_ENTRIES_MIN = 2;
+export const POOL_ENTRIES_MAX = 12;
+export const POOL_QUESTIONS_MIN = 1;
+export const POOL_QUESTIONS_MAX = 5;
+
+const poolEntrySchema = z
+  .strictObject({
+    rebuild_of: levelId,
+    questions: z
+      .array(quizVerifier)
+      .min(POOL_QUESTIONS_MIN, 'a pool entry needs at least one follow-up question')
+      .max(POOL_QUESTIONS_MAX, `a pool entry has at most ${POOL_QUESTIONS_MAX} follow-up questions`),
+  })
+  .superRefine((entry, ctx) => {
+    // Option ids are unique within the entry, so a question can be named without the others in the way.
+    const seen = new Set<string>();
+    entry.questions.forEach((q, qi) => {
+      q.options.forEach((o, oi) => {
+        if (seen.has(o.id)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['questions', qi, 'options', oi, 'id'],
+            message: `option id ${o.id} is used by another question of this pool entry`,
+          });
+        }
+        seen.add(o.id);
+      });
+    });
+  });
+export type PoolEntry = z.output<typeof poolEntrySchema>;
+
+export const interviewSchema = z
+  .strictObject({
+    minutes: z
+      .number({ error: 'must be a whole number of minutes' })
+      .int('must be a whole number of minutes')
+      .min(INTERVIEW_MINUTES_MIN, `must be at least ${INTERVIEW_MINUTES_MIN} minutes`)
+      .max(INTERVIEW_MINUTES_MAX, `must be at most ${INTERVIEW_MINUTES_MAX} minutes`),
+    rebuild_of: levelId.optional(),
+    pool: z
+      .array(poolEntrySchema)
+      .min(POOL_ENTRIES_MIN, `a pool needs at least ${POOL_ENTRIES_MIN} entries`)
+      .max(POOL_ENTRIES_MAX, `a pool has at most ${POOL_ENTRIES_MAX} entries`)
+      .optional(),
+    hint_xp_cost: z
+      .number({ error: 'must be a whole number of XP' })
+      .int('must be a whole number of XP')
+      .min(0, 'must not be negative')
+      .max(1000, 'must be at most 1000')
+      .default(INTERVIEW_DEFAULT_HINT_XP_COST),
+    /** Start from an empty slot file. Default: true for a pool level, false for a `rebuild_of` level. */
+    blank_start: z.boolean({ error: 'must be true or false' }).optional(),
+  })
+  .superRefine((iv, ctx) => {
+    if (iv.rebuild_of !== undefined && iv.pool !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['pool'], message: 'use either rebuild_of or pool, not both' });
+    } else if (iv.rebuild_of === undefined && iv.pool === undefined) {
+      ctx.addIssue({ code: 'custom', path: [], message: 'needs rebuild_of (one level) or pool (a list of levels to draw from)' });
+    }
+    const seen = new Set<string>();
+    (iv.pool ?? []).forEach((e, i) => {
+      if (seen.has(e.rebuild_of)) {
+        ctx.addIssue({ code: 'custom', path: ['pool', i, 'rebuild_of'], message: `${e.rebuild_of} is already in this pool` });
+      }
+      seen.add(e.rebuild_of);
+    });
+  });
 export type Interview = z.output<typeof interviewSchema>;
+
+/** `blank_start` with its default: true for a pool level, false for a `rebuild_of` level. */
+export function interviewBlankStart(iv: Pick<Interview, 'pool' | 'blank_start'>): boolean {
+  return iv.blank_start ?? iv.pool !== undefined;
+}
 
 const levelBase = {
   id: levelId,
@@ -643,13 +705,16 @@ const levelBase = {
 const fileModeLevel = <M extends Exclude<LevelMode, 'decision' | 'code'>>(mode: M) =>
   z.strictObject({ ...levelBase, mode: z.literal(mode), solutions: fileSolutions });
 
-// Only a code level can be an interview rebuild, and only then may `teach` be left out.
+// Only a code level can be an interview rebuild, and only then may `teach` be left out. A pool level (E-04) has
+// no checks and no solutions of its own: they come from the level the engine draws, so on a code level `verify`
+// may be empty or absent and `solutions` may be absent; checkLevel demands both for every other code level.
 const codeLevel = z.strictObject({
   ...levelBase,
   teach: text.optional(),
   interview: interviewSchema.optional(),
   mode: z.literal('code'),
-  solutions: fileSolutions,
+  verify: z.array(verifySpecSchema).default([]),
+  solutions: fileSolutions.optional(),
 });
 
 const levelUnion = z.discriminatedUnion('mode', [
@@ -666,6 +731,25 @@ function checkLevel(level: LevelUnion, ctx: z.RefinementCtx): void {
 
   if (level.mode === 'code' && level.teach === undefined && level.interview === undefined) {
     ctx.addIssue({ code: 'custom', path: ['teach'], message: 'required (it may only be left out on an interview level)' });
+  }
+
+  // E-04: a pool level takes its checks and solutions from the drawn level, so it has none of its own.
+  if (level.mode === 'code' && level.interview && level.interview.rebuild_of === undefined && level.interview.pool === undefined) {
+    return; // `interview` already reports that it needs rebuild_of or pool
+  }
+  const isPool = level.mode === 'code' && level.interview?.pool !== undefined;
+  if (level.mode === 'code' && isPool) {
+    if (level.verify.length > 0) {
+      ctx.addIssue({ code: 'custom', path: ['verify'], message: 'a pool level has no verify of its own (its checks come from the drawn level); remove it' });
+    }
+    if (level.solutions !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['solutions'], message: 'a pool level has no solutions of its own (the drawn level has them); remove it' });
+    }
+    return;
+  }
+  if (level.mode === 'code' && level.verify.length === 0) {
+    ctx.addIssue({ code: 'custom', path: ['verify'], message: 'a level needs at least one verifier' });
+    return; // the rest of the checks would only repeat this
   }
 
   // Decision solutions name quiz option ids, so a decision level needs a quiz; `answer`
@@ -710,19 +794,24 @@ function checkLevel(level: LevelUnion, ctx: z.RefinementCtx): void {
     return;
   }
 
+  const solutions = level.solutions;
+  if (solutions === undefined) {
+    ctx.addIssue({ code: 'custom', path: ['solutions'], message: 'required' });
+    return;
+  }
   const exts = SOLUTION_EXTENSIONS[level.mode];
   const checkExt = (p: string, path: (string | number)[]) => {
     if (!exts.some((e) => p.endsWith(e))) {
       ctx.addIssue({ code: 'custom', path, message: `a ${level.mode} solution must be a ${exts.join(' or ')} file` });
     }
   };
-  checkExt(level.solutions.reference, ['solutions', 'reference']);
-  level.solutions.wrong.forEach((w, i) => checkExt(w.path, ['solutions', 'wrong', i, 'path']));
+  checkExt(solutions.reference, ['solutions', 'reference']);
+  solutions.wrong.forEach((w, i) => checkExt(w.path, ['solutions', 'wrong', i, 'path']));
 
   // Every antipattern detector is proven against a known antipattern implementation, and a
   // "works, but wrong" solution is only possible if there is a detector to fire.
   const antipatternIndex = types.indexOf('antipattern');
-  const wbw = level.solutions.wrong.findIndex((w) => w.expect === 'works_but_wrong');
+  const wbw = solutions.wrong.findIndex((w) => w.expect === 'works_but_wrong');
   if (antipatternIndex !== -1 && wbw === -1) {
     ctx.addIssue({
       code: 'custom',

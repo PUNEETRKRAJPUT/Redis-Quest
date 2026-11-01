@@ -136,8 +136,25 @@ async function chaptersUnder(root) {
 }
 
 const chapters = []; // LoadedChapter[] in the order requested, with `only` = level ids to grade (null = all)
+let knownChapters = null;
+/** Every chapter under --levels (and its _examples), loaded once. */
+async function allKnownChapters() {
+  knownChapters ??= await chaptersUnder(opts.levels);
+  return knownChapters;
+}
+/** A loaded level by id: from the chapters asked for first, then from everything under --levels. */
+async function findLoadedLevel(id) {
+  for (const { lc } of chapters) {
+    const hit = lc.levels.find((l) => l.level.id === id);
+    if (hit) return hit;
+  }
+  for (const r of await allKnownChapters()) {
+    const hit = r.chapter.levels.find((l) => l.level.id === id);
+    if (hit) return hit;
+  }
+  return null;
+}
 async function resolveTargets() {
-  let known = null;
   for (const t of opts.targets) {
     const asDir = resolve(t);
     if (
@@ -153,7 +170,7 @@ async function resolveTargets() {
       chapters.push({ lc: r.chapter, only: null });
       continue;
     }
-    known ??= await chaptersUnder(opts.levels);
+    const known = await allKnownChapters();
     let found = null;
     for (const r of known) {
       const lv = r.chapter.levels.find((l) => l.level.id === t);
@@ -310,6 +327,12 @@ async function uiActions(lv, transcript) {
     } else if (n === 'cli_ping') {
       if (!transcript.some((t) => t.line.toUpperCase() === 'PING'))
         notes.push('solution never sent PING');
+    } else if (n === 'portfolio_written') {
+      // The learner presses "Write my story": POST /api/portfolio/write. The engine emits the event itself.
+      const r = await api('POST', '/api/portfolio/write');
+      notes.push(
+        `UI wrote the story (POST /api/portfolio/write -> ${r.status}${r.body?.bytes ? `, ${r.body.bytes} bytes` : ''})`,
+      );
     } else if (n === 'load_finished' || n === 'script_killed' || n === 'redis_busy') {
       // The harness produces these just before verify (verifyWithEvents), through the engine's own routes.
     } else if (n) notes.push(`event ${n} is produced by the solution itself (nothing simulated)`);
@@ -341,6 +364,23 @@ async function buildAnswers(lv, good) {
       }
     }
   }
+  return answers;
+}
+
+/**
+ * E-04, a pool level: the drawn level's checks come first, then the pool entry's follow-up questions, whose answer
+ * indices continue after them. A good solution answers every question right; a wrong one gets the first one wrong.
+ */
+function poolAnswers(offset, questions, good) {
+  const answers = {};
+  questions.forEach((q, k) => {
+    const key = String(offset + k);
+    if (good || k > 0) answers[key] = q.correct.length > 1 ? q.correct : q.correct[0];
+    else {
+      const wrong = q.options.find((o) => !q.correct.includes(o.id));
+      answers[key] = wrong ? wrong.id : '';
+    }
+  });
   return answers;
 }
 
@@ -794,18 +834,45 @@ async function gradeLevel(lv) {
     return;
   }
 
+  // E-04: a pool level has no solutions of its own. The first start draws one of its entries; the harness reads
+  // the draw from GET /api/levels/:id and plays THAT level's solutions (paths resolved from its directory), the
+  // way a learner who was handed that use case would. `src` is the level whose files and checks are played;
+  // `lv` stays the level the verdicts belong to.
+  const poolSpec = x.mode === 'code' && x.interview?.pool ? x.interview.pool : null;
+  let src = lv;
+  let questions = [];
+  let drawNote = '';
+  if (poolSpec) {
+    await ensureUnlocked(id);
+    await start(id);
+    const got = await api('GET', `/api/levels/${id}`);
+    const drawnId = got.body?.interview?.drawn?.id;
+    if (!drawnId)
+      throw new Error(
+        `${id}: the engine reports no draw after start (${JSON.stringify(got.body?.interview ?? null).slice(0, 300)})`,
+      );
+    const loaded = await findLoadedLevel(drawnId);
+    if (!loaded)
+      throw new Error(
+        `${id}: the engine drew ${drawnId} but no level with that id was found under ${opts.levels}`,
+      );
+    src = loaded;
+    questions = poolSpec.find((e) => e.rebuild_of === drawnId)?.questions ?? [];
+    drawNote = `drew ${drawnId} (${loaded.level.title}), ${questions.length} follow-up question${questions.length === 1 ? '' : 's'}`;
+    log(`      ${id}: ${drawNote}`);
+  }
   const sols = [
-    { path: x.solutions.reference, expect: 'right', because: '' },
-    ...x.solutions.wrong.map((w) => ({ ...w })),
+    { path: src.level.solutions.reference, expect: 'right', because: '' },
+    ...src.level.solutions.wrong.map((w) => ({ ...w })),
   ];
   // A level that waits for Redis to go away and come back needs a real `docker compose stop redis`; nothing the
   // harness can do through the engine produces that, so it is graded by hand (ch2-10 was, with a real outage).
-  const needsOutage = lv.level.verify.some(
+  const needsOutage = src.level.verify.some(
     (v) => v.type === 'event' && (v.kind === 'redis_disconnect' || v.kind === 'redis_reconnect'),
   );
   // E-03: `redis_target_changed` and `sentinel_failover` happen only when the learner switches target on the page and
   // the Docker side (a profile started, a master stopped) is real, so those levels are graded by hand too.
-  const needsProfiles = lv.level.verify.some(
+  const needsProfiles = src.level.verify.some(
     (v) =>
       v.type === 'event' &&
       v.kind === 'custom' &&
@@ -838,12 +905,12 @@ async function gradeLevel(lv) {
       await ensureUnlocked(id);
       unlocked = true;
     }
-    const file = resolveLevelPath(lv, s.path);
+    const file = resolveLevelPath(src, s.path);
     const good = s.expect !== 'wrong';
     let transcript = [];
-    let note = '';
+    let note = drawNote;
     if (ext === '.js' || ext === '.mjs') {
-      const sl = slotOf(lv);
+      const sl = slotOf(src);
       if (sl.err) {
         skipped(lv, label, s.expect, `SKIPPED (${sl.err}: nowhere to put the solution)`, s.because);
         continue;
@@ -852,16 +919,18 @@ async function gradeLevel(lv) {
       const source = readFileSync(file, 'utf8');
       if (sl.slots.length === 1) {
         await writeWorkspace(sl.rel, source);
-        note = `workspace/${sl.rel}`;
+        note = [note, `workspace/${sl.rel}`].filter(Boolean).join('; ');
       } else {
-        const files = bundleFiles(lv, s.path, sl.slots, source);
+        const files = bundleFiles(src, s.path, sl.slots, source);
         for (let k = 0; k < files.length; k++)
           await writeWorkspace(files[k][0], files[k][1], k === files.length - 1);
-        note = `bundle ${files[0][0]} + ${files.length - 1} shims`;
+        note = [note, `bundle ${files[0][0]} + ${files.length - 1} shims`]
+          .filter(Boolean)
+          .join('; ');
       }
     } else if (ext === '.redis') {
       await start(id);
-      transcript = await runRedisFile(file, ctxOf(lv));
+      transcript = await runRedisFile(file, ctxOf(src));
       // FT.CREATE indexes the documents that already exist in the background; a check that counts them a
       // few milliseconds later can see 0. Give it the moment a person typing the next command would.
       if (transcript.some((t) => /^FT\.CREATE\b/i.test(t.line))) {
@@ -880,11 +949,14 @@ async function gradeLevel(lv) {
       continue;
     }
     if (good) {
-      const ui = await uiActions(lv, transcript);
+      const ui = await uiActions(src, transcript);
       if (ui.length) note = [note, ...ui].filter(Boolean).join('; ');
     }
-    const answers = await buildAnswers(lv, good);
-    const live = await verifyWithEvents(lv, id, answers, good);
+    const answers = {
+      ...(await buildAnswers(src, good)),
+      ...(poolSpec ? poolAnswers(src.level.verify.length, questions, good) : {}),
+    };
+    const live = await verifyWithEvents(src, id, answers, good);
     const out = live.out;
     if (live.note) note = [note, live.note].filter(Boolean).join('; ');
     record(lv, label, s.expect, out, { because: s.because, note });

@@ -9,6 +9,8 @@ import type {
   LogService,
   MetricsSeries,
   MirrorStatus,
+  PortfolioResponse,
+  PortfolioWriteResponse,
   Progress,
   TargetInfo,
   VerifyResponse,
@@ -113,6 +115,8 @@ export const api = {
   metrics: (seconds = 60) => call<MetricsSeries>('GET', `/api/metrics?seconds=${seconds}`),
   logs: (service: LogService, lines = 500) =>
     call<{ service: string; lines: string[] }>('GET', `/api/logs/${service}?lines=${lines}`),
+  portfolio: () => call<PortfolioResponse>('GET', '/api/portfolio'),
+  writePortfolio: () => call<PortfolioWriteResponse>('POST', '/api/portfolio/write', {}),
   tree: () => call<{ entries: WorkspaceEntry[] }>('GET', '/api/workspace/tree'),
   readFile: (path: string) =>
     call<{ path: string; content: string; size: number; mtime: string }>(

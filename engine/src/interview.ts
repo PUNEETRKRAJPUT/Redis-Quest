@@ -7,7 +7,8 @@ import type { LevelProgress, ProgressFile } from './progress.js';
 
 export interface InterviewSpec {
   minutes: number;
-  rebuildOf: string;
+  /** The level this one repeats; null on a pool level (E-04), where the engine draws it at the first start. */
+  rebuildOf: string | null;
   hintXpCost: number;
 }
 
@@ -17,7 +18,7 @@ export function interviewSpec(level: LoadedLevel): InterviewSpec | null {
   if (lv.mode !== 'code' || !lv.interview) return null;
   return {
     minutes: lv.interview.minutes,
-    rebuildOf: lv.interview.rebuild_of,
+    rebuildOf: lv.interview.rebuild_of ?? null,
     hintXpCost: lv.interview.hint_xp_cost,
   };
 }
@@ -94,8 +95,8 @@ export function chargeHint(
 export interface InterviewView {
   minutes: number;
   hintXpCost: number;
-  /** The guided level this one repeats; the ideal-way panel links to it. */
-  rebuildOf: { id: string; title: string | null };
+  /** The guided level this one repeats (on a pool level: the drawn one, null before the draw); the ideal-way panel links to it. */
+  rebuildOf: { id: string; title: string | null } | null;
   startedAt: string | null;
   deadlineAt: string | null;
   overtime: boolean;
@@ -104,6 +105,22 @@ export interface InterviewView {
   hintsBought: number;
   /** Set once the level is passed: the time it took, frozen. */
   elapsedMs: number | null;
+  /** E-04: true on a pool level. */
+  pool: boolean;
+  /** E-04: the level the interviewer drew (pool levels; null before the first start and on other levels). */
+  drawn: { id: string; title: string; chapter: string; chapterTitle: string } | null;
+  /** E-04: slot files moved aside when the level started blank, so the UI can say where the earlier file is. */
+  blanked: { file: string; backup: string }[];
+  /** E-04: index of the first follow-up question among `verifiers` (pool levels once drawn); null otherwise. */
+  questionsFrom: number | null;
+}
+
+/** What a pool or blank-start level adds to the `interview` object (E-04). */
+export interface InterviewExtras {
+  pool: boolean;
+  drawn: InterviewView['drawn'];
+  blanked: InterviewView['blanked'];
+  questionsFrom: number | null;
 }
 
 /**
@@ -115,6 +132,7 @@ export function interviewView(
   lp: LevelProgress,
   nowMs: number,
   rebuildTitle: string | null,
+  extras: InterviewExtras = { pool: false, drawn: null, blanked: [], questionsFrom: null },
 ): { interview: InterviewView; remainingMs: number | null } {
   const s = startMs(lp);
   const frozen = lp.status === 'passed' && lp.interviewElapsedMs !== undefined;
@@ -126,13 +144,21 @@ export function interviewView(
     interview: {
       minutes: spec.minutes,
       hintXpCost: spec.hintXpCost,
-      rebuildOf: { id: spec.rebuildOf, title: rebuildTitle },
+      rebuildOf: spec.rebuildOf
+        ? { id: spec.rebuildOf, title: rebuildTitle }
+        : extras.drawn
+          ? { id: extras.drawn.id, title: extras.drawn.title }
+          : null,
       startedAt: lp.interviewStartedAt ?? null,
       deadlineAt: s === null ? null : new Date(s + limitMs(spec)).toISOString(),
       overtime: frozen ? lp.overtime === true : isOvertime(spec, lp, nowMs),
       overtimeMs: elapsed === null ? 0 : Math.max(0, elapsed - limitMs(spec)),
       hintsBought: lp.hintsBought ?? 0,
       elapsedMs: frozen ? (lp.interviewElapsedMs as number) : null,
+      pool: extras.pool,
+      drawn: extras.drawn,
+      blanked: extras.blanked,
+      questionsFrom: extras.questionsFrom,
     },
     remainingMs: remaining,
   };

@@ -124,14 +124,14 @@ solutions:                             # beat 7, and the CI proof of every verif
 | `brainstorm` | yes | `prompt`, `options: [{ id, label, is_reasonable }]`. The learner always writes one free-text line as well; there is no field for it |
 | `teach` | yes | markdown, or `{ file: ./x.md }`. Optional only on a `code` level that sets `interview` |
 | `task` | yes | markdown, or `{ file: ./x.md }` |
-| `verify` | yes | non-empty list of verifiers (below) |
+| `verify` | yes | non-empty list of verifiers (below). Empty or absent only on a pool level (`interview.pool`), whose checks come from the drawn level |
 | `reward` | yes | `xp` (positive integer), optional `badge` |
-| `solutions` | yes | see "Solutions" |
+| `solutions` | yes | see "Solutions". Absent on a pool level (the drawn level has them) |
 | `setup` | no | list of `{ cmd: [...] }`, `{ sql: "..." }` or `{ script: path }` |
 | `scenario` | no | load scenario id for the live pain panel (e.g. `toss-time-100`) |
 | `hints` | no | ordered list of strings |
 | `show_me` | no | `{ component, keys, title? }`, see below; a bare component id is still accepted |
-| `interview` | no | `code` levels only: makes the level a timed blank rebuild, see "Interview levels" |
+| `interview` | no | `code` levels only: makes the level a timed blank rebuild (`rebuild_of`) or a drawn one (`pool`), see "Interview levels" |
 | `docs` | no | URLs starting with `https://redis.io/docs/` |
 | `min_redis_version` | no | quoted, e.g. `"8.4"`, for commands that need it |
 
@@ -146,7 +146,7 @@ Unknown keys are errors everywhere, including inside verifiers. There is no `unl
 
 Rules that cut across fields:
 
-- A `decision` level needs at least one `quiz`; a `code` level needs a `behavior` or `traffic`.
+- A `decision` level needs at least one `quiz`; a `code` level needs a `behavior` or `traffic` (a pool level draws one).
 - An `antipattern` verifier needs at least one `works_but_wrong` solution, and a
   `works_but_wrong` solution needs an `antipattern` verifier (each detector is proven to fire).
 - `setup` and fixtures may not run `FLUSHALL`, `FLUSHDB` or `SHUTDOWN`, and may not touch any key
@@ -175,6 +175,75 @@ interview:
   subtracts `hint_xp_cost` from the learner's XP (never below 0), and a pass records "rebuilt in m:ss".
 - Write the task in interview wording ("Design a ... that ...") and keep hints few; they cost XP here.
 - A full example is `levels/_examples/example-interview/`.
+
+### Interview pools: the interviewer picks
+
+`interview.pool` replaces `rebuild_of` when the level should draw its use case at random from earlier levels:
+
+```yaml
+interview:
+  minutes: 20
+  hint_xp_cost: 20
+  blank_start: true                 # optional; default true for a pool level, false for a rebuild_of level
+  pool:                             # 2 to 12 entries, each rebuild_of once
+    - rebuild_of: ch2-02-cache-aside-v1
+      questions:                    # 1 to 5 follow-up quizzes, asked after the rebuild's own checks
+        - type: quiz
+          question: "Redis restarts and comes back empty. What happens to your page?"
+          options:
+            - { id: refills, label: "It refills from Postgres on the next misses, slower for a while" }
+            - { id: errors, label: "Every request fails until the cache is reloaded by hand" }
+          correct: refills
+          explanation: "A miss reads the source of truth and writes the entry back."
+    - rebuild_of: ch3-03-token-bucket
+      questions: [...]
+```
+
+- Exactly one of `rebuild_of` and `pool`. A pool entry is a quiz written as in "quiz" below (the same fields and
+  rules), with option ids unique across the questions of that entry.
+- A pool level is a `code` level whose own `verify` is **empty or absent** and whose `solutions` is **absent**: its
+  checks and solutions are the drawn level's. `task` is still required but the learner never sees it (they see the
+  drawn level's task), and `show_me`, `docs`, `scenario` and `min_redis_version` are likewise taken from the drawn
+  level. `story`, `brainstorm`, `hints`, `title` and `reward` are the pool level's own; its hints come first and the
+  drawn level's hints follow, all at `hint_xp_cost`. Leave `teach` out.
+- Every `rebuild_of` in a pool must be a **code** level that is not itself a pool level, and must come earlier (same
+  chapter, listed before, or an earlier chapter), exactly as for `rebuild_of`. The validator reports a wrong one with
+  the position of that entry (`interview.pool[1].rebuild_of`).
+- **The draw.** At the first start the engine picks one entry, seeded by the player id and the level id (the same save
+  always draws the same way), skipping entries that this player drew in other pool levels (when every entry is taken,
+  repeats are allowed). The pick is stored and never changes: starting again or restarting the engine keeps it.
+  Three pool levels over the same nine entries therefore give three different use cases.
+- **Blank start.** With `blank_start: true` the engine moves each slot file of the drawn level that is not empty to
+  `<file>.before-<pool level id>` (`-2`, `-3` if that name exists; a backup is never overwritten) and leaves an empty
+  file, once. The level payload lists `blanked: [{ file, backup }]` so the page can say where the learner's own earlier
+  file went. `blank_start: false` leaves the file alone. On a `rebuild_of` level the default is `false`, so the
+  existing interviews play exactly as before; `true` there blanks the slot files of the level it rebuilds.
+- **Grading.** The pool level is graded as the drawn level (its fixtures resolve from its directory, its slots, its
+  scenario and its verifiers), then the entry's questions are asked, with answer indices that continue after the drawn
+  level's checks. A wrong answer to a question makes the verdict `wrong`, like any failed quiz. "The ideal way" is the
+  drawn level's.
+- The grading harness plays the drawn level's own solutions (see `docs/grading.md`).
+
+## The portfolio page
+
+`GET /api/portfolio` answers `{ markdown, stats }`: a page built from the learner's save (`progress.json`), the level
+files and the workspace, never from anything else. `POST /api/portfolio/write` writes it to `workspace/PORTFOLIO.md`,
+answers `{ path, file, bytes, levels, passed }` and emits the level event `custom portfolio_written`
+with `{ bytes, levels, passed }` (`levels` is all levels in the game, `passed` the learner's). A level can wait for it:
+
+```yaml
+- type: event
+  kind: custom
+  match: { name: portfolio_written }
+  timeoutMs: 120000
+```
+
+The page has a title with the player's name, XP and badges; per chapter the passed levels with one line each (for a
+traffic level the stored before and after numbers, for an interview "rebuilt in m:ss", for a pool level the drawn use
+case); the learner's brainstorm lines; the workspace files with sizes (no `.before-` backups, no `_bundle-*` shims,
+not the page itself); and "What I would say in an interview". Every number is read from the save and every sentence
+names its level; where the save has no number for a level, the line has none. The numbers come from the traffic check
+of the verify that passed (`metrics` on the stored verdict). The UI offers it as "Write my story" on "What you built".
 
 ## The seven beats
 
@@ -330,6 +399,9 @@ of `to`; `match: { name: redis_target_changed, kind: cluster }`) and `sentinel_f
 (the engine is on a `sentinel://` target and its client followed a new master: `from` and `to` are `host:port`;
 `match: { name: sentinel_failover }`). Both need the compose profiles and a hand on the Docker side, so the grading
 harness skips levels that wait for them.
+The finale's (E-04): `portfolio_written { bytes, levels, passed }` (the learner pressed "Write my story" on "What you
+built", or `POST /api/portfolio/write` wrote `workspace/PORTFOLIO.md`; `match: { name: portfolio_written }`). The grading
+harness writes the story itself before verifying a good solution.
 
 ### `quiz`
 

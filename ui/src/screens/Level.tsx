@@ -7,7 +7,13 @@ import { ChecksList, VerdictBanner } from '../level/VerifyPanel';
 import { RunTraffic } from '../level/RunTraffic';
 import { SlotToggle } from '../level/SlotToggle';
 import { Workbench } from '../level/Workbench';
-import { Countdown, hintButtonLabel, hintCostCopy, rebuiltIn } from '../level/interview';
+import {
+  Countdown,
+  DrawnNotice,
+  hintButtonLabel,
+  hintCostCopy,
+  rebuiltIn,
+} from '../level/interview';
 import { IconBulb, IconCheck, IconSpinner } from '../icons';
 import { Markdown } from '../markdown';
 import { PainPanel } from '../panels/MetricsPanel';
@@ -229,6 +235,10 @@ export function LevelScreen({ id }: { id: string }) {
   const benchStart = level.mode === 'cli' ? 'terminal' : level.mode === 'code' ? 'editor' : null;
   const hintsShown = level.hints.length;
   const interview = level.interview;
+  // E-04: the first quiz that is a follow-up question from the interviewer (pool levels, once drawn).
+  const firstFollowUp = quizzes.find(
+    (q) => q.index >= (interview?.questionsFrom ?? Infinity),
+  )?.index;
   const hintCost = interview?.hintXpCost ?? 0;
   const rebuilt = rebuiltIn(interview);
 
@@ -469,11 +479,17 @@ export function LevelScreen({ id }: { id: string }) {
         open={!!open[5]}
         onToggle={() => toggle(5)}
       >
+        {interview ? <DrawnNotice interview={interview} /> : null}
         <Markdown source={level.task} className="task" />
         <Workbench initial={benchStart} chapter={level.chapter} />
         <SlotToggle levelId={id} slots={level.slots} reload={load} />
         {quizzes.map((q) => (
           <fieldset key={q.index} className="options quiz" data-testid={`quiz-${q.index}`}>
+            {interview?.questionsFrom != null && q.index === firstFollowUp ? (
+              <p className="muted" data-testid="followups-heading">
+                The interviewer has follow-up questions, asked after your code is checked:
+              </p>
+            ) : null}
             <legend>{q.question}</legend>
             {q.options.map((o) => {
               const cur = answers[String(q.index)];

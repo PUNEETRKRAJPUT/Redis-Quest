@@ -1068,6 +1068,24 @@ a.level-link:hover {
   gap: 16px;
   margin-top: 14px;
 }
+.story {
+  margin: 16px 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.story h2 {
+  margin-top: 0;
+}
+.portfolio-page {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
 .built-card {
   background: var(--surface);
   border: 1px solid var(--line);

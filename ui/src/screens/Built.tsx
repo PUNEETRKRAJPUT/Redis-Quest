@@ -5,6 +5,7 @@ import { ShowMe } from '../showme';
 import { useQuest } from '../store';
 import { rebuiltIn } from '../level/interview';
 import type { LevelData } from '../types';
+import { Story } from './Story';
 
 const DEFAULT_INSIGHT_PORT = '5540';
 
@@ -62,6 +63,11 @@ function BuiltCard({
     <section className="built-card" data-testid={`built-${levelId}`}>
       <h2>{title}</h2>
       <p className="muted">{chapter}</p>
+      {info?.interview?.drawn ? (
+        <p className="muted" data-testid={`built-drawn-${levelId}`}>
+          The interviewer picked: {info.interview.drawn.title}.
+        </p>
+      ) : null}
       {rebuilt ? (
         <p className="rebuilt" data-testid={`built-rebuilt-${levelId}`}>
           {rebuilt[0]?.toUpperCase()}
@@ -109,6 +115,7 @@ export function Built() {
         </a>{' '}
         to see the same keys with a mouse.
       </p>
+      <Story />
       {passed.length === 0 ? (
         <p className="callout">Nothing yet. Pass your first level and it shows up here.</p>
       ) : null}

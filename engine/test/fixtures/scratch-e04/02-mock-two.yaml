@@ -1,0 +1,59 @@
+id: scratch-e04-02-mock-two
+chapter: scratch-e04
+title: "Mock interview two"
+mode: code
+
+# E-04 scratch pool level: no teach, no verify, no solutions. The engine draws one of the two entries at the
+# first start and grades the level as the drawn one, then asks the entry's follow-up question.
+interview:
+  minutes: 15
+  hint_xp_cost: 20
+  pool:
+    - rebuild_of: example-code-01-cache-aside
+      questions:
+        - type: quiz
+          question: "Redis restarts and comes back empty. What happens to your stats page (two)?"
+          options:
+            - id: refills-two
+              label: "It refills from Postgres on the next misses, slower for a while"
+            - id: errors-two
+              label: "Every request fails until someone reloads the cache by hand"
+          correct: refills-two
+          explanation: "A cache-aside miss reads the source of truth and writes the entry back, so the page keeps working."
+    - rebuild_of: example-code-02-token-bucket
+      questions:
+        - type: quiz
+          question: "Why one Lua script and not two commands (two)?"
+          options:
+            - id: atomic-two
+              label: "Read, decide and write must be one atomic step"
+            - id: faster-two
+              label: "Two commands are always slower"
+          correct: atomic-two
+          explanation: "Two commands let concurrent requests interleave between the read and the write."
+
+story: |
+  The interviewer closes the laptop lid halfway and says: "I will pick the question. You get a blank file."
+
+brainstorm:
+  prompt: "A blank file and a clock. What is your first move?"
+  options:
+    - id: name-the-keys
+      label: "Name the keys and their types before any code"
+      is_reasonable: true
+    - id: start-typing
+      label: "Start typing and see what comes out"
+      is_reasonable: false
+    - id: not-redis
+      label: "Ask whether Redis is even the right tool"
+      is_reasonable: true
+
+task: |
+  (A pool level's own task is not shown: the learner sees the drawn level's task.)
+
+hints:
+  - "Name the keys first."
+
+reward:
+  xp: 150
+  badge: "Mock two"

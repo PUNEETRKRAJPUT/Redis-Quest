@@ -98,6 +98,9 @@ export async function buildIdeal(level: LoadedLevel, ctx: TemplateContext): Prom
       reasoning,
     };
   }
+  // A pool level (E-04) has no solutions of its own; callers pass the level it drew.
+  if (!lv.solutions)
+    throw new Error(`${lv.id} has no solutions of its own: ask for the level that was drawn`);
   const reference = await readSolution(level, lv.solutions.reference, ctx);
   const wrong = await Promise.all(
     lv.solutions.wrong.map(async (w) => ({

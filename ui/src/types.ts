@@ -24,6 +24,9 @@ export interface ProgressLevel {
   hintsBought?: number;
   interviewElapsedMs?: number;
   overtime?: boolean;
+  /** E-04, pool levels. */
+  drawn?: string;
+  blanked?: { file: string; backup: string }[];
 }
 
 export interface Progress {
@@ -78,7 +81,8 @@ export type VerifierInfo =
 export interface InterviewInfo {
   minutes: number;
   hintXpCost: number;
-  rebuildOf: { id: string; title: string | null };
+  /** The level repeated; on a pool level the drawn one, and null before the first start. */
+  rebuildOf: { id: string; title: string | null } | null;
   startedAt: string | null;
   deadlineAt: string | null;
   overtime: boolean;
@@ -87,6 +91,14 @@ export interface InterviewInfo {
   hintsBought: number;
   /** Set once passed: the time it took. */
   elapsedMs: number | null;
+  /** E-04, pool levels: true on a pool level (absent on an engine older than E-04). */
+  pool?: boolean;
+  /** E-04: the level the interviewer drew; null before the first start. */
+  drawn?: { id: string; title: string; chapter: string; chapterTitle: string } | null;
+  /** E-04: slot files moved aside when the level started blank (where the learner's earlier file went). */
+  blanked?: { file: string; backup: string }[];
+  /** E-04: index of the first follow-up question among the verifiers (pool levels once drawn). */
+  questionsFrom?: number | null;
 }
 
 /** E-02: POST /api/load/start (202). */
@@ -275,4 +287,24 @@ export interface LevelEventMsg {
   kind: string;
   name?: string;
   data?: unknown;
+}
+
+/** E-04: GET /api/portfolio. `stats` is what the page was made from; the UI only shows the markdown. */
+export interface PortfolioResponse {
+  markdown: string;
+  stats: {
+    levelsPassed: number;
+    levelsTotal: number;
+    xp: number;
+    workspace: { files: number; bytes: number };
+  };
+}
+
+/** E-04: POST /api/portfolio/write. */
+export interface PortfolioWriteResponse {
+  /** Where the file is, as a person says it: `workspace/PORTFOLIO.md`. */
+  path: string;
+  bytes: number;
+  levels: number;
+  passed: number;
 }

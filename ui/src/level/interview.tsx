@@ -95,8 +95,37 @@ export function Countdown({ level }: { level: LevelData }) {
   );
 }
 
+/**
+ * E-04, a pool level: who the interviewer picked, and where the learner's own earlier file went (the engine moved
+ * it aside so the level starts from a blank file). Nothing is drawn before the first start, so nothing is shown.
+ */
+export function DrawnNotice({ interview }: { interview: InterviewInfo }) {
+  const drawn = interview.drawn;
+  if (!interview.pool || !drawn) return null;
+  const blanked = interview.blanked ?? [];
+  return (
+    <div className="callout" data-testid="drawn-notice">
+      <p>
+        The interviewer picked: <strong>{drawn.title}</strong> ({drawn.chapterTitle}).
+      </p>
+      {blanked.length > 0 ? (
+        <p data-testid="blanked-note">
+          The file starts blank.{' '}
+          {blanked.map((b, i) => (
+            <span key={b.file}>
+              {i ? ' ' : ''}Your earlier <code>workspace/{b.file}</code> is at{' '}
+              <code>workspace/{b.backup}</code>.
+            </span>
+          ))}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** Beat 7 on an interview level: points at the guided level whose solutions this one repeats. */
 export function RebuildLink({ interview }: { interview: InterviewInfo }) {
+  if (!interview.rebuildOf) return null;
   return (
     <p data-testid="ideal-rebuild-link">
       This level rebuilds{' '}

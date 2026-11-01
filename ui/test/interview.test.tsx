@@ -3,6 +3,7 @@ import { expect, test } from 'vitest';
 import {
   clockView,
   Countdown,
+  DrawnNotice,
   formatClock,
   hintButtonLabel,
   hintCostCopy,
@@ -121,4 +122,41 @@ test('the ideal-way panel links to the rebuilt level', () => {
   const html = renderToStaticMarkup(<RebuildLink interview={iv()} />);
   expect(html).toContain('href="#/level/example-code-01-cache-aside"');
   expect(html).toContain('Cache-aside, version one');
+});
+
+// E-04: a pool level's notice, and the rebuild link before anything is drawn.
+
+test('DrawnNotice: nothing before the draw, and nothing on an ordinary interview level', () => {
+  expect(
+    renderToStaticMarkup(
+      <DrawnNotice interview={iv({ pool: true, drawn: null, rebuildOf: null })} />,
+    ),
+  ).toBe('');
+  expect(renderToStaticMarkup(<DrawnNotice interview={iv()} />)).toBe('');
+});
+
+test('DrawnNotice: names the drawn level and says where the earlier file is', () => {
+  const h = renderToStaticMarkup(
+    <DrawnNotice
+      interview={iv({
+        pool: true,
+        drawn: {
+          id: 'ch2-02-cache-aside-v1',
+          title: 'Cache-aside, version one',
+          chapter: 'ch2',
+          chapterTitle: 'Everyone showed up',
+        },
+        blanked: [{ file: 'ch2/cache.js', backup: 'ch2/cache.js.before-finale-01' }],
+      })}
+    />,
+  );
+  expect(h).toContain('Cache-aside, version one');
+  expect(h).toContain('Everyone showed up');
+  expect(h).toContain('data-testid="blanked-note"');
+  expect(h).toContain('workspace/ch2/cache.js');
+  expect(h).toContain('workspace/ch2/cache.js.before-finale-01');
+});
+
+test('RebuildLink renders nothing while nothing is drawn', () => {
+  expect(renderToStaticMarkup(<RebuildLink interview={iv({ rebuildOf: null })} />)).toBe('');
 });

@@ -1,0 +1,2 @@
+# the harness writes the story (POST /api/portfolio/write) before it verifies
+PING
