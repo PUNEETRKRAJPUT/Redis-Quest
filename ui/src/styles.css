@@ -1164,6 +1164,22 @@ a.level-link:hover {
   font-family: var(--mono);
   overflow-wrap: anywhere;
 }
+/* Data tables with several columns (stream groups, index fields, ACL users): no key column width, no wrapping
+   inside a cell, and the card scrolls sideways instead of squashing the columns. */
+.kv-table.cols {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.kv-table.cols th {
+  width: auto;
+  padding-right: 16px;
+}
+.kv-table.cols td {
+  overflow-wrap: normal;
+  padding-right: 16px;
+  vertical-align: top;
+}
 .feed {
   margin: 0;
   padding-left: 22px;

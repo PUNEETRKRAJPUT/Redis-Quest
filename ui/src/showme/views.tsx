@@ -650,7 +650,7 @@ export function StreamGroupsView({ name, length, groups }: StreamGroupsProps) {
           {groups.length === 0 ? (
             <Empty>No consumer group yet. Nothing is reading this stream.</Empty>
           ) : (
-            <table className="kv-table" data-testid="stream-groups">
+            <table className="kv-table cols" data-testid="stream-groups">
               <thead>
                 <tr>
                   <th>group</th>
@@ -820,7 +820,7 @@ export function FtCardView({ name, info, docIds }: FtCardProps) {
             </div>
           </dl>
           {info.fields.length > 0 ? (
-            <table className="kv-table" data-testid="ft-fields">
+            <table className="kv-table cols" data-testid="ft-fields">
               <tbody>
                 {info.fields.map((f) => (
                   <tr key={f.name}>
@@ -859,7 +859,7 @@ export function AclUsersView({ users }: AclUsersProps) {
       {users.length === 0 ? (
         <Empty>No ACL users came back.</Empty>
       ) : (
-        <table className="kv-table" data-testid="acl-users">
+        <table className="kv-table cols" data-testid="acl-users">
           <tbody>
             {users.map((u) => (
               <tr key={u.name} data-user={u.name}>
