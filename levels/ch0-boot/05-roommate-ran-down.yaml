@@ -62,7 +62,9 @@ verify:
         equals: 1
         message: "Your save file is gone from Redis. Did you run down with -v? That deletes the volumes too."
 
-show_me: hash_card
+show_me:
+  component: hash_card
+  keys: ["game:player:{{player.id}}"]
 docs:
   - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
 

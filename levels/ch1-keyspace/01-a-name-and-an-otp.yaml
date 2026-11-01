@@ -77,7 +77,9 @@ verify:
         between: [1, 120]
         message: "The code should be about to expire within two minutes. If it never will, you stored it without EX 120."
 
-show_me: kv_card
+show_me:
+  component: kv_card
+  keys: ["otp:{{player.id}}", "user:{{player.id}}:name"]
 docs:
   - https://redis.io/docs/latest/develop/using-commands/keyspace/
 

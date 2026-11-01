@@ -79,7 +79,9 @@ verify:
         gte: 6
         message: "The first over has six balls. match:m-041:balls should hold at least six entries."
 
-show_me: stream_log
+show_me:
+  component: stream_log
+  keys: ["match:m-041:balls"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/streams/
 

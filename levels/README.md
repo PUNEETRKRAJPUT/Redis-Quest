@@ -92,7 +92,9 @@ verify:                                # beat 6; runs in list order
         equals: 0
         message: "This passes today, but you also keep a list copy of the board ..."
 
-show_me: leaderboard_panel             # optional; UI component that lights up on "right"
+show_me:                               # optional; what lights up on "right", and which keys it displays
+  component: leaderboard_panel         # UI component id
+  keys: ["lb:hostel:h-c-02-2"]          # templated like any text; one panel per key
 docs:                                  # optional; official pages only
   - https://redis.io/docs/latest/develop/data-types/sorted-sets/
 reward:
@@ -128,9 +130,15 @@ solutions:                             # beat 7, and the CI proof of every verif
 | `setup` | no | list of `{ cmd: [...] }`, `{ sql: "..." }` or `{ script: path }` |
 | `scenario` | no | load scenario id for the live pain panel (e.g. `toss-time-100`) |
 | `hints` | no | ordered list of strings |
-| `show_me` | no | UI component id, snake_case |
+| `show_me` | no | `{ component, keys, title? }`, see below; a bare component id is still accepted |
 | `docs` | no | URLs starting with `https://redis.io/docs/` |
 | `min_redis_version` | no | quoted, e.g. `"8.4"`, for commands that need it |
+
+`show_me` names the UI component (snake_case id) and the Redis keys it displays. `keys` may use
+templates (`{{player.id}}`), are read through the UI's read-only CLI proxy (one panel per key), and may
+be empty when nothing in Redis is worth showing. The short form `show_me: kv_card` is kept for compatibility:
+the loader normalises it to `{ component: kv_card, keys: [] }`. `title` is an optional heading. Prefer
+the object form: with no keys the UI has nothing to display and asks the learner which key to read.
 
 Unknown keys are errors everywhere, including inside verifiers. There is no `unlocks` field:
 `chapter.yaml` order decides what comes next.

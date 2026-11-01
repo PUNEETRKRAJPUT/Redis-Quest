@@ -62,7 +62,9 @@ verify:
     tolerance: 600
     message: "That is not close to the TTL Redis reports right now. It is in seconds, and it counts down."
 
-show_me: ttl_timer
+show_me:
+  component: ttl_timer
+  keys: ["game:welcome:gift"]
 docs:
   - https://redis.io/docs/latest/develop/tools/insight/
 

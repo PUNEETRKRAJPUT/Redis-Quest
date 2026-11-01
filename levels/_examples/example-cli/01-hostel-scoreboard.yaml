@@ -89,7 +89,9 @@ verify:
         equals: 0
         message: "This passes today, but you also keep a list copy of the board. Two copies drift apart at the first missed write, and the list has to be sorted on every read. The sorted set already is the scoreboard."
 
-show_me: leaderboard_panel
+show_me:
+  component: leaderboard_panel
+  keys: ["lb:hostel:h-c-02-2"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/sorted-sets/
   - https://redis.io/docs/latest/develop/use-cases/leaderboard

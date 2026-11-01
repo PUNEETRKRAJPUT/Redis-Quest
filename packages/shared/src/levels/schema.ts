@@ -556,6 +556,29 @@ const decisionSolutions = z.strictObject({
     .min(1, 'every level ships at least one known-wrong solution'),
 });
 
+const showMeComponent = z.string().regex(/^[a-z][a-z0-9_]*$/, 'must be a UI component id like leaderboard_panel');
+
+/**
+ * `show_me` is either a bare component id (kept for compatibility) or `{ component, keys, title? }`.
+ * Keys are templated like any other level text (`{{player.id}}`). Both forms normalise to the object,
+ * with `keys: []` for the string form, so everything downstream sees one shape.
+ */
+export interface ShowMe {
+  component: string;
+  keys: string[];
+  title?: string;
+}
+const showMeSchema = z
+  .union([
+    showMeComponent,
+    z.strictObject({
+      component: showMeComponent,
+      keys: z.array(text).default([]),
+      title: text.optional(),
+    }),
+  ])
+  .transform((v): ShowMe => (typeof v === 'string' ? { component: v, keys: [] } : v));
+
 const levelBase = {
   id: levelId,
   chapter: chapterId,
@@ -568,7 +591,7 @@ const levelBase = {
   scenario: kebabId('scenario').optional(),
   hints: z.array(text).min(1, 'omit hints instead of leaving it empty').optional(),
   verify: z.array(verifySpecSchema).min(1, 'a level needs at least one verifier'),
-  show_me: z.string().regex(/^[a-z][a-z0-9_]*$/, 'must be a UI component id like leaderboard_panel').optional(),
+  show_me: showMeSchema.optional(),
   docs: z
     .array(
       z.string().refine((u) => u.startsWith(DOCS_URL_PREFIX) && !/\s/.test(u), {

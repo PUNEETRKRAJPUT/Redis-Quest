@@ -104,7 +104,9 @@ verify:
         gte: 1
         message: "This passes today, but a cached row with no TTL is stale forever and memory only grows. The day Chengappa scores a century, the page still shows yesterday's runs until somebody deletes the key by hand."
 
-show_me: stats_latency_panel
+show_me:
+  component: stats_latency_panel
+  keys: ["cache:player:p-151"]
 docs:
   - https://redis.io/docs/latest/develop/use-cases/cache-aside
   - https://redis.io/docs/latest/develop/data-types/hashes/

@@ -90,7 +90,9 @@ verify:
     compare: equals
     message: "That is not what TTL prints for a missing key. Run TTL lobby:m-999 and copy the number."
 
-show_me: ttl_timer
+show_me:
+  component: ttl_timer
+  keys: ["lobby:m-041"]
 docs:
   - https://redis.io/docs/latest/develop/using-commands/keyspace/
 

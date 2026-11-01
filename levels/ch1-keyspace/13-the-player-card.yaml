@@ -85,7 +85,9 @@ verify:
         equals: [2]
         message: "The tags array should hold two tags, hot and top-pick. Use JSON.ARRAPPEND on $.tags."
 
-show_me: json_tree
+show_me:
+  component: json_tree
+  keys: ["player:p-028"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/json/
 

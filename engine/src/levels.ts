@@ -83,6 +83,7 @@ export function renderLevel(
       brainstorm: lv.brainstorm,
       hints: lv.hints ?? [],
       verify: lv.verify,
+      showMe: lv.show_me ?? null,
     },
     ctx,
   );
@@ -114,7 +115,7 @@ export function renderLevel(
     hintsTotal: r.hints.length,
     verifiers,
     docs: lv.docs ?? [],
-    showMe: lv.show_me ?? null,
+    showMe: r.showMe,
     scenario: lv.scenario ?? null,
     minRedisVersion: lv.min_redis_version ?? null,
     reward: lv.reward,

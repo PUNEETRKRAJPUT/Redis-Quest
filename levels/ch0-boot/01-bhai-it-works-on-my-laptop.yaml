@@ -62,7 +62,9 @@ verify:
         gte: 1
         message: "The engine has not recorded a boot yet. Check that ./scripts/start finished without a FAIL line."
 
-show_me: kv_card
+show_me:
+  component: kv_card
+  keys: ["game:engine:boots"]
 docs:
   - https://redis.io/docs/latest/develop/get-started/data-store/
 

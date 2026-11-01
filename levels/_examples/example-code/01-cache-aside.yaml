@@ -82,7 +82,9 @@ verify:
         notEquals: -1
         message: "This passes today, but the cache never expires. When stats change after the match, every user keeps seeing the old numbers until someone deletes the key by hand."
 
-show_me: stats_latency_panel
+show_me:
+  component: stats_latency_panel
+  keys: ["cache:player:p-028"]
 docs:
   - https://redis.io/docs/latest/develop/use-cases/cache-aside
 min_redis_version: "8.0"

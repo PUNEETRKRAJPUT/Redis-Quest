@@ -1,5 +1,12 @@
 // Shapes of the engine API, copied from docs/handoffs/P0-06.md. Only what the UI reads.
 
+/** `show_me` as the loader normalises it: always an object. Keys may still carry `{{player.id}}` (see showme/index.tsx). */
+export interface ShowMeSpec {
+  component: string;
+  keys: string[];
+  title?: string;
+}
+
 export type LevelStatus = 'locked' | 'available' | 'in_progress' | 'passed';
 export type Mode = 'cli' | 'code' | 'ops' | 'decision';
 export type Verdict = 'right' | 'works_but_wrong' | 'wrong' | 'not_implemented';
@@ -76,7 +83,7 @@ export interface LevelData {
   hintsTotal: number;
   verifiers: VerifierInfo[];
   docs: string[];
-  showMe: string | null;
+  showMe: ShowMeSpec | null;
   scenario: string | null;
   minRedisVersion: string | null;
   reward: { xp: number; badge?: string };

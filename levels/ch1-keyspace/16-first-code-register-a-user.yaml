@@ -115,7 +115,9 @@ verify:
             equals: null
             message: "user:u-c1-101 is in another hostel and should not be on lb:hostel:h-c-02-2."
 
-show_me: leaderboard_panel
+show_me:
+  component: leaderboard_panel
+  keys: ["lb:hostel:h-c-02-2"]
 docs:
   - https://redis.io/docs/latest/develop/clients/nodejs/
 

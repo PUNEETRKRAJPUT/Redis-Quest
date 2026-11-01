@@ -93,7 +93,9 @@ verify:
     tolerance: 1
     message: "That is not the distance Redis computes. Run GEODIST with km as the unit and type the number it prints, to within a kilometre."
 
-show_me: geo_map
+show_me:
+  component: geo_map
+  keys: ["stadiums"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/geospatial/
 

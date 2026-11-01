@@ -79,7 +79,9 @@ verify:
         equals: 0
         message: "Nothing was wiped: the key set before this level started is still there. Run FLUSHALL first, then restore."
 
-show_me: hash_card
+show_me:
+  component: hash_card
+  keys: ["game:player:{{player.id}}"]
 docs:
   - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
 

@@ -74,7 +74,9 @@ verify:
     correct: cache-redis
     explanation: "The pain is the same query running again for every request. A Redis cache removes the repeats, so a hundred taps become one query. An index is also a good idea, but it is a schema change that makes one run cheaper, every request still runs it, and it is the DBA's lesson, not tonight's. A bigger Postgres makes each of the hundred runs a little faster and still runs all of them, at a price. A Map in the app's memory is a cache nobody else can see: each app instance fills its own copy, a restart empties it, and tonight's fix would stop working the moment you run a second instance."
 
-show_me: stats_latency_panel
+show_me:
+  component: stats_latency_panel
+  keys: []
 docs:
   - https://redis.io/docs/latest/develop/use-cases/cache-aside
 

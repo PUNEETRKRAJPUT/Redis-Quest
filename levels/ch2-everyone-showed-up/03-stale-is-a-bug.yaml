@@ -68,7 +68,9 @@ verify:
             equals: 0
             message: "cache:player:p-028 is still in Redis, so the page keeps showing the old runs. Delete the key."
 
-show_me: stats_latency_panel
+show_me:
+  component: stats_latency_panel
+  keys: ["cache:player:p-028"]
 docs:
   - https://redis.io/docs/latest/develop/use-cases/cache-aside
   - https://redis.io/docs/latest/develop/using-commands/keyspace/

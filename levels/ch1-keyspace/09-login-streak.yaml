@@ -77,7 +77,9 @@ verify:
         equals: 0
         message: "Day 4 is the day you skipped. It should read 0."
 
-show_me: bitmap_streak
+show_me:
+  component: bitmap_streak
+  keys: ["login:{{player.id}}:2026-11"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/strings/bitmaps
 

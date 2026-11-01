@@ -84,7 +84,9 @@ verify:
         equals: 2
         message: "Exactly two players should be shared with Teja. Check that you added only the three players named above."
 
-show_me: set_chips
+show_me:
+  component: set_chips
+  keys: ["fav:{{player.id}}"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/sets/
 

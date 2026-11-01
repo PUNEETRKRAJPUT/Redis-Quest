@@ -527,9 +527,7 @@ export function LevelScreen({ id }: { id: string }) {
               <IconCheck size={18} /> Level passed. +{level.reward.xp} XP
               {level.reward.badge ? `, badge "${level.reward.badge}"` : ''}.
             </p>
-            {level.showMe ? (
-              <ShowMe id={level.showMe} levelId={level.id} playerId={progress.player.id} />
-            ) : null}
+            {level.showMe ? <ShowMe spec={level.showMe} playerId={progress.player.id} /> : null}
             {next ? (
               <a
                 className="btn primary"

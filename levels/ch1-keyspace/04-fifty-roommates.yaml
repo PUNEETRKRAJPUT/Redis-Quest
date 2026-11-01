@@ -141,7 +141,9 @@ verify:
     correct: scan-match
     explanation: "KEYS walks the whole keyspace in one go and blocks the server, so the docs keep it for debugging. SCAN does the same walk in small batches that a busy server can interleave with real traffic."
 
-show_me: kv_card
+show_me:
+  component: set_chips
+  keys: ["ch1:users"]
 docs:
   - https://redis.io/docs/latest/develop/using-commands/keyspace/
 

@@ -86,7 +86,9 @@ verify:
         equals: 4
         message: "The profile should have exactly four fields: name, college, hostel and matches."
 
-show_me: hash_card
+show_me:
+  component: hash_card
+  keys: ["user:{{player.id}}"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/hashes/
 

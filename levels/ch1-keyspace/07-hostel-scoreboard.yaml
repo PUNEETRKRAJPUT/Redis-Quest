@@ -90,7 +90,9 @@ verify:
         equals: 0
         message: "This passes today, but a list cannot rank. You are also keeping a list copy of the board, so every score change has to be written twice and the two copies will drift. A sorted set already knows the order."
 
-show_me: leaderboard_panel
+show_me:
+  component: leaderboard_panel
+  keys: ["lb:hostel:h-c-02-1"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/sorted-sets/
 

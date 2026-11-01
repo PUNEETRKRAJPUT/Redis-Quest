@@ -15,6 +15,7 @@ import {
   StreamLogView,
   TtlTimerView,
 } from './views';
+import type { ShowMeSpec } from '../types';
 import { useRedis } from './useRedis';
 
 export const SHOW_ME_IDS = [
@@ -38,31 +39,12 @@ export function isShowMeId(id: string): id is ShowMeId {
 }
 
 /**
- * The level schema carries only a component id (`show_me: hash_card`), no key. Until it does, the UI keeps a
- * small table of which key each Chapter 0 and Chapter 1 level lights up. Anything missing falls back to a
- * "which key?" box. Chapter 1 entries are read from the authored task text and are not verified.
+ * `show_me.keys` come from the level (F-05). GET /api/levels/:id does not render templates in `show_me`
+ * yet (engine/src/levels.ts renderLevel only renders title, story, teach, task, brainstorm, hints and verify),
+ * so the UI fills in `{{player.id}}` itself. Already rendered keys pass through unchanged.
  */
-export function defaultKey(
-  id: string,
-  levelId: string | undefined,
-  playerId: string,
-): string | null {
-  const t: Record<string, string> = {
-    'ch0-01-bhai-it-works-on-my-laptop': 'game:engine:boots',
-    'ch0-02-say-hello': 'game:engine:boots',
-    'ch0-03-find-your-save-file': `game:player:${playerId}`,
-    'ch0-04-the-second-window': 'game:welcome:gift',
-    'ch0-05-roommate-ran-down': `game:player:${playerId}`,
-    'ch1-01-a-name-and-an-otp': `otp:${playerId}`,
-    'ch1-05-the-match-feed': `feed:${playerId}`,
-    'ch1-06-favourite-players': `fav:${playerId}`,
-    'ch1-07-hostel-scoreboard': 'lb:hostel:h-c-02-2',
-    'ch1-08-lobby-closes-at-the-toss': 'lobby:m-041',
-    'ch1-09-login-streak': `login:${playerId}:2026-11`,
-  };
-  if (levelId && t[levelId]) return t[levelId];
-  if (id === 'cache_stats') return 'INFO stats';
-  return null;
+export function renderKey(key: string, playerId: string): string {
+  return key.replace(/\{\{\s*player\.id\s*\}\}/g, playerId);
 }
 
 function Loading({ error }: { error: string | null }) {
@@ -225,23 +207,7 @@ function KeyPicker({ id, onPick }: { id: string; onPick: (k: string) => void }) 
   );
 }
 
-/** Renders one show-me component by id. `keyName` overrides the default key from `defaultKey`. */
-export function ShowMe({
-  id,
-  levelId,
-  playerId,
-  keyName,
-}: {
-  id: string;
-  levelId?: string;
-  playerId: string;
-  keyName?: string;
-}): ReactNode {
-  const [picked, setPicked] = useState<string | null>(null);
-  if (!isShowMeId(id)) return <p className="muted">Unknown show-me component: {id}</p>;
-  const k = picked ?? keyName ?? defaultKey(id, levelId, playerId);
-  if (id === 'cache_stats') return <CacheStats />;
-  if (!k) return <KeyPicker id={id} onPick={setPicked} />;
+function Panel({ id, k, playerId }: { id: ShowMeId; k: string; playerId: string }): ReactNode {
   switch (id) {
     case 'kv_card':
       return <KvCard k={k} />;
@@ -265,5 +231,35 @@ export function ShowMe({
       return <StreamLog k={k} />;
     case 'json_tree':
       return <JsonTree k={k} />;
+    case 'cache_stats':
+      return <CacheStats />;
   }
+}
+
+/** Renders the level's show-me: its component once per declared key. */
+export function ShowMe({ spec, playerId }: { spec: ShowMeSpec; playerId: string }): ReactNode {
+  const [picked, setPicked] = useState<string | null>(null);
+  const id = spec.component;
+  if (!isShowMeId(id)) return <p className="muted">Unknown show-me component: {id}</p>;
+  const keys = (picked ? [picked] : spec.keys.map((k) => renderKey(k, playerId))).filter(Boolean);
+  const title = spec.title ? <h3 data-testid="showme-title">{spec.title}</h3> : null;
+  if (id === 'cache_stats') {
+    return (
+      <>
+        {title}
+        <CacheStats />
+      </>
+    );
+  }
+  if (keys.length === 0) return <KeyPicker id={id} onPick={setPicked} />;
+  return (
+    <>
+      {title}
+      {keys.map((k) => (
+        <div key={k} data-testid="showme-panel" data-key={k}>
+          <Panel id={id} k={k} playerId={playerId} />
+        </div>
+      ))}
+    </>
+  );
 }

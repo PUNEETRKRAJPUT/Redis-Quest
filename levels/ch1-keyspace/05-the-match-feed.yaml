@@ -74,7 +74,9 @@ verify:
         equals: 50
         message: "The feed should hold exactly the latest fifty events: sixty old ones plus your new one, trimmed to fifty."
 
-show_me: list_feed
+show_me:
+  component: list_feed
+  keys: ["feed:{{player.id}}"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/lists/
 

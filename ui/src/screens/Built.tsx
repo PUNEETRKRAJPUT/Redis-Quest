@@ -3,6 +3,7 @@ import { api } from '../api';
 import { IconExternal } from '../icons';
 import { ShowMe } from '../showme';
 import { useQuest } from '../store';
+import type { ShowMeSpec } from '../types';
 
 const DEFAULT_INSIGHT_PORT = '5540';
 
@@ -45,7 +46,7 @@ function BuiltCard({
   chapter: string;
   playerId: string;
 }) {
-  const [showMe, setShowMe] = useState<string | null | undefined>(undefined);
+  const [showMe, setShowMe] = useState<ShowMeSpec | null | undefined>(undefined);
   useEffect(() => {
     api
       .level(levelId)
@@ -59,7 +60,7 @@ function BuiltCard({
       {showMe === undefined ? (
         <p className="muted">Loading...</p>
       ) : showMe ? (
-        <ShowMe id={showMe} levelId={levelId} playerId={playerId} />
+        <ShowMe spec={showMe} playerId={playerId} />
       ) : (
         <p className="muted">This level has no live panel.</p>
       )}

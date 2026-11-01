@@ -95,7 +95,9 @@ verify:
     correct: hll-fixed-small-estimate
     explanation: "The docs put a HyperLogLog at up to 12 KB with a standard error of 0.81%. A set stores every member, so it grows with the audience, but it can tell you exactly who is in it."
 
-show_me: hll_counter
+show_me:
+  component: hll_counter
+  keys: ["visitors:match:all-live"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/probabilistic/hyperloglogs
 

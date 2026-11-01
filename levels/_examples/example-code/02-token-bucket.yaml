@@ -79,7 +79,9 @@ verify:
         expectCount: { value: true, lte: 10 }
         message: "This passes one request at a time, but 100 concurrent requests got more than 10 through. Your read and your write are separate commands, so requests interleave between them. At the IPL final that is the Gomti Gang's script and your SMS bill."
 
-show_me: otp_limiter_panel
+show_me:
+  component: otp_limiter_panel
+  keys: ["ratelimit:u-limit-1"]
 docs:
   - https://redis.io/docs/latest/develop/use-cases/rate-limiter
   - https://redis.io/docs/latest/develop/programmability/

@@ -254,6 +254,10 @@ test('Chapter 0 end to end: welcome, map, five levels, built, tools', async ({ p
   await expect(page.getByTestId('passed-panel').getByTestId('hash-table')).toContainText(
     PLAYER_NAME,
   );
+  // F-05: the panel shows the key the level declares (show_me.keys), not one the UI hard-codes.
+  const keyPanel = page.getByTestId('passed-panel').getByTestId('showme-panel');
+  await expect(keyPanel).toHaveAttribute('data-key', `game:player:${playerId}`);
+  await expect(keyPanel.locator('.showme-key')).toHaveText(`game:player:${playerId}`);
   await page.getByTestId('next-level').click();
 
   // ---- level 4: ops + answer box: read the TTL through the terminal ------------------------------------------

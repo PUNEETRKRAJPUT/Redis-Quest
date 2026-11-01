@@ -73,7 +73,9 @@ verify:
         equals: 936
         message: "The balance should be 936: 1000 welcome points, minus the 65 entry, plus the 1 login bonus."
 
-show_me: kv_card
+show_me:
+  component: kv_card
+  keys: ["wallet:{{player.id}}"]
 docs:
   - https://redis.io/docs/latest/develop/data-types/strings/
 

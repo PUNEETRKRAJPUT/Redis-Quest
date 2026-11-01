@@ -63,7 +63,9 @@ verify:
     compare: equals
     message: "That is not the name stored in your save file. Run HGET game:player:{{player.id}} name and copy what it prints."
 
-show_me: hash_card
+show_me:
+  component: hash_card
+  keys: ["game:player:{{player.id}}"]
 docs:
   - https://redis.io/docs/latest/develop/using-commands/keyspace/
 

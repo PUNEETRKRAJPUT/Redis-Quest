@@ -106,7 +106,9 @@ verify:
         equals: 0
         message: "This passes today, but a lock is left behind when the id is not a player: no PX, or no release on that path. One bad id and that key is locked forever. Release the lock on every path and always give it a PX."
 
-show_me: stats_latency_panel
+show_me:
+  component: stats_latency_panel
+  keys: ["cache:player:p-028"]
 docs:
   - https://redis.io/docs/latest/develop/use-cases/cache-aside
   - https://redis.io/docs/latest/develop/clients/patterns/distributed-locks

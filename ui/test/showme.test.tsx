@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test } from 'vitest';
-import { bitfieldArgs, defaultKey, infoField, isShowMeId, SHOW_ME_IDS } from '../src/showme';
+import { bitfieldArgs, infoField, isShowMeId, renderKey, SHOW_ME_IDS } from '../src/showme';
 import { SAMPLE } from '../src/showme/sample';
 import {
   BitmapStreakView,
@@ -85,7 +85,7 @@ test('helpers', () => {
   expect(bitfieldArgs('k', 2)).toEqual(['BITFIELD', 'k', 'GET', 'u1', '#0', 'GET', 'u1', '#1']);
   expect(infoField('keyspace_hits:12\r\nkeyspace_misses:3\r\n', 'keyspace_hits')).toBe(12);
   expect(infoField('', 'keyspace_hits')).toBe(0);
-  expect(defaultKey('hash_card', 'ch0-03-find-your-save-file', 'p-1')).toBe('game:player:p-1');
-  expect(defaultKey('ttl_timer', 'ch0-04-the-second-window', 'p-1')).toBe('game:welcome:gift');
-  expect(defaultKey('kv_card', 'unknown', 'p-1')).toBeNull();
+  expect(renderKey('game:player:{{player.id}}', 'p-1')).toBe('game:player:p-1');
+  expect(renderKey('login:{{ player.id }}:2026-11', 'p-1')).toBe('login:p-1:2026-11');
+  expect(renderKey('lb:hostel:h-c-02-1', 'p-1')).toBe('lb:hostel:h-c-02-1');
 });
