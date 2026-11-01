@@ -8,6 +8,12 @@ SENTINEL_URL='sentinel://mymaster@sentinel-1:26379,sentinel-2:26379,sentinel-3:2
 put_target() { curl -fsS -X PUT "$API/api/target" -H 'content-type: application/json' -d "{\"redisUrl\":\"$1\"}"; echo; }
 ask() { docker compose exec -T sentinel-1 redis-cli -p 26379 "$@"; }
 
+# 0. the replica from level 7 must be up and in sync (idempotent: `up -d` is a no-op when it already runs)
+docker compose --profile replica up -d redis-replica
+for i in $(seq 1 30); do
+  docker compose exec -T redis-replica redis-cli INFO replication | grep -q 'master_link_status:up' && break
+  sleep 1
+done
 # 1. three Sentinels, then ask one who the master is
 docker compose --profile sentinel up -d sentinel-1 sentinel-2 sentinel-3
 sleep 5
@@ -20,7 +26,10 @@ curl -fsS "$API/api/target"; echo
 curl -fsS -X POST "$API/api/cli" -H 'content-type: application/json' -d '{"command":"SET score:final 31"}' || true; echo
 # 3. kill the master; the game's event arrives about 7 seconds later (E-03: 7.3 s)
 docker compose stop redis
-sleep 12
+for i in $(seq 1 40); do                               # measured 7 s; a busy Mac can take longer, so wait for it
+  curl -fsS "$API/api/target" 2>/dev/null | grep -q 'redis-replica:6379' && break
+  sleep 1
+done
 curl -fsS "$API/api/target"; echo                      # master redis-replica:6379
 curl -fsS "$API/app/target"; echo
 curl -fsS -X POST "$API/api/cli" -H 'content-type: application/json' -d '{"command":"SET score:final 32"}' || true; echo
@@ -34,7 +43,10 @@ ask SENTINEL replicas mymaster | grep -A1 -E '^name$' | head -6
 # 5. the way back: let Sentinel settle at least 10 s, stop the new master, start it again as a replica, point the game home
 sleep 12
 docker compose stop redis-replica
-sleep 12
+for i in $(seq 1 40); do                               # the failback, measured 7 s after the stop
+  ask SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -1 | grep -qx 'redis' && break
+  sleep 1
+done
 ask SENTINEL get-master-addr-by-name mymaster          # redis 6379
 docker compose start redis-replica
 put_target redis://redis:6379

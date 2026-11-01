@@ -502,9 +502,10 @@ async function restoreAfterOps(wasDown) {
       '--profile',
       'cluster',
     ];
+    // redis-replica is not on the list: level 5.8 starts from the replica level 5.7 left running, and a replica
+    // without a Sentinel cannot demote anything (the REPLICAOF NO ONE below covers the rest).
     const extras = [
       'redis-nopersist',
-      'redis-replica',
       'sentinel-1',
       'sentinel-2',
       'sentinel-3',
