@@ -32,10 +32,11 @@ task: |
   with `docker compose up -d`. Then come back here.
 
 verify:
-  - type: event
-    kind: redis_reconnect
-    timeoutMs: 300000
-    message: "The game did not see Redis go away and come back within five minutes."
+  - type: redis
+    checks:
+      - cmd: [GET, "game:engine:boots"]
+        gte: 2
+        message: "The game has booted only once. Run docker compose down, then bring it back up, and verify again."
   - type: redis
     checks:
       - cmd: [EXISTS, "game:player:{{player.id}}"]

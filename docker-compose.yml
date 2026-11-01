@@ -47,6 +47,9 @@ services:
       PORT: "4200"
       LEVELS_DIR: /levels
       ENGINE_DEV: "${ENGINE_DEV:-}"
+      LOAD_MAX_CONNECTIONS: "${LOAD_MAX_CONNECTIONS:-200}"
+      LOAD_MAX_DURATION_SEC: "${LOAD_MAX_DURATION_SEC:-30}"
+      LOW_POWER: "${LOW_POWER:-}"
       # host ports, readable from levels as {{env.NAME}}
       REDIS_PORT: "${REDIS_PORT:-6379}"
       PROXY_PORT: "${PROXY_PORT:-3000}"
@@ -77,7 +80,9 @@ services:
   redis:
     image: redis:8
     platform: linux/arm64
-    command: ["redis-server", "--maxmemory", "512mb", "--save", "", "--appendonly", "no"] # ch5 turns persistence on
+    # Persistence is ON by default so a learner who runs `docker compose down` keeps their save file
+    # (Chapter 0.5). Chapter 5 switches to the `crash` profile (redis-nopersist) to show the loss.
+    command: ["redis-server", "--maxmemory", "512mb", "--save", "60", "1000", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports: ["127.0.0.1:${REDIS_PORT:-6379}:6379"]
     volumes: ["redis-data:/data"]
     healthcheck: { test: ["CMD", "redis-cli", "PING"], interval: 2s, timeout: 2s, retries: 15 }

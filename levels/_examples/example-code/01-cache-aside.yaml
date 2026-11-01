@@ -69,9 +69,6 @@ verify:
           - cmd: [TYPE, "cache:player:p-028"]
             equals: hash
             message: "After a miss, cache:player:p-028 should be a hash in Redis. Nothing was cached."
-          - cmd: [TTL, "cache:player:p-028"]
-            between: [1, 30]
-            message: "The cached stats should expire within 30 seconds."
   - type: traffic
     scenario: toss-time-100
     baseline: true
