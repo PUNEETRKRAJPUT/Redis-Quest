@@ -1,0 +1,25 @@
+# Chapter 2: the toss is at 7:30 and a hundred users open the same three player pages at once.
+# Used by example-code-01-cache-aside (and level 2.2 cache-aside) for its traffic verifier and pain panel.
+id: toss-time-100
+description: "100 users hammer the stats pages of the three hot players (p-028, p-101, p-151)."
+durationSec: 10
+connections: 50
+pipelining: 1
+seed: 20260101
+# Discarded warmup: a correct cache-aside fills its three keys here, so the graded run measures the
+# steady state, not the first stampede (stampedes have their own level and scenario).
+warmup:
+  durationSec: 2
+  connections: 5
+users:
+  count: 100
+  distribution: uniform
+params:
+  player:
+    values: [p-028, p-101, p-151]
+    distribution: uniform
+requests:
+  - method: GET
+    path: /app/players/{player}/stats
+    weight: 1
+    userIdHeader: x-user-id

@@ -1,0 +1,41 @@
+# Compose override for scripts/check/P0-09.sh only (project quest-p09). It isolates this check from
+# every other agent and from the learner: its own image tag, and scratch directories for the workspace,
+# logs, progress and levels (P09_* are absolute paths exported by the check script).
+x-p09-node: &p09-node
+  image: quest-p09-node:latest
+  volumes:
+    - ${P09_WORKSPACE:?}:/workspace
+    - ${P09_LOGS:?}:/logs
+    - ${P09_PROGRESS:?}:/progress
+
+services:
+  engine:
+    <<: *p09-node
+    environment:
+      # Event waits are capped so wrong Chapter 0 solutions grade in seconds, not minutes.
+      VERIFY_MAX_EVENT_WAIT_MS: "3000"
+      LOAD_MAX_CONNECTIONS: "200"
+      LOAD_MAX_DURATION_SEC: "30"
+    volumes:
+      - ${P09_WORKSPACE:?}:/workspace
+      - ${P09_LOGS:?}:/logs
+      - ${P09_PROGRESS:?}:/progress
+      - ${P09_LEVELS:?}:/levels:ro
+      # live scenarios (the image has a copy from build time)
+      - ./scenarios:/srv/scenarios:ro
+  app:
+    <<: *p09-node
+    environment:
+      # The app's default (1 request per socket, so Caddy redials and spreads requests across scaled
+      # instances) exhausts the proxy's ephemeral ports at a few hundred requests per second: about
+      # 28k sockets in TIME_WAIT, then Caddy answers 502 "cannot assign requested address". Every
+      # cached traffic run hits it. Raised here only; reported in docs/handoffs/P0-09.md for P0-07.
+      APP_MAX_REQUESTS_PER_SOCKET: "100"
+  runner:
+    <<: *p09-node
+  proxy:
+    volumes:
+      - ${P09_LOGS:?}:/logs
+  postgres:
+    volumes:
+      - ${P09_LOGS:?}:/logs

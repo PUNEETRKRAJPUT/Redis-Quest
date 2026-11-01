@@ -19,6 +19,11 @@ import { newProgress, reconcileLevels, type ProgressFile, type ProgressStore } f
 import type { RedisManager } from './redis.js';
 import { runSetup, SetupRefusedError } from './setup.js';
 import { runVerification, type Answers } from './verify.js';
+import { loadVerifyConfig } from './verify/config.js';
+import { levelSlots, Verifier, VerifyBusyError } from './verify/index.js';
+import { ScenarioError } from './load/scenario.js';
+import { TrafficError } from './verify/traffic.js';
+import { buildIdeal, idealAccess } from './verify/ideal.js';
 import {
   listTree,
   readWorkspaceFile,
@@ -125,10 +130,23 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
     if (err instanceof SetupRefusedError) {
       return reply.code(500).send({ error: 'setup_refused', message: err.message });
     }
+    if (err instanceof VerifyBusyError) {
+      return reply.code(409).send({ error: 'verify_in_progress', message: err.message });
+    }
+    if (err instanceof ScenarioError) {
+      return reply.code(400).send({ error: 'invalid_scenario', message: err.message });
+    }
+    if (err instanceof TrafficError) {
+      return reply.code(502).send({ error: 'traffic_failed', message: err.message });
+    }
     const status = err.statusCode && err.statusCode < 500 ? err.statusCode : 500;
     if (status >= 500) log.error({ err }, 'request failed');
     return reply.code(status).send({ error: status >= 500 ? 'internal' : 'bad_request', message: err.message });
   });
+
+  // P0-09: the verifier engine (one per server); it taps app metric pushes and keeps its own event log.
+  const verifier = new Verifier({ cfg: loadVerifyConfig({ progressDir: cfg.progressDir, port: cfg.port }), log, bus, redis, metrics });
+  verifier.startCommandCheck();
 
   // ---- helpers -------------------------------------------------------------------------------
   const redisUrl = () => store.current?.target.redisUrl ?? runtime.redisUrl;
@@ -386,22 +404,55 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           }
         }
         const lp = p.levels[id] as NonNullable<ProgressFile['levels'][string]>;
-        const outcome = await runVerification(entry.level, {
-          templateCtx: templateContext(cfg, p, entry),
-          redis,
-          events: bus,
-          startedAt: lp.startedAt,
-          attempt: lp.attempts + 1,
-        }, answers);
+        const done = verifier.begin(p.player.id); // 409 verify_in_progress on overlap
+        let outcome;
+        try {
+          outcome = await runVerification(entry.level, {
+            templateCtx: templateContext(cfg, p, entry),
+            redis,
+            events: bus,
+            startedAt: lp.startedAt,
+            attempt: lp.attempts + 1,
+            verifier,
+          }, answers);
+        } finally {
+          done();
+        }
         const now = new Date().toISOString();
+        // Compact record in progress.json; the full feedback is in the response (and the WS events).
+        const record = {
+          at: now,
+          verdict: outcome.verdict,
+          durationMs: outcome.durationMs,
+          checks: outcome.checks.map((c) => ({ index: c.index, type: c.type, ok: c.ok, ...(c.skipped ? { skipped: true } : {}) })),
+        };
+        // "The ideal way" rides along once allowed (passed, or 3 attempts); read before the commit.
+        const ideal = await buildIdeal(entry.level, templateContext(cfg, p, entry));
         const result = await commit('verify', id, (draft) => {
-          const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]>;
+          const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]> & { idealRevealedAt?: string };
           l.attempts += 1;
-          l.verdicts.push({ at: now, verdict: outcome.verdict });
+          l.verdicts.push(record);
           if (outcome.verdict === 'right') markPassed(draft, entry, now);
-          return { attempts: l.attempts, status: l.status };
+          const access = idealAccess(l.status, l.attempts);
+          if (access.allowed) l.idealRevealedAt ??= now;
+          return { attempts: l.attempts, status: l.status, allowed: access.allowed };
         });
-        return { ...outcome, ...result };
+        return { ...outcome, attempts: result.attempts, status: result.status, ...(result.allowed ? { ideal } : {}) };
+      });
+
+      // The ideal way on request: always served, with whether it would have been shown anyway.
+      api.get<{ Params: { id: string } }>('/levels/:id/ideal', async (req) => {
+        const { entry, p } = activeEntry(req.params.id, ['available', 'in_progress', 'passed']);
+        const id = entry.level.level.id;
+        const lp = p.levels[id] as NonNullable<ProgressFile['levels'][string]>;
+        const access = idealAccess(lp.status, lp.attempts);
+        const ideal = await buildIdeal(entry.level, templateContext(cfg, p, entry));
+        const now = new Date().toISOString();
+        await commit('ideal', id, (draft) => {
+          const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]> & { idealRevealedAt?: string };
+          l.idealRevealedAt ??= now;
+        });
+        return { ...access, ...ideal };
       });
 
       // Dev-only shortcut so checks and demos can walk the chapters without solving anything.
@@ -484,6 +535,25 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         bus.emit('level.event', { kind: 'custom', name: b.name, ...(b.data !== undefined ? { data: b.data } : {}) });
         return { ok: true };
       });
+
+      // ---- verifier: baselines and the read-only allowlist cross-check (P0-09) -------------------
+      api.post<{ Params: { scenario: string } }>('/baselines/:scenario/refresh', async (req) => {
+        const body = isObject(req.body) ? req.body : {};
+        let keep: string[] | null = null;
+        if (body.levelId !== undefined) {
+          const entry = needLevel(String(body.levelId));
+          const own = levelSlots(entry.level.level.verify);
+          keep = activeSlots().filter((s) => !own.includes(s));
+        }
+        const owner = store.current?.player.id ?? 'no-player';
+        const done = verifier.begin(owner);
+        try {
+          return await verifier.refreshBaseline(req.params.scenario, keep);
+        } finally {
+          done();
+        }
+      });
+      api.get('/verify/command-check', async () => verifier.commandCheck ?? { pending: true });
 
       api.get<{ Querystring: { seconds?: string } }>('/metrics', async (req) => {
         const s = Number(req.query.seconds ?? 60);

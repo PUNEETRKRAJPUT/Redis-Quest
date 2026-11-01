@@ -47,26 +47,43 @@ export interface Aggregate {
   errors: number;
   p50Ms: number;
   p99Ms: number;
+  /** Sums of the additive per-request counters the app pushes (P0-07); 0 when no instance sent them. */
+  dbQueries: number;
+  redisCommands: number;
+  noDbCount: number;
+  slotErrors: number;
 }
+
+/** Fields that add up across seconds and instances (unlike percentiles). */
+export const ADDITIVE_FIELDS = ['dbQueries', 'redisCommands', 'noDbCount', 'slotErrors'] as const;
 
 function aggregate(stats: RouteStat[]): Aggregate {
   let count = 0;
   let errors = 0;
   let p50w = 0;
   let p99 = 0;
+  const sums = { dbQueries: 0, redisCommands: 0, noDbCount: 0, slotErrors: 0 };
   for (const s of stats) {
     count += s.count;
     errors += s.errors;
     p50w += s.p50Ms * s.count;
     p99 = Math.max(p99, s.p99Ms);
+    for (const f of ADDITIVE_FIELDS) sums[f] += s[f] ?? 0;
   }
-  return { count, errors, p50Ms: count ? round(p50w / count) : 0, p99Ms: round(p99) };
+  return { count, errors, p50Ms: count ? round(p50w / count) : 0, p99Ms: round(p99), ...sums };
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
 export class MetricsStore {
   private byInstance = new Map<string, Sample[]>();
+  private pushListeners = new Set<(p: MetricsPush, now: number) => void>();
+
+  /** Called after every accepted push (the verifier sums a load run's exact window from these). */
+  onPush(fn: (p: MetricsPush, now: number) => void): () => void {
+    this.pushListeners.add(fn);
+    return () => this.pushListeners.delete(fn);
+  }
 
   push(p: MetricsPush, now = Date.now()): void {
     const at = Math.floor((p.at ?? now) / 1000) * 1000;
@@ -76,6 +93,13 @@ export class MetricsStore {
     else list.push({ at, routes: p.routes });
     this.byInstance.set(p.instanceId, list);
     this.prune(now);
+    for (const l of this.pushListeners) {
+      try {
+        l(p, now);
+      } catch {
+        // a listener must never break metric ingestion
+      }
+    }
   }
 
   private prune(now: number): void {
