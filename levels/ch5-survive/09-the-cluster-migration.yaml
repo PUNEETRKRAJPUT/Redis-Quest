@@ -29,23 +29,23 @@ brainstorm:
 
 teach: |
   From the scaling page of the docs: Redis Cluster splits the keyspace into **16384 hash slots**. A key's slot is
-  CRC16(key) mod 16384, and every master owns a range of slots (`redis-cli --cluster create` cuts them in thirds: A-05's check saw
+  CRC16(key) mod 16384, and every master owns a range of slots (`redis-cli --cluster create` cuts them in thirds: the app's own check's check saw
   0-5460, 5461-10922 and 10923-16383 on this stack). A cluster needs at least three masters and is not strongly consistent.
   The cluster bus listens on the data port plus 10000.
 
   - **Hash tags.** If a key has `{...}`, only the text inside is hashed, so `{user:1}:cart` and `{user:1}:profile` share a slot. A
     multi-key command, a `MULTI`/`EXEC` or a Lua script is only allowed when every key is in the same slot.
-  - The errors, exact on this stack (A-05, E-03): `CROSSSLOT Keys in request don't hash to the same slot` when the keys are on one master
+  - The errors, exact on this stack (measured by the game's own checks): `CROSSSLOT Keys in request don't hash to the same slot` when the keys are on one master
     in different slots; `MOVED <slot> <host>:6379` when a transaction's key lives on another master.
   - node-redis's cluster client picks a node per command, so it has **no WATCH** (Chapter 3's WATCH join fails with
     `conn.watch is not a function`). A Lua script with every key in `KEYS[]` runs where that slot lives.
   - In the game's terminal, keyless commands (`DBSIZE`, `KEYS`, `INFO`, `CLUSTER INFO`) go to the master that owns slot 0 only: `DBSIZE` sees one
     node of three. Name the keys you check.
   - **Pub/sub.** Plain `PUBLISH` reaches subscribers on every node, and its reply counts receivers on the node it went to, so `0` is normal
-    (A-05's ticker still heard it). The docs' sharded form, `SPUBLISH` and `SSUBSCRIBE`, hashes the channel to a slot and keeps messages in the shard.
+    (the app's ticker still heard it). The docs' sharded form, `SPUBLISH` and `SSUBSCRIBE`, hashes the channel to a slot and keeps messages in the shard.
     The ticker would use it at scale.
   - The wallet and the contest counter had different slots: `CLUSTER KEYSLOT` answers 10458 for `wallet:u-000010` (CRC16, computed by the author,
-    and the same function that gave A-05's measured 7573 for `contest:9001:entries`). With a tag, `{wallet:u-000010}` and
+    and the same function that gave the measured 7573 for `contest:9001:entries`). With a tag, `{wallet:u-000010}` and
     `{wallet:u-000010}:joins:9001` share slot 10458. The price: the per-contest count is now a per-user record.
 
 task: |
@@ -136,7 +136,7 @@ verify:
       - id: moved-always
         label: "MOVED, always: the client must reconnect to the master that owns the first key"
     correct: crossslot-same-master
-    explanation: "A-05 measured it: CROSSSLOT when both slots sit on one master, MOVED when the other key is on another master. Multi-key commands, transactions and Lua scripts need every key in one slot."
+    explanation: "Measured on this stack: CROSSSLOT when both slots sit on one master, MOVED when the other key is on another master. Multi-key commands, transactions and Lua scripts need every key in one slot."
   - type: quiz
     question: "The new key {wallet:u-000010}:joins:9001 replaces contest:9001:entries. What did the hash tag cost you?"
     options:

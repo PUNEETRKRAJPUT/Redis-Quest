@@ -42,7 +42,7 @@ teach: |
   - Docs warning: Sentinel with Docker or any NAT or port mapping must be mixed with care, because addresses are announced to clients.
     That is why the compose file gives the master and the replica `--replica-announce-ip`.
 
-  **Measured by the stack's own checks (E-03 for the engine, A-05 for the app), on this stack:** after `docker compose stop redis`, the engine sees
+  **Measured by the game's own checks (the engine's and the app's), on this stack:** after `docker compose stop redis`, the engine sees
   the master down at 3.5 s; Sentinel logs `+sdown`, `+odown` and `+switch-master` at about 5 s, 6 s and 6.2 s; a terminal `SET` works again at
   6.6 s; the game's `sentinel_failover` event comes at 7.3 s and `/api/target` shows `redis-replica:6379` at 7.5 s. The app's learner writes were stable again
   at 5.2 s and `/app/target` named the new master at 7.3 s. Then `docker compose start redis` returns it as a replica after about 11 s.
