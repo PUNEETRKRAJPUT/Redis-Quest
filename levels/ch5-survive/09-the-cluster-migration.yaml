@@ -175,7 +175,7 @@ verify:
       - id: only-masters
         label: "PUBLISH only reaches the master that owns slot 0, and a subscriber on any other node cannot hear it"
     correct: global-publish
-    explanation: "From the pub/sub docs: global Pub/Sub broadcasts to every node; sharded Pub/Sub (7.0) hashes channels to slots and keeps messages within the shard, which scales better. A-05's check saw the receiver count 0 and the subscriber hearing the message anyway."
+    explanation: "From the pub/sub docs: global Pub/Sub broadcasts to every node; sharded Pub/Sub (7.0) hashes channels to slots and keeps messages within the shard, which scales better. the app check's check saw the receiver count 0 and the subscriber hearing the message anyway."
 
 show_me:
   component: kv_card
