@@ -1,0 +1,35 @@
+id: finale
+title: "The architect"
+incident:
+  - from: senior
+    time: "09:00"
+    text: "Placement season, bhai. I called the alumni network: three rounds, back to back, first one at 9:30. Mess breakfast is on me after. Do not make me a liar 🙏"
+  - from: roommate
+    time: "09:04"
+    text: "bhai I am pacing in the corridor. YOU are the one interviewing and I am the one who cannot sit"
+  - from: you
+    time: "09:06"
+    text: "it is a mock. they pick something I built, I rebuild it from an empty file, then they ask what happens when it breaks. I have broken every one of these at least once"
+  - from: senior
+    time: "09:12"
+    text: "They will not ask what Redis is. They will ask what happens when it is not there. Keep that sentence in your head"
+  - from: rival-college
+    time: "09:17"
+    text: "Heard you are interviewing at my company this morning. I am on the panel for the third round. Intern, but panel 😏"
+  - from: roommate
+    time: "09:21"
+    text: "MUKUL is on the panel?? do not smile at him. do not EVER smile at him"
+  - from: you
+    time: "09:27"
+    text: "good. then I already know his three questions: what if it is down, what if there are two of me, what if everybody asks at once"
+  - from: senior
+    time: "09:30"
+    text: "Laptop is open. Go. And if you say 'it depends', say what on"
+levels:
+  - finale-01-mock-interview-one
+  - finale-02-mock-interview-two
+  - finale-03-mock-interview-three
+  - finale-04-the-gauntlet
+  - finale-05-the-neighbours
+  - finale-06-the-code-review
+  - finale-07-your-story

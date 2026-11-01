@@ -1,0 +1,106 @@
+id: finale-07-your-story
+chapter: finale
+title: "Your story"
+mode: ops
+
+story: |
+  `17:10  Harry Bhaiya: "offer or no offer, put it where people can see it. a repo, bhai, not a screenshot"`
+
+  The loops are over, the interviewer has shaken your hand, and Harry Bhaiya is already asking about the mess. Before you go, the hiring manager
+  says the thing that decides how the day is remembered: "Send me a link. Not a CV line. Something I can open, with your name on it, that
+  tells me what you actually did."
+
+  The game has been taking notes all along. Your save file holds every level you passed, the numbers the traffic checks measured, how long
+  each interview took and how many hints you bought, and your own brainstorm lines. Your workspace folder holds the code you wrote. The game
+  can turn those into one page, from nothing but what it recorded: no invented numbers, and every line names its level. Then it is yours to
+  read, to check and to put somewhere.
+
+brainstorm:
+  prompt: "You have a day's worth of measured numbers and a folder of your own files. What belongs on the page you show a hiring manager?"
+  options:
+    - id: measured-and-named
+      label: "Only what was measured, each line with the level it came from, and your own words on why you chose what you chose"
+      is_reasonable: true
+    - id: round-up
+      label: "Round the numbers up a little, and leave out the levels you needed hints for"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not a page: a conversation, with the page as the thing you open when they ask 'show me'"
+      is_reasonable: true
+
+teach: |
+  The page is built by the game, from your save and your workspace, and from nothing else. What is on it:
+
+  - A title with your name, your XP and your badges.
+  - For each chapter, the levels you passed with one line each. A level graded on traffic carries the numbers that check measured, taken from the
+    attempt that passed: p99 before and after, Postgres calls per request, Redis commands per request, requests per second. A level where the
+    save holds no number has no number on its line.
+  - For the interviews, how long the rebuild took and how many hints you bought, and what the interviewer drew.
+  - The brainstorm lines you wrote before each level, in your words.
+  - The files in your workspace, with their sizes (your earlier attempts, the `.before-` files, and the page itself are left out).
+  - A closing section, "What I would say in an interview": a sentence for each level that has a measured number or an interview result, each
+    naming its level. A save with neither says so plainly instead of making something up.
+
+  How to use it. Every number was measured by the game, on your Mac, against the game's own Postgres and traffic. That is a measurement and not a
+  production figure, so say it: "on my laptop, against a seeded database". The honest label is worth more than the number. Then pick one line and
+  be ready to say three things about it: the number, the trade-off you chose (a 30 second TTL, a bucket instead of a window, fail open or closed),
+  and what you would change at ten times the traffic.
+
+  The page is a file in your workspace, `workspace/PORTFOLIO.md`, so it can be committed with your code. `git init` inside `workspace/` makes that
+  folder a repository of its own, separate from the game's. Before the first commit read `git status`: a repository outlives the day you made it,
+  and anything secret that was ever committed has to be treated as leaked. The game holds no secrets and no customer data, so it is a safe place to
+  build the habit.
+
+task: |
+  1. Press "Write my story" on the What you built page, or from your own terminal: `curl -s -X POST localhost:3000/api/portfolio/write`
+     (use your own port if you changed `PROXY_PORT`).
+  2. Open `workspace/PORTFOLIO.md` and read it, all of it. Everything on it should be something you can explain. If a line surprises you, find its
+     level and read it again before an interviewer does.
+  3. Make `workspace/` a repository of your own: `cd workspace && git init && git add . && git commit -m "Redis Quest: what I built"`. Read
+     `git status` before you commit. Then push it wherever you keep your code. The game cannot see the push and does not grade it.
+  4. Answer the two questions below and press Verify.
+
+hints:
+  - "The button is on the What you built page, at the top. The curl does the same thing, and either one makes the page."
+  - "`git init` inside `workspace/` makes it a repository of its own: it does not touch the game's. Run `git status` and read the list before the first commit."
+  - "In an interview you get two minutes per project: one number, one trade-off, one thing you would change."
+
+verify:
+  - type: event
+    kind: custom
+    match: { name: portfolio_written }
+    timeoutMs: 120000
+    message: "The game has not written your story since you started this level. Press 'Write my story' on the What you built page, or run the curl from the task, then press Verify."
+  - type: quiz
+    question: "An interviewer says 'tell me about something on your page'. Which answer is the strongest?"
+    options:
+      - { id: s1-read-it-all, label: "Read the page aloud from the top, so that nothing is missed" }
+      - { id: s1-redis-fast, label: "Say that you learned Redis and that it made everything faster" }
+      - { id: s1-one-line, label: "Pick one line and say the number it measured (p99 before and after, Postgres calls per request), the trade-off you chose and the level it came from; say it was measured on your laptop and not in production, and what you would change at ten times the traffic" }
+      - { id: s1-no-numbers, label: "Talk about what each command does and leave the numbers out, because numbers change between machines" }
+    correct: s1-one-line
+    explanation: "The page is built from your save: every number was measured by the game and every line names its level, so you can say it and defend it. An interviewer rewards a number, the trade-off you chose, what you would change, and an honest label on where the number came from (a game's Postgres and traffic on your Mac, not production). A page read aloud is a page and not a conversation, a claim of speed gives them nothing to test, and a tour of commands without numbers never shows that you measured anything."
+  - type: quiz
+    question: "You are about to push workspace/ to a public repository. What stays out of it?"
+    options:
+      - { id: s2-nothing, label: "Nothing: it is only practice code" }
+      - { id: s2-secrets, label: "Anything secret or not yours: .env files, passwords, API keys and tokens, customer or personal data. The game has none, but check `git status` before the first commit and keep a .gitignore, so the habit is there on the day it matters" }
+      - { id: s2-attempts, label: "Your earlier attempts, the .before- files, and anything that looks unfinished" }
+      - { id: s2-readme, label: "Nothing, but add a README with the Redis password and the .env contents so that a reviewer can run it" }
+    correct: s2-secrets
+    explanation: "A repository outlives the day you made it, and a secret that was ever committed has to be treated as leaked even after you delete it. The game has no secrets and no customer data, which is why it is a safe place to practise: read `git status` before the first commit, keep `.env` and credentials in a `.gitignore`, and never put a real person's data in a repository. Your earlier attempts are yours and are fine to keep: they show how you improved."
+
+show_me:
+  component: cache_stats
+  keys: []
+
+reward:
+  xp: 80
+  badge: "Story told"
+
+solutions:
+  reference: solutions/07-reference.sh
+  wrong:
+    - path: solutions/07-wrong-no-page.sh
+      expect: wrong
+      because: "This makes workspace/ a repository and commits it, but never asks the game to write the story. The portfolio_written event never happens, and the commit has no PORTFOLIO.md in it."

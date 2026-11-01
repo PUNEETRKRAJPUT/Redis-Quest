@@ -1,0 +1,301 @@
+id: finale-03-mock-interview-three
+chapter: finale
+title: "Mock interview three: the panel"
+mode: code
+
+# The panel round: Mukul asks the follow-ups. Same nine use cases, same answers, his voice.
+# A pool level has no teach, no verify, no solutions and no show_me of its own: the engine draws one entry at the
+# first start, grades the level as the drawn one (its checks, its slots, its solutions), then asks the entry's
+# three questions. The placeholder task below is never shown.
+
+story: |
+  `11:00  Mukul: "Panel round. I got the third chair. Do not smile, bhai, it ruins my concentration 😏"`
+
+  Fifteen minutes this time, and two chairs on the other side of the table. The alumnus from the first round takes notes. In the second chair, with a company lanyard that says INTERN in capital letters, sits Mukul Awasthi, who spent the whole season trying to break your app and now gets to ask how you would have built it. He asks the follow-ups. He has been waiting for this since the invoice.
+
+  Same rules as before: a use case you have not been given yet, an empty file (your earlier one moves to `.before-finale-03-mock-interview-three`) and a clock. A shorter clock, a harder audience.
+
+brainstorm:
+  prompt: "Fifteen minutes and a panel. What is your plan for the clock?"
+  options:
+    - { id: build-then-answer, label: "Get the file passing first, even if it is plain, then spend the spare minutes on the three questions you can predict: it is down, there are two of me, everybody asks at once", is_reasonable: true }
+    - { id: perfect-first, label: "Polish the code until the clock is nearly out, then answer fast", is_reasonable: false }
+    - { id: not-redis, label: "Tell the panel your first question is what the use case needs, and pick the tool after that", is_reasonable: true }
+
+task: |
+  The interviewer picks when you start.
+
+hints:
+  - "Fifteen minutes: plain and passing beats clever and unfinished. Keep the last three for the questions, not for the code."
+  - "Mukul's questions are always some form of: what if it is down, what if there are two of me, what if everybody asks at once. Have a one-sentence answer for each."
+  - "A hint costs XP. A failed round costs more."
+
+reward:
+  xp: 150
+  badge: "Panel round"
+
+interview:
+  minutes: 15
+  hint_xp_cost: 20
+  blank_start: true
+  pool:
+    - rebuild_of: ch2-02-cache-aside-v1
+      questions:
+        - type: quiz
+          question: "Mukul: 'My favourite. I walk over and restart your Redis. It comes back empty. What does your stats page do, bhai?'"
+          options:
+            - { id: ca1-errors, label: "Every request fails until somebody reloads the cache by hand" }
+            - { id: ca1-refills, label: "It keeps answering: every miss reads Postgres and writes the hash back, so it is slower for a while and then warm again" }
+            - { id: ca1-remembers, label: "It shows the last values the app remembers, because the app keeps a copy of everything it read" }
+            - { id: ca1-null, label: "It returns null for every player until the first write" }
+          correct: ca1-refills
+          explanation: "Reasoned from the cache-aside page and level 2.2: a miss is the normal path. It reads the source of truth, Postgres, and writes the hash back with its TTL, so nothing breaks. The price is a burst of Postgres reads while the hot keys come back, which is what the single-flight lock of level 2.4 is for."
+        - type: quiz
+          question: "Mukul: 'Now I put a second copy of your app behind the load balancer. What do you change in the code?'"
+          options:
+            - { id: ca2-prefix, label: "Each server needs its own key prefix, and a message between the two when one of them writes" }
+            - { id: ca2-lock, label: "A lock around every read, so the two servers never fill the same key" }
+            - { id: ca2-ttl, label: "Halve the TTL, so that the two copies stay in step" }
+            - { id: ca2-nothing, label: "Nothing: both servers read and write the same Redis key, so the cache is already shared" }
+          correct: ca2-nothing
+          explanation: "The cache lives in Redis, not in the process, so any number of app servers share it. (Level 3.1 showed the opposite for a counter kept in each process's memory: two copies let twenty through.) The one thing to watch is a cold key, and level 2.4's single-flight lock already covers any number of copies."
+        - type: quiz
+          question: "Mukul: 'One player. Every phone in Lucknow on the same page, thousands of times a second. Where do you cut the cost?'"
+          options:
+            - { id: ca3-ttl-day, label: "Raise the TTL to a day, so the key is almost never refilled" }
+            - { id: ca3-shard, label: "Spread that one player over several Redis nodes in a cluster" }
+            - { id: ca3-local, label: "Keep a very short-lived copy in the app's own memory, or turn on client-side caching, so most reads never leave the process" }
+            - { id: ca3-bigger, label: "Give Redis a bigger machine" }
+          correct: ca3-local
+          explanation: "Level 4b.1: a hot key is cheap per command, the cost is how many commands ask for the same few bytes, so you stop most of them leaving the app. Use a bounded memo that trusts its copy for a second, or node-redis client-side caching (level 5.6), where Redis tells the client when the key changes. A longer TTL does not reduce reads, and a cluster puts one key in exactly one slot on one node (scaling page), so a hot key stays hot."
+    - rebuild_of: ch2-07-fixtures-must-never-miss
+      questions:
+        - type: quiz
+          question: "Mukul: 'I delete every cache:match key before the toss. What does your getFixtures do, and why that and not the easy thing?'"
+          options:
+            - { id: pf1-null, label: "It returns null without asking Postgres, so the app answers with an error and somebody finds out the sync pipeline is broken" }
+            - { id: pf1-fallback, label: "It reads the matches from Postgres for that request, so the page never breaks" }
+            - { id: pf1-empty, label: "It returns an empty list and logs nothing, since there is nothing to show" }
+            - { id: pf1-retry, label: "It retries the SCAN until the keys appear" }
+          correct: pf1-null
+          explanation: "Level 2.7 and the prefetch-cache page: this cache reads Redis only, and a miss means the sync pipeline is broken, which is an incident. A quiet fallback to Postgres hides it, and when the whole crowd lands on the fixtures page every phone becomes a Postgres query."
+        - type: quiz
+          question: "Mukul: 'The sync worker falls asleep for ten minutes and misses a change. How does your cache ever find out?'"
+          options:
+            - { id: pf2-ttl, label: "The TTL expires the stale hash, so it heals by itself within the minute" }
+            - { id: pf2-next-read, label: "The next read notices and refreshes the hash from Postgres" }
+            - { id: pf2-restart, label: "Restarting Redis makes it read Postgres again" }
+            - { id: pf2-reload, label: "A periodic reload against Postgres repairs it (the game's reprefetch button is that reload); the one hour TTL is only a safety net" }
+          correct: pf2-reload
+          explanation: "Level 2.7 and the prefetch-cache page: change events can be lost (a crashed worker, a gap), so the docs advise a periodic reload against the source. The TTL is a long safety net refreshed on every upsert, not how data stays fresh, and a prefetch cache never reads Postgres on a read."
+        - type: quiz
+          question: "Mukul: 'Why do you delete the hash and write it again? A plain HSET is less typing.'"
+          options:
+            - { id: pf3-faster, label: "DEL then HSET is cheaper than HSET alone" }
+            - { id: pf3-dropped-fields, label: "So that a field the new row no longer has cannot linger from the old one" }
+            - { id: pf3-cannot-overwrite, label: "HSET cannot change a field that already exists" }
+            - { id: pf3-lock, label: "It takes a lock, so that two sync workers cannot clash" }
+          correct: pf3-dropped-fields
+          explanation: "Level 2.7 and the prefetch-cache page: the DEL goes first, so a field that the new row no longer has cannot linger from the old one. HSET only sets the fields you give it (and overwrites the ones that exist), so without the DEL an old field would stay. The multi is there so a reader never sees the hash half written; it is not a lock."
+    - rebuild_of: ch2-08-otp-login-properly
+      questions:
+        - type: quiz
+          question: "Mukul: 'My friend lost his phone with your app logged in. Log him out of everything, right now. How?'"
+          options:
+            - { id: ss1-set, label: "It reads the user's set of session ids, then deletes each session hash and removes the ids from the set, in one multi" }
+            - { id: ss1-keys, label: "KEYS session:*, read each hash's owner, and delete the ones that match" }
+            - { id: ss1-flush, label: "Flush every session and let everybody log in again" }
+            - { id: ss1-wait, label: "Nothing: the 30 minute expiry will log the thief out" }
+          correct: ss1-set
+          explanation: "Level 2.8 and the session-store page: a set per user lists every session id, so logging out everywhere is one SMEMBERS plus DEL and SREM, not a walk over every session. KEYS would block the server (level 4b.3), a flush logs out everybody, and waiting does not work because every read of the session slides the expiry forward, so the thief keeps it alive."
+        - type: quiz
+          question: "Mukul: 'The auditor says nobody stays logged in past eight hours, even if they are active. Your expiry slides. Fix it.'"
+          options:
+            - { id: ss2-ttl-8h, label: "Set the TTL to 8 hours" }
+            - { id: ss2-no-slide, label: "Stop sliding the expiry, so a session ends 30 minutes after login" }
+            - { id: ss2-cookie, label: "Put the expiry time in the cookie and trust it" }
+            - { id: ss2-cap, label: "An absolute cap: on every read compare created_at, which is already in the hash, with now, and destroy the session when it is older than 8 hours" }
+          correct: ss2-cap
+          explanation: "Reasoned from the session-store page: sliding expiration decides how long a stolen cookie stays useful, so the page recommends a separate absolute cap. Your hash already holds created_at (level 2.8), so the cap is one comparison on read. An 8 hour sliding TTL still renews for ever for an active user, and a cookie the user can edit cannot be the authority."
+        - type: quiz
+          question: "Mukul: 'I restart Redis in the middle of lunch. Are your users still logged in?'"
+          options:
+            - { id: ss3-always, label: "Always: sessions are stored with their TTL, so they come back" }
+            - { id: ss3-depends, label: "It depends on persistence: with a snapshot and the log on they come back, losing at most about a second with everysec; with none, everybody logs in again" }
+            - { id: ss3-never, label: "Never: Redis forgets everything on a restart" }
+            - { id: ss3-minute, label: "Only the sessions that have more than a minute left" }
+          correct: ss3-depends
+          explanation: "Chapter 5: persistence is a setting you choose. The session-store page relies on AOF and RDB so that sessions survive a restart within their TTL, the persistence page says everysec may lose about a second, and a node with no persistence starts blank (level 5.1)."
+    - rebuild_of: ch3-03-token-bucket
+      questions:
+        - type: quiz
+          question: "Mukul: 'I unplug Redis for ten seconds. What does allow() do, and who decided?'"
+          options:
+            - { id: tb1-open, label: "Always allow: a limiter must never be the reason a student cannot log in" }
+            - { id: tb1-closed, label: "Always refuse: a limiter that cannot count must assume the worst" }
+            - { id: tb1-retry, label: "Retry in a loop until Redis answers" }
+            - { id: tb1-policy, label: "It is a decision for this limiter: weigh a bad request let through against a good one refused. For OTPs prefer a weaker local limit to either extreme, for the wallet refuse, and log it loudly in every case" }
+          correct: tb1-policy
+          explanation: "Level 3.5 and the rate-limiter page ('fail open or closed depending on your policy'). For OTPs the level's answer is the middle path: count in the process's own memory, weaker but a ceiling. For the wallet it was closed, because a join let through unchecked is entries nobody paid for. A silent failure either way is the real fault, so log it and alert on it."
+        - type: quiz
+          question: "Mukul: 'A hundred of my scripts hit you at once. Why one Lua script and not two commands?'"
+          options:
+            - { id: tb2-roundtrip, label: "Two commands cost two round trips, and that is the only reason" }
+            - { id: tb2-atomic, label: "Read, decide and write must be one atomic step, or concurrent requests all read a full bucket and all get through" }
+            - { id: tb2-hash-only, label: "Redis only lets a script write hashes" }
+            - { id: tb2-memory, label: "A script stores the bucket in less memory" }
+          correct: tb2-atomic
+          explanation: "Level 3.3 and the programmability page: a script runs without anything else interleaving. Written as HMGET then HSET from JavaScript, a hundred concurrent requests all see a full bucket before any of them writes, which is exactly what the level's concurrency check catches. The saved round trip is a bonus, not the reason."
+        - type: quiz
+          question: "Mukul: 'Your two servers disagree about the time by a few seconds, and your script takes now from the caller. What does that cost you?'"
+          options:
+            - { id: tb3-nothing, label: "Nothing: Redis never looks at the app's clock" }
+            - { id: tb3-expire, label: "Keys expire early or late, because Redis takes TTLs from the app" }
+            - { id: tb3-cost, label: "The bucket inherits each caller's clock error: a server running ahead refills early, one behind refills late. Reading TIME inside the script gives one clock, at the price of a script that is no longer a function of its arguments" }
+          correct: tb3-cost
+          explanation: "The docs' token bucket takes now from the client, and level 3.3 passes it in ARGV so the script stays a function of its inputs. The docs' other limiters call TIME inside the script to avoid clock drift between app servers. With a 60 second refill, a few seconds of skew moves a refill by a few seconds, which may be fine: say so, and move the clock into the script if it is not."
+    - rebuild_of: ch3-06-the-real-leaderboard
+      questions:
+        - type: quiz
+          question: "Mukul: 'Two teams, same points. Who is ranked higher, and who decided that?'"
+          options:
+            - { id: lb1-member, label: "Whichever member name sorts higher: equal scores fall back to the member itself, not to who got there first" }
+            - { id: lb1-first, label: "The one that reached the score first" }
+            - { id: lb1-random, label: "Redis picks one at random each time" }
+            - { id: lb1-shared, label: "They share one rank and the next rank is skipped" }
+          correct: lb1-member
+          explanation: "Sorted-sets page: members with the same score are ordered lexicographically by member, with no collation. The leaderboard page warns that ties break by member, so encode a tie-breaker in the score if arrival order matters. Two teams on one score still get two different positions, which is what rank counts (level 3.6)."
+        - type: quiz
+          question: "Mukul: 'A thousand of us refresh the top ten every second. Forty thousand teams. Why does that not hurt?'"
+          options:
+            - { id: lb2-sort-on-read, label: "Redis sorts the forty thousand scores on every request, but it is very fast at it" }
+            - { id: lb2-hash, label: "Because a hash lookup is O(1)" }
+            - { id: lb2-ordered, label: "The set is kept ordered as members are added, so the top ten is a short range read: O(log N) to find the start, plus ten" }
+            - { id: lb2-app-cache, label: "The app caches the top ten for an hour" }
+          correct: lb2-ordered
+          explanation: "Sorted-sets page: ordered by the data structure, not sorted on request, and ZRANGE costs O(log(N)+M) for M results. Level 3.6 asks for exactly the limit and measures p99 under 60 ms with no Postgres. Asking for the whole board and cutting it in JavaScript is what would make the page slow."
+        - type: quiz
+          question: "Mukul: 'A team scores on two servers at the same instant. Why ZINCRBY and not read, add, write back?'"
+          options:
+            - { id: lb3-incr, label: "ZINCRBY adds inside Redis in one step, so neither update overwrites the other" }
+            - { id: lb3-order, label: "ZINCRBY keeps the set ordered and ZADD does not" }
+            - { id: lb3-only, label: "ZINCRBY is the only command that can raise a score" }
+            - { id: lb3-ties, label: "ZADD cannot break ties" }
+          correct: lb3-incr
+          explanation: "The leaderboard page: ZINCRBY is an atomic increment with no read-modify-write cycle. Reading the score, adding in JavaScript and writing it back is the lost update of level 1.2, now on a sorted set. (Level 3.6's twist: ZINCRBY creates a member that is not there, so look with ZSCORE first if an unknown team must stay unknown.)"
+    - rebuild_of: ch3-10-the-ticker
+      questions:
+        - type: quiz
+          question: "Mukul: 'My phone loses signal for ten seconds mid-over. When it comes back, what does it see?'"
+          options:
+            - { id: tk1-replay, label: "Redis replays the balls it missed as soon as the phone subscribes again" }
+            - { id: tk1-queued, label: "Redis queued the messages for that phone and delivers them in order" }
+            - { id: tk1-error, label: "An error, until the page is reloaded" }
+            - { id: tk1-last, label: "The broadcast is at-most-once, so the missed balls are gone for subscribers; the page reads the last-ball key to catch up to now, and a feed that must be complete needs a stream" }
+          correct: tk1-last
+          explanation: "Levels 3.10 and 3.11: pub/sub delivers to whoever is subscribed right now and keeps nothing (the pub/sub page: at-most-once). The last-ball key is the durable record the docs advise writing next to the publish, and the seq number tells a page how many balls it missed. A feed that cannot miss one belongs in a stream (Chapter 4)."
+        - type: quiz
+          question: "Mukul: 'Your PUBLISH printed 0. Panic, or not?'"
+          options:
+            - { id: tk2-failed, label: "The publish failed and nothing was sent" }
+            - { id: tk2-nobody, label: "Nobody was subscribed to that channel at that moment; if it stays 0, suspect a typo in the channel name" }
+            - { id: tk2-queued, label: "The message is waiting until a subscriber appears" }
+            - { id: tk2-ok, label: "Nothing is wrong: 0 is the usual success reply" }
+          correct: tk2-nobody
+          explanation: "The pub/sub page: PUBLISH answers with the number of subscribers it reached, and a steady 0 usually means a typo in the channel name (level 3.10's third hint). Channels are not keys, so SCAN will not show them; PUBSUB NUMSUB will (level 3.11)."
+        - type: quiz
+          question: "Mukul: 'Why does your subscriber get a connection of its own? One connection is simpler.'"
+          options:
+            - { id: tk3-share, label: "It does not need one: node-redis shares a single connection for everything" }
+            - { id: tk3-speed, label: "Subscriptions are faster on a separate connection" }
+            - { id: tk3-login, label: "Subscribers must log in as a different user" }
+            - { id: tk3-own, label: "A subscribed connection can do nothing but subscribe, unsubscribe and ping in the default protocol, so it takes client.duplicate()" }
+          correct: tk3-own
+          explanation: "The pub/sub page: a RESP2 subscribed client may only issue the subscribe commands and PING. In node-redis you duplicate the client, connect the copy and subscribe there (the node-redis guide). It is the same duplicate() you used for BLMOVE in level 4.7."
+    - rebuild_of: ch4-03-a-worker-died
+      questions:
+        - type: quiz
+          question: "Mukul: 'Your worker adds the runs and dies before the XACK. The sweep hands the ball to another worker. How many times are the runs added?'"
+          options:
+            - { id: st1-skip, label: "Redis remembers the work was done and skips it" }
+            - { id: st1-rollback, label: "The unacknowledged add is rolled back, so the runs are counted exactly once" }
+            - { id: st1-lost, label: "They are lost, because a claimed entry is deleted from the stream" }
+            - { id: st1-twice, label: "They are added twice, because delivery is at-least-once; the fix is to make the processing idempotent, with an idempotency key as in level 4.8" }
+          correct: st1-twice
+          explanation: "Levels 4.3 and 4.8: a consumer group keeps delivering an entry until somebody acknowledges it (streams page), which says nothing about its effect happening once, and Redis does not roll anything back (transactions page). The sweep is only safe if the work is idempotent: a marker written with SET NX in the same script as the INCRBY, so the second delivery changes nothing."
+        - type: quiz
+          question: "Mukul: 'I plant one ball that crashes every worker that touches it. What stops it going round for ever?'"
+          options:
+            - { id: st2-xdel, label: "XDEL it the first time it fails" }
+            - { id: st2-delivery, label: "Read its delivery count from XPENDING and, at or over a limit, copy it to a dead-letter stream and XACK it on the group" }
+            - { id: st2-idle, label: "Raise the minimum idle time so that nobody claims it" }
+            - { id: st2-workers, label: "Add more workers until one of them survives" }
+          correct: st2-delivery
+          explanation: "Level 4.4 and the streams page: the delivery counter goes up on every claim and is the signal for a poison message. The dead-letter stream keeps the evidence for a human, and the XACK on the original removes the entry from the group's pending list; without it the ball is both dead-lettered and still pending."
+        - type: quiz
+          question: "Mukul: 'Which command shows me the stuck balls, how long they have been stuck, and how many times each was tried?'"
+          options:
+            - { id: st3-xlen, label: "XLEN on the stream" }
+            - { id: st3-xrange, label: "XRANGE - +, which marks the unacknowledged ones" }
+            - { id: st3-info, label: "INFO persistence" }
+            - { id: st3-xpending, label: "XPENDING on the group in its extended form: id, consumer, idle milliseconds and delivery count for each pending entry" }
+          correct: st3-xpending
+          explanation: "Level 4.3: XPENDING key group is the summary, and with - + and a count it lists each pending entry with its consumer, idle time and delivery count. XLEN only counts entries, acknowledged or not, and XRANGE shows contents without any delivery state."
+    - rebuild_of: ch4-07-the-job-queue
+      questions:
+        - type: quiz
+          question: "Mukul: 'A worker takes a job and I kill its box a second later. Where is the job?'"
+          options:
+            - { id: jq1-gone, label: "Gone: it was popped off the list and nothing remembers it" }
+            - { id: jq1-processing, label: "In the processing list, because BLMOVE put it there in one step; the reclaimer returns it to pending after the visibility timeout" }
+            - { id: jq1-pending, label: "Back on the pending list, because Redis notices the dead connection" }
+            - { id: jq1-completed, label: "On the completed list, marked as failed" }
+          correct: jq1-processing
+          explanation: "Level 4.7 and the job-queue page: BLMOVE pending processing is atomic, so the id is always in exactly one list. RPOP would have removed it from Redis the moment it was popped. The reclaimer sweeps the processing list for jobs claimed longer ago than the visibility timeout."
+        - type: quiz
+          question: "Mukul: 'The reclaimer hands a slow job to a second worker, then the first one finishes as well. What did your claim token do, and what did it not do?'"
+          options:
+            - { id: jq2-once, label: "It makes the job run exactly once: the second finish is impossible" }
+            - { id: jq2-lock, label: "It locks the job, so the second worker never starts" }
+            - { id: jq2-label, label: "Nothing: the token only labels the job in the logs" }
+            - { id: jq2-fence, label: "It fenced the late complete, which changes nothing because the stored token is no longer the first worker's; it did not undo a side effect the first worker already caused, so a credit or a charge still needs an idempotency key" }
+          correct: jq2-fence
+          explanation: "Level 4.7 and the job-queue page: complete and fail are scripts that check the claim token first and return 0 if the worker no longer owns the job. Delivery is still at-least-once, so work with side effects (the credit of level 4.8) needs an idempotency key or a low retry count."
+        - type: quiz
+          question: "Mukul: 'Why does claim open a second connection? Redis is fast, just block on the one you have.'"
+          options:
+            - { id: jq3-block, label: "BLMOVE holds its connection while it waits, so on the shared client it would hold up every other request; take deps.redis.duplicate()" }
+            - { id: jq3-cluster, label: "So that the job can be routed to a different cluster node" }
+            - { id: jq3-speed, label: "A dedicated connection makes BLMOVE faster" }
+            - { id: jq3-token, label: "The claim token needs its own connection to be unique" }
+          correct: jq3-block
+          explanation: "Level 4.7 and the job-queue page: node-redis sends everything over one connection, so a blocking call on the shared client holds up every other request. duplicate() and connect() give the blocking call its own (the game closes it). The page's advice is one shared client, except for a long BLMOVE."
+    - rebuild_of: ch4-16-the-ops-wall
+      questions:
+        - type: quiz
+          question: "Mukul: 'Three samples per request, all day, every route. What stops your memory growing for ever?'"
+          options:
+            - { id: ow1-expire, label: "An EXPIRE of one day on each series" }
+            - { id: ow1-cron, label: "A nightly cron that runs KEYS ts:* and deletes the old series" }
+            - { id: ow1-nothing, label: "Nothing is needed: time series compress themselves" }
+            - { id: ow1-retention, label: "RETENTION 86400000 on each series: it drops samples older than a day, measured against the newest, and the series lives on" }
+          correct: ow1-retention
+          explanation: "Level 4.16 and the time-series page: RETENTION trims relative to the newest sample, so the series keeps a rolling window and needs no EXPIRE. An EXPIRE on the key would delete the whole series at the deadline and the graph would go blank, and KEYS in a cron is level 4b.3 again."
+        - type: quiz
+          question: "Mukul: 'Your minute buckets change shape every time the graph refreshes. What did you forget?'"
+          options:
+            - { id: ow2-align, label: "ALIGN 0 on TS.RANGE, so every bucket starts on a multiple of the bucket size and the boundaries stay put" }
+            - { id: ow2-retention, label: "The retention is too short" }
+            - { id: ow2-avg, label: "sum is the wrong aggregator: use avg for everything" }
+            - { id: ow2-sort, label: "The series has to be sorted again after each write" }
+          correct: ow2-align
+          explanation: "Level 4.16 and the time-series page: ALIGN 0 keeps bucket boundaries stable while the window moves. Without it the buckets start at the first sample of the requested range, so the same minute is cut differently on every refresh (the level's own explanation)."
+        - type: quiz
+          question: "Mukul: 'The CTO wants p99 latency across every route and says storing every request time is a waste. What do you use?'"
+          options:
+            - { id: ow3-zset, label: "A sorted set with every latency, then ZRANGE to the 99th percent position" }
+            - { id: ow3-average, label: "Average the per-minute averages and call it the p99" }
+            - { id: ow3-hll, label: "A HyperLogLog of the latencies" }
+            - { id: ow3-tdigest, label: "A t-digest: TDIGEST.ADD for each latency and TDIGEST.QUANTILE 0.99 for an estimate, in small fixed space" }
+          correct: ow3-tdigest
+          explanation: "Level 4.16 and the t-digest page: it estimates percentiles without storing every point, and COMPRESSION trades accuracy for memory. The answer is an estimate, which is the right trade for an ops wall. A sorted set grows with every request, and an average of averages is not a percentile."

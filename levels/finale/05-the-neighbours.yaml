@@ -1,0 +1,148 @@
+id: finale-05-the-neighbours
+chapter: finale
+title: "The neighbours"
+mode: decision
+
+story: |
+  `12:30  Harry Bhaiya: "the VP of engineering is joining for ten minutes. she asked me one thing: 'does he know when NOT to use it'"`
+
+  The last person in the loop has sat at the end of the table for the whole morning without saying a word. Now she closes her laptop. "You have
+  said Redis for three hours," she says, and she does not sound unkind. "Tell me what else would do this job, and when it would do it better."
+
+  There is nothing to build. These are six conversations you will have in real design meetings, where a colleague proposes something else
+  for work that Redis is doing in your design. The answers are reasoned, not quoted: this game never ran Memcached, Kafka or a CDN, and the
+  docs digest covers Redis only. Where a Redis docs page speaks to the comparison it is named; everything else says it is judgement.
+
+brainstorm:
+  prompt: "A colleague proposes a different tool for something your design does with Redis. What do you establish first?"
+  options:
+    - id: what-the-job-needs
+      label: "What the job needs: how much it may lose, how fast, at what scale, and what the team already runs and can operate"
+      is_reasonable: true
+    - id: defend-redis
+      label: "That Redis is better, because you have spent a week learning it"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: take their suggestion seriously first, and see whether it is one system fewer"
+      is_reasonable: true
+
+teach: |
+  There are no new commands. This level is the habit of a good design review, in four questions. Ask them before you defend anything:
+
+  1. **What may be lost, and for how long?** A cache may vanish (level 2.2 refills it). A queue of jobs may lose a few seconds on a crash only if
+     the jobs can be run again. A wallet may not lose anything (Chapter 5 spent five levels on what a restart costs).
+  2. **How fast, for how many?** A network hop saved is real for a hot key (level 4b.1), and a number nobody measured is not an argument. "At what
+     scale does it matter" is almost never answered by a rule; it is answered by running your own load.
+  3. **What do you already operate?** One more system is a pager, a bill, an upgrade and a failure mode (the managed-Redis level made the same
+     point from the other side). A tool that is "one system fewer" starts with a real advantage.
+  4. **Where does the truth live?** Everything in this game that mattered had a source of truth, and Redis was the part allowed to be fast.
+
+  What the Redis docs say about these neighbours is thin, and the levels cite it where it exists: the streams page compares a Redis consumer group
+  with Kafka (groups balance workers on one key; Kafka partitions are more like N different Redis keys), and the use-case pages describe the lists,
+  streams and caches this game built. Memcached, Postgres `SKIP LOCKED` and CDNs are other products with their own documentation, so each
+  explanation below says "reasoned, not from the docs" and means it. Treat them as arguments you could make in a meeting, and check the
+  specifics of any product you propose before you quote it.
+
+task: |
+  Answer the six questions and press Verify. There is nothing to type in the terminal. Choose the answer you would give in the design review.
+
+hints:
+  - "Each question has a tempting answer that says 'always' or 'never'. A real design answer says what it depends on."
+  - "If an answer names a number, check whether anyone in this game measured it. The honest ones say 'measure yours'."
+  - "Ask who benefits from each answer: the one that quietly protects your own favourite tool is usually the wrong one."
+
+verify:
+  - type: quiz
+    question: "1. You only need GET and SET of strings with an expiry, and losing everything on a restart is fine. One teammate says Memcached, another says the Redis you already run. What is the honest comparison?"
+    options:
+      - { id: n1-need, label: "Either does this job. Decide on what you already run and what you will want next: a second system to operate is a cost, and structures, atomic counters, persistence and replicas are what Redis adds the day you need them" }
+      - { id: n1-memcached-always, label: "Memcached, always: a cache should never be a database" }
+      - { id: n1-redis-always, label: "Redis, always: it can do everything the other can, so there is nothing to decide" }
+      - { id: n1-benchmark, label: "Whichever wins a one-day benchmark on a laptop" }
+    correct: n1-need
+    explanation: "Reasoned, not from the docs: the digest does not describe Memcached, so this answer is about your needs and not about its internals. What the Redis eviction page does say is that eviction is meant for caches, so Redis as a plain cache is an ordinary use. The cost of choosing it is a larger system than the job strictly needs; the benefit, if it is already there, is one system fewer."
+  - type: quiz
+    question: "2. The ball stream: a few thousand balls a minute at the busiest hour (a story number), two consumer groups, a day of replay. A senior says 'that is a Kafka job'. What is the honest answer?"
+    options:
+      - { id: n2-kafka-always, label: "He is right: streams in Redis are a toy" }
+      - { id: n2-pubsub, label: "Neither: pub/sub gives all of that" }
+      - { id: n2-depends, label: "Start with the Redis stream you already have. A consumer group balances workers on one stream key and a Kafka partition is closer to N Redis keys, so the day one key cannot carry the rate, or you need weeks of history that memory cannot hold, or the company already runs Kafka well, is the day to move" }
+      - { id: n2-redis-forever, label: "Stay on Redis for ever: adding consumers to the group scales a stream to any size" }
+    correct: n2-depends
+    explanation: "Reasoned, with the streams page's own comparison: Redis groups are server-side load balancing on one key, and Kafka partitions are more like N different Redis keys, so to scale you shard across several stream keys. The streaming use-case page says Redis can stand in for Kafka at moderate scale and short retention; that is a vendor-published claim, and nobody here measured the limit of one key, so measure yours before you decide either way."
+  - type: quiz
+    question: "3. The job queue. Postgres is already the truth for everything, and a teammate says a jobs table with SELECT ... FOR UPDATE SKIP LOCKED is one system fewer than the Redis list queue. How do you answer?"
+    options:
+      - { id: n3-cannot, label: "SKIP LOCKED cannot work: two workers always claim the same row" }
+      - { id: n3-redis-always, label: "Redis is always faster, so there is nothing to discuss" }
+      - { id: n3-pg-always, label: "Postgres is always the better queue, because Redis loses jobs" }
+      - { id: n3-fair, label: "Fair point: at a modest job rate it is one system fewer, and a job can be enqueued in the same transaction as the data it belongs to. The list queue earns its place when job writes and deletes start to compete with the main workload, or workers want blocking pops. There is no universal number, so measure" }
+    correct: n3-fair
+    explanation: "Reasoned, not from the digest: FOR UPDATE SKIP LOCKED is a Postgres feature that lets each worker lock a different row, and the digest only covers the Redis side (the job-queue page's lists with a visibility timeout and at-least-once delivery). A Redis queue can lose about a second of jobs on a crash with everysec (persistence page), which is a point for the table. The decision turns on the job rate and on how much the main database can spare."
+  - type: quiz
+    question: "4. Three players take most of the stats traffic, and a second of staleness is fine. Should the cache be a Map in the app, or Redis?"
+    options:
+      - { id: n4-never, label: "Never a Map: an in-process cache is always a bug" }
+      - { id: n4-memo, label: "A small bounded Map is right for a tiny hot set: no network hop, and a second of staleness is acceptable. It is per instance and has no invalidation, so keep Redis behind it for anything that must agree across copies, and bound its memory" }
+      - { id: n4-only-map, label: "Only the Map: once the hot set is small, Redis adds nothing" }
+      - { id: n4-connections, label: "Neither: raise the Postgres connection limit" }
+    correct: n4-memo
+    explanation: "Level 4b.1 did exactly this, with the rules from the client-side caching page: bound the memory and evict. What you buy is no network hop; what you pay is a copy per process and no invalidation until the memo's own timer runs out. Client-side caching with tracking (level 5.6) is the version where Redis tells the app when a key changed. Reasoned: the choice is about how stale each copy may be."
+  - type: quiz
+    question: "5. The stats page is the same for every visitor for 30 seconds. A teammate says: put a CDN in front of it and drop Redis. What is the honest answer?"
+    options:
+      - { id: n5-layers, label: "A CDN is the cheaper first layer for a page that is identical for everyone: those requests never reach your servers. Redis stays for what varies per user or must be shared, such as sessions, limits and 'around me' ranks, and for the data the page is built from when the CDN asks" }
+      - { id: n5-cdn-all, label: "A CDN can cache personalised pages too, so Redis is not needed anywhere" }
+      - { id: n5-redis-faster, label: "Redis is faster than a CDN, so the CDN adds nothing" }
+      - { id: n5-no-cdn, label: "A CDN cannot cache anything that changes every 30 seconds" }
+    correct: n5-layers
+    explanation: "Reasoned, not from the docs: a short TTL at the edge removes the request, and Redis removes the database query behind the requests that still arrive, so the two stack. Level 5.6's brainstorm listed a CDN in front of the stats page as a reasonable alternative for exactly this page. What a shared edge copy cannot be is different for each visitor."
+  - type: quiz
+    question: "6. Look back at everything you built today. What is the honest description of how Postgres and Redis fit together?"
+    options:
+      - { id: n6-redis-only, label: "Redis is the database and Postgres is a leftover: nothing in the game needed it" }
+      - { id: n6-pg-only, label: "Postgres alone would have done it, and Redis was never worth a second system" }
+      - { id: n6-both, label: "Postgres is the truth and Redis is the accelerator: caches refill from Postgres, the prefetch cache is reloaded against it, boards are rebuilt from its rows, and what must not be lost in Redis has a durability story chosen on purpose" }
+      - { id: n6-nightly, label: "Redis first, with a nightly copy to Postgres as a backup" }
+    correct: n6-both
+    explanation: "Reasoned, and it is what the whole game did: cache-aside refills from Postgres (level 2.2), the prefetch cache is reloaded from it (level 2.7), a leaderboard is rebuilt from corrected rows (level 3.8), and the data that has to survive was given persistence and a replica on purpose (Chapter 5). Whether a given key may be lost is the question that decides which side of the line it lives on."
+
+docs:
+  - https://redis.io/docs/latest/develop/data-types/streams/
+  - https://redis.io/docs/latest/develop/use-cases/streaming
+  - https://redis.io/docs/latest/develop/use-cases/job-queue
+  - https://redis.io/docs/latest/develop/reference/client-side-caching/
+  - https://redis.io/docs/latest/develop/reference/eviction/
+  - https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+
+reward:
+  xp: 60
+  badge: "Knows when not to"
+
+solutions:
+  reference:
+    - n1-need
+    - n2-depends
+    - n3-fair
+    - n4-memo
+    - n5-layers
+    - n6-both
+  wrong:
+    - option: n1-redis-always
+      expect: wrong
+      because: "'Always' is not an answer. A second tool costs operating time, and the other system may already be running. The honest answer is about the job and about what you operate."
+    - option: n2-redis-forever
+      expect: wrong
+      because: "More consumers in a group balance work on one stream key; they do not spread the key. The streams page says scaling means sharding across several stream keys, which is what a Kafka partition is closer to."
+    - option: n3-redis-always
+      expect: wrong
+      because: "Nobody here measured it. For a modest job rate a table is fine and is one system fewer, and the answer turns on the rate and on what the main database can spare."
+    - option: n4-only-map
+      expect: wrong
+      because: "A Map is per process and has no invalidation, so anything that must agree across copies still needs Redis behind it. It only replaces Redis for a tiny, forgiving hot set."
+    - option: n5-cdn-all
+      expect: wrong
+      because: "A shared edge copy is the same for every visitor. Sessions, limits and per-user ranks cannot live there, and the data behind the page still has to come from somewhere."
+    - option: n6-redis-only
+      expect: wrong
+      because: "Every cache refills from Postgres and every prefetch is reloaded from it. Without the source of truth there is nothing to rebuild from after a restart."

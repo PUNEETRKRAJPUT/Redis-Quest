@@ -1,0 +1,275 @@
+id: finale-04-the-gauntlet
+chapter: finale
+title: "The gauntlet"
+mode: decision
+
+story: |
+  `11:40  Harry Bhaiya: "lunch break is the hiring manager's whiteboard. fifteen problems, one line each. say the structure, or say 'not Redis'. both are good answers, bhai"`
+
+  The head of engineering does not want code. He has fifteen cards with one problem on each, and he reads them out at the speed of a person
+  who has done this fifty times. For every card you give one answer: a structure, a pattern, or "not Redis". Then he says "why?", and you
+  get one sentence.
+
+  There is nothing to build and nothing to run. The answers are reasoned model answers, not quotations from the docs: where a docs page
+  backs the structure, the explanation names it, and where the answer is judgement, the explanation says so. A good interview answer is
+  one you can defend, not one you can recite.
+
+brainstorm:
+  prompt: "Fifteen problem statements, each with one answer. What do you ask first, every time?"
+  options:
+    - id: shape-of-the-question
+      label: "What is the shape of the data and of the question (a yes or no, a distinct count, an order, a place, a log, a lock, a rate), and does it have to live in memory at all?"
+      is_reasonable: true
+    - id: reach-for-a-hash
+      label: "Nothing: reach for a hash, because a hash can hold anything"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: whether this data needs to be fast at all, or whether the database it came from can simply serve it"
+      is_reasonable: true
+
+teach: |
+  Fifteen problems, one method. Ask these in this order, out loud:
+
+  1. **What is the shape of the data, and of the question?** A yes or no per day, a count of different things, a membership test, an ordering,
+     a place on a map, a log that many readers replay, a lock, a rate. Each structure in the game answers one of these shapes, and the
+     compare-data-types page has the docs' own rules of thumb for choosing between them.
+  2. **What may be wrong, and by how much?** An estimate within a percent is a different tool from a "maybe" that the database confirms,
+     and both are different from a number that may never be off, which is a database's job (the persistence page lists what a crash can lose).
+  3. **Does it have to be in memory at all?** The FAQ is plain: Redis keeps its data in memory and has no plans for an on-disk backend. Something
+     huge, rarely read, or needing joins belongs somewhere else, and saying so is a complete answer.
+
+  The toolbox, by shape: a bit per integer in a known range is a bitmap; a count of distinct things within a percent is a HyperLogLog; "have I
+  seen this" with room for a "maybe" is a Bloom filter, or a cuckoo filter when entries must be removed; the heaviest few of an endless stream
+  is a Top-K; "near me" is a geo index; an ordered ranking is a sorted set; a replayable log with workers sharing it is a stream with consumer
+  groups; a live broadcast is pub/sub; one winner among many is a lock; a rate is a token bucket; a hot read of something slow is cache-aside.
+  And the answer that wins as often as any of them: not Redis.
+
+  The questions below are reasoned judgement, not docs quotations: more than one design can run, and the explanation says why one fits the
+  statement best.
+
+task: |
+  Answer all fifteen and press Verify. There is nothing to type in the terminal. Choose the design you would defend to the head of engineering,
+  not the first one that could work.
+
+hints:
+  - "Read the numbers and the small words in each statement: 'estimate', 'must never', 'once a day', 'millions' and 'seven years' each rule something in or out."
+  - "If two answers could both work, take the one that asks for no more precision, durability or speed than the statement does."
+  - "'Not Redis' is the right answer more than once, and it is wrong when the statement wants live answers at app speed from data that fits in memory."
+
+verify:
+  - type: quiz
+    question: "1. A login streak badge. For each of two million users: which of the last 365 days they opened the app, and 'seven in a row' has to be a cheap question."
+    options:
+      - { id: q01-hash, label: "A hash per user with a field for every date" }
+      - { id: q01-bitmap, label: "A string used as a bitmap per user, one bit per day: SETBIT to record a day, GETBIT or BITFIELD to read the last seven" }
+      - { id: q01-zset, label: "A sorted set of dates per user" }
+      - { id: q01-not-redis, label: "Not Redis: a login_days table in Postgres" }
+    correct: q01-bitmap
+    explanation: "Level 1.9 and the bitmaps page: the keys are integers in a known range, so one bit per day does it (365 bits is about 46 bytes, arithmetic and not a measurement). A hash or a sorted set holds the same yes or no at many times the memory (compare-data-types page), and a table answers it but not for two million users at the speed of opening the app."
+  - type: quiz
+    question: "2. How many different phones opened the match page today? About ten million of them, an answer within a percent or two is fine, and nobody wants a list of phone ids stored."
+    options:
+      - { id: q02-set, label: "A set of phone ids: SADD on every visit, SCARD at the end" }
+      - { id: q02-counter, label: "INCR a counter on every page open" }
+      - { id: q02-hll, label: "A HyperLogLog: PFADD on every visit, PFCOUNT for the number" }
+      - { id: q02-not-redis, label: "Not Redis: COUNT(DISTINCT phone_id) over a visits table, at night" }
+    correct: q02-hll
+    explanation: "Level 1.10 and the HyperLogLog page: up to 12 KB per key, a standard error of 0.81%, and no ids stored, which is also what the statement asked for. A set is exact but grows with every phone and keeps the ids, INCR counts opens and not different phones, and a nightly scan cannot answer 'today, so far'."
+  - type: quiz
+    question: "3. Is this coupon code still unused? Millions of codes. A code stops being unused when it is redeemed and goes back to unused when the order is cancelled. A fast 'no' in front of Postgres is wanted, and every 'yes' is confirmed there."
+    options:
+      - { id: q03-bloom, label: "A Bloom filter of unused codes" }
+      - { id: q03-set, label: "A set holding every unused code" }
+      - { id: q03-not-redis, label: "Not Redis: a unique index in Postgres, checked on every request" }
+      - { id: q03-cuckoo, label: "A cuckoo filter of unused codes: CF.EXISTS for the quick no, CF.DEL when a code is redeemed, CF.ADDNX when an order is cancelled" }
+    correct: q03-cuckoo
+    explanation: "Level 4.14 and the probabilistic pages: a Bloom filter cannot delete, which is the whole difficulty here, and the cuckoo page names coupon validation (remove on use) as its use case. A filter's 'yes' can be false (about 0.78% at the smallest bucket size), so every yes still goes to Postgres, which stays the truth. A set of millions of codes costs far more memory than a filter, and a Postgres check on every request is what the filter spares."
+  - type: quiz
+    question: "4. Show the ten names fans are mentioning most right now. Fans type nicknames, hashtags and misspellings by the million, most of them once. The counts need not be exact."
+    options:
+      - { id: q04-topk, label: "A Top-K: TOPK.ADD for every mention, TOPK.LIST for the ten" }
+      - { id: q04-zset, label: "A sorted set with one member per different string: ZINCRBY for every mention" }
+      - { id: q04-cms, label: "A count-min sketch, queried for every name seen" }
+      - { id: q04-not-redis, label: "Not Redis: GROUP BY name ORDER BY count in Postgres every few seconds" }
+    correct: q04-topk
+    explanation: "Reasoned, from the Top-K page (it names trending hashtags as its use case) and level 4.16, which mentions it: Top-K keeps only the K heaviest names in fixed space and lists them. A sorted set keeps a member for every misspelling ever typed, a count-min sketch answers 'how often did this name occur' for a name you ask about and does not list the leaders, and the Postgres query scans every mention every few seconds."
+  - type: quiz
+    question: "5. Which grounds are within 20 km of the fan who just opened the app? A few hundred grounds that almost never change, asked a hundred thousand times a minute (story numbers)."
+    options:
+      - { id: q05-hash, label: "A hash from ground to coordinates, with the distance maths done in the app over all of them" }
+      - { id: q05-zset-lat, label: "A sorted set scored by latitude, filtered by longitude in the app" }
+      - { id: q05-geo, label: "A geo index: GEOADD every ground once, GEOSEARCH with BYRADIUS 20 km from the fan's position" }
+      - { id: q05-not-redis, label: "Not Redis: a Postgres query with a distance function, on every request" }
+    correct: q05-geo
+    explanation: "Level 1.11 and the geospatial page: GEOADD once per ground (longitude first) and GEOSEARCH BYRADIUS answers 'within 20 km' directly. The hash and the latitude-only set make the app do the geometry over every ground on every request, and the Postgres query is fine for one request but not for a hundred thousand a minute over data that never changes."
+  - type: quiz
+    question: "6. Every ball is recorded. The scoring workers share the balls so that each is processed once, analytics wants to read the whole match again every night, and no ball may be lost when a worker dies."
+    options:
+      - { id: q06-pubsub, label: "Pub/sub: the workers subscribe, and so does analytics" }
+      - { id: q06-list, label: "A list: producers LPUSH, workers BLMOVE" }
+      - { id: q06-not-redis, label: "Not Redis: a Postgres table with a processed flag for each consumer" }
+      - { id: q06-stream, label: "A stream with a consumer group for the workers, and a second group or XRANGE for analytics" }
+    correct: q06-stream
+    explanation: "Levels 4.1 to 4.6 and the streams page: a stream keeps its entries, a consumer group hands each to one worker and holds it as pending until it is acknowledged (so a dead worker's balls can be reclaimed), and a second group or XRANGE replays the match. Pub/sub drops a message for a subscriber that is away, and a list hands each entry to one consumer and forgets it. A table can do this at a low rate, but you would write the blocking read and the pending list yourself."
+  - type: quiz
+    question: "7. The last place in a contest. Two hundred requests arrive in the same instant, and taking the place is three steps on Redis keys (check the slot count, take one, add the member) that must not interleave. Exactly one may win."
+    options:
+      - { id: q07-get-set, label: "GET the slot count and, if it is above zero, SET it one lower" }
+      - { id: q07-lock, label: "A lock key: SET lock:contest:<id> <token> NX PX <ttl>, do the three steps, release only if the value is still your token" }
+      - { id: q07-pubsub, label: "Every request PUBLISHes 'I want it' and the first subscriber to answer wins" }
+      - { id: q07-not-redis, label: "Not Redis: move the slots and members to Postgres and take a row lock" }
+    correct: q07-lock
+    explanation: "Level 4.10 and the distributed-locks page: SET NX PX gives exactly one winner and a lock that cannot outlive a crash, and the token makes the release safe. GET then SET is the race of level 3.9. Reasoned: for a single counter a Lua script would do (level 4.10 says so), a lock is only as safe as its holder is quick (level 4.11), so keep the work under it short and bounded; and moving the data to Postgres for one lock is more change than the problem needs."
+  - type: quiz
+    question: "8. At most ten OTP requests per user per minute, counted across every app server. A burst of ten is fine. Twenty around a minute boundary is not, and a hundred concurrent requests must not all get through."
+    options:
+      - { id: q08-bucket, label: "A token bucket in a Lua script: a hash per user with tokens and last_refill, read, decide and write in one step" }
+      - { id: q08-fixed, label: "A fixed window: INCR and EXPIRE per user" }
+      - { id: q08-memory, label: "A counter in each app server's own memory" }
+      - { id: q08-not-redis, label: "Not Redis: ask the SMS vendor to block abusers on their dashboard" }
+    correct: q08-bucket
+    explanation: "Levels 3.1 to 3.4 and the rate-limiter page, which recommends the token bucket. A fixed window lets twice the limit through around its boundary, a counter in each process does not agree across copies (level 3.1: twenty got through with two copies), and the vendor's dashboard blocks abusers after the OTPs were sent and invoiced."
+  - type: quiz
+    question: "9. A 'who is watching' strip on the match page. People join and leave all the time, and every open page should see the changes live."
+    options:
+      - { id: q09-stream, label: "A stream per match with every join and leave, replayed by each page" }
+      - { id: q09-presence, label: "Pub/sub for the joins and leaves, plus a key per viewer with a short TTL that their page keeps refreshing, so a page that opens late can read who is here now" }
+      - { id: q09-hll, label: "A HyperLogLog of viewer ids" }
+      - { id: q09-not-redis, label: "Not Redis: every page asks Postgres once a second" }
+    correct: q09-presence
+    explanation: "Reasoned, from levels 3.10 and 3.11 and the pub/sub page, which lists presence indicators among its uses: pub/sub carries the live changes but keeps nothing, so a durable record (here keys that expire when a viewer stops refreshing) is what a late page reads. A stream keeps every join and leave for ever, more than a who-is-here strip needs; a HyperLogLog counts but can neither list nor remove; and a poll per page per second is a lot of reads."
+  - type: quiz
+    question: "10. Rank forty thousand teams by points that change hundreds of times a second: the top ten on the home page, 'you are 14,203rd' on every profile, and teams on equal points must always come out in the same order."
+    options:
+      - { id: q10-list, label: "A list kept sorted in the app" }
+      - { id: q10-zset, label: "A sorted set: ZINCRBY for points, ZRANGE with REV for the top, ZREVRANK for a team's place" }
+      - { id: q10-topk, label: "A Top-K of the teams" }
+      - { id: q10-not-redis, label: "Not Redis: ORDER BY points DESC in Postgres on every request" }
+    correct: q10-zset
+    explanation: "Level 3.6 and the leaderboard page: the operations are O(log N), and teams on equal points fall back to the member name, so the order is stable (sorted-sets page). Top-K is approximate and has no exact rank, a list sorted in the app repeats on every read the sort a sorted set does once on write, and ORDER BY on every request is the O(N) sort the leaderboard page warns about (a vendor-published claim: measure yours)."
+  - type: quiz
+    question: "11. The player stats query takes four seconds, reads a million rows and cannot be rewritten before the toss. A hundred phones ask about the same three players, and the numbers change about once a match."
+    options:
+      - { id: q11-forever, label: "Cache the result in Redis with no expiry and fix the key when somebody complains" }
+      - { id: q11-memory, label: "Keep the results in each app server's own memory for an hour" }
+      - { id: q11-aside, label: "Cache-aside: a hash per player with a short TTL, refilled from Postgres on a miss, deleted when the player's row changes" }
+      - { id: q11-not-redis, label: "Not Redis: add a read replica of Postgres for the stats query" }
+    correct: q11-aside
+    explanation: "Levels 2.2 to 2.4 and the cache-aside page: a bounded TTL, a delete on write and a single-flight lock on a cold key. No expiry is stale for ever and fills memory (levels 2.3 and 4b.4), memory per app server is a copy per server with no invalidation (level 4b.1 uses it for one second, on one hot key), and a replica is a second box running the same four second query."
+  - type: quiz
+    question: "12. An audit log of every admin action: about 200 GB, kept for seven years, searched a few times a year by the compliance team."
+    options:
+      - { id: q12-not-redis, label: "Not Redis: a database on disk or an object store, partitioned by month" }
+      - { id: q12-stream, label: "A stream, trimmed to seven years by MINID" }
+      - { id: q12-ts, label: "A time series with a RETENTION of seven years" }
+      - { id: q12-zset, label: "A sorted set scored by timestamp" }
+    correct: q12-not-redis
+    explanation: "Reasoned, with the FAQ: Redis keeps its data in memory and has no plans for an on-disk backend, so this would be 200 GB of RAM for something read a few times a year. The time-series page says a series is not a replacement for petabyte-scale cold archival: this is smaller than that, but the point holds."
+  - type: quiz
+    question: "13. A finance report that joins five tables, run once a night for the accounts team."
+    options:
+      - { id: q13-hashes, label: "A hash per row of each table, joined in the app" }
+      - { id: q13-zsets, label: "Sorted sets as indexes on every join column" }
+      - { id: q13-stream, label: "A stream of changes, folded into the report by a consumer" }
+      - { id: q13-not-redis, label: "Not Redis: run the join in Postgres, on the source of truth, at night when nobody is waiting" }
+    correct: q13-not-redis
+    explanation: "Reasoned, with the secondary-indexing page: Redis natively offers primary-key access, and for complex queries the page points to a relational store. A nightly report has no latency need that would justify copying five tables into memory and keeping the copies in step."
+  - type: quiz
+    question: "14. A 50 MB highlights video that every phone downloads once and nobody ever changes."
+    options:
+      - { id: q14-chunks, label: "A list of 1 MB chunks, read back in order" }
+      - { id: q14-not-redis, label: "Not Redis: a file in object storage behind a CDN" }
+      - { id: q14-string, label: "A Redis string holding the whole file" }
+      - { id: q14-aside, label: "Cache-aside over the file's real home, so Redis holds the popular copies" }
+    correct: q14-not-redis
+    explanation: "Reasoned, with the strings page and the FAQ: a string can hold 512 MB, so it would fit, but Redis's limit is memory, and a file that never changes and is the same for everyone is what object storage and a CDN are for. Every megabyte in Redis is a megabyte of the memory you pay the most for."
+  - type: quiz
+    question: "15. A running total of points issued to students, read once a day by the warden's audit. It must be exactly right, even after a power cut."
+    options:
+      - { id: q15-incr, label: "INCRBY on a Redis string" }
+      - { id: q15-hash, label: "A hash of per-day counters with HINCRBY" }
+      - { id: q15-not-redis, label: "Not Redis: a row in Postgres, updated in a transaction" }
+      - { id: q15-hll, label: "A HyperLogLog of the awards" }
+    correct: q15-not-redis
+    explanation: "Reasoned, with the persistence page: INCRBY is exact and atomic, but with the log on everysec a power cut can lose about a second, and replication is asynchronous, so an acknowledged write can still be lost in a failover. The wallet of Chapter 1 lives in Redis because phones read and spend it all day; a total nobody reads until tomorrow has no such need, so let the database built for durability keep it. A HyperLogLog is an estimate by design."
+
+docs:
+  - https://redis.io/docs/latest/develop/data-types/compare-data-types
+  - https://redis.io/docs/latest/develop/data-types/strings/bitmaps
+  - https://redis.io/docs/latest/develop/data-types/probabilistic/hyperloglogs
+  - https://redis.io/docs/latest/develop/data-types/probabilistic/cuckoo-filter
+  - https://redis.io/docs/latest/develop/data-types/probabilistic/top-k
+  - https://redis.io/docs/latest/develop/data-types/geospatial/
+  - https://redis.io/docs/latest/develop/data-types/streams/
+  - https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/
+  - https://redis.io/docs/latest/develop/use-cases/rate-limiter
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+  - https://redis.io/docs/latest/develop/get-started/faq
+
+reward:
+  xp: 100
+  badge: "Through the gauntlet"
+
+solutions:
+  reference:
+    - q01-bitmap
+    - q02-hll
+    - q03-cuckoo
+    - q04-topk
+    - q05-geo
+    - q06-stream
+    - q07-lock
+    - q08-bucket
+    - q09-presence
+    - q10-zset
+    - q11-aside
+    - q12-not-redis
+    - q13-not-redis
+    - q14-not-redis
+    - q15-not-redis
+  wrong:
+    - option: q01-hash
+      expect: wrong
+      because: "A hash holds the same yes or no, but a field per date costs many times the memory of a bit per day, for two million users. The compare-data-types page sends bit-sized flags to strings."
+    - option: q02-set
+      expect: wrong
+      because: "A set is exact, but it grows with every phone and stores the ids the statement said nobody wants. A HyperLogLog needs at most 12 KB and stores no ids."
+    - option: q03-bloom
+      expect: wrong
+      because: "A Bloom filter cannot delete. A redeemed code could never leave the filter of unused codes, which is exactly the requirement; the cuckoo filter supports CF.DEL."
+    - option: q04-cms
+      expect: wrong
+      because: "A count-min sketch estimates how often a name you ask about occurred; it has no command that lists the heaviest names. Top-K keeps and lists them."
+    - option: q05-hash
+      expect: wrong
+      because: "With a hash the app must compute the distance to every ground on every request, a hundred thousand times a minute. GEOSEARCH BYRADIUS does it inside Redis."
+    - option: q06-pubsub
+      expect: wrong
+      because: "Pub/sub is at-most-once and keeps nothing: a worker that is away loses the ball for good, and analytics cannot read the match again at night."
+    - option: q07-get-set
+      expect: wrong
+      because: "Between the GET and the SET another request reads the same count, so two hundred requests can all see a free place. The check and the take have to be one protected step."
+    - option: q08-fixed
+      expect: wrong
+      because: "A fixed window lets up to twice the limit through around its boundary, and the statement rules that out. A token bucket tracks what has been spent and refilled."
+    - option: q09-stream
+      expect: wrong
+      because: "A stream keeps every join and leave for ever and every page would replay the whole history to learn who is here now. It is more than the strip needs and does not forget a viewer who simply closed the tab."
+    - option: q10-topk
+      expect: wrong
+      because: "Top-K is approximate and has no exact rank, so it cannot say 'you are 14,203rd'. A sorted set ranks every member exactly."
+    - option: q11-forever
+      expect: wrong
+      because: "A key with no expiry is stale for ever and memory only grows (levels 2.3 and 4b.4). A TTL bounds the staleness and a delete on write fixes it sooner."
+    - option: q12-ts
+      expect: wrong
+      because: "A series with seven years of retention keeps 200 GB in memory for something read a few times a year. Retention trims the window, but the window is still all in RAM."
+    - option: q13-hashes
+      expect: wrong
+      because: "Copying five tables into hashes and joining them in the app rebuilds, badly, what Postgres does with one query on the source of truth, for a report nobody waits for."
+    - option: q14-string
+      expect: wrong
+      because: "A string can hold 512 MB, so it works, but it puts a file that never changes into the memory you pay the most for. Object storage with a CDN is built for it."
+    - option: q15-incr
+      expect: wrong
+      because: "INCRBY is exact and atomic, but with everysec a power cut can lose about a second and a failover can lose an acknowledged write. Nothing here needs Redis's speed, so the durable database should hold it."

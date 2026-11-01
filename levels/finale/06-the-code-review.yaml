@@ -1,0 +1,206 @@
+id: finale-06-the-code-review
+chapter: finale
+title: "The code review"
+mode: decision
+
+story: |
+  `14:05  Teja: "tiny fix pls approve before standup. works on my laptop 🙏"`
+
+  The last exercise of the day is not a build. The hiring manager shares his screen: a pull request from the fest app's repository, three
+  files, in Teja's handwriting, with a description that says "tiny fix". "A teammate in a hurry," he says. "Tell me what you would not merge,
+  and tell me why. I am not interested in style. I am interested in what happens at two in the morning."
+
+  There is no Redis to run. Everything you need to catch is something this game made you pay for, once, in some level. The PR is below, in
+  the teach section, as the files would appear on your screen. Read it the way you would read a stranger's code on a bad day.
+
+brainstorm:
+  prompt: "A pull request touches Redis code and the author says 'works on my laptop'. How do you read it?"
+  options:
+    - id: three-questions-per-call
+      label: "For every Redis call ask what happens when it fails, when two of them run at once, and when nobody ever cleans up"
+      is_reasonable: true
+    - id: read-for-style
+      label: "Read for naming and formatting first, and trust that a working demo means the logic is right"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: first ask whether this code needs Redis at all, then review what is left"
+      is_reasonable: true
+
+teach: |
+  Teja's pull request, "tiny fix, works on my laptop", touches three files. The answers are reasoned about these exact lines: where an
+  explanation names a level, that is where the mistake was the lesson.
+
+  **`workspace/review/cache.js`** (the stats page, now reading Redis first)
+
+  ```js
+  // workspace/review/cache.js
+  // tiny fix: the stats page was slow, so it reads Redis first now. works on my laptop
+  const toStrings = (row) =>
+    Object.fromEntries(Object.entries(row).map(([k, v]) => [k, v === null ? '' : String(v)]));
+
+  export default async function getPlayerStats({ redis, db }, playerId) {
+    const key = `cache:player:${playerId}`;
+    try {
+      const cached = await redis.hGetAll(key);
+      if (Object.keys(cached).length > 0) return cached;
+
+      // only one request should load a missing player
+      const lockKey = `lock:${key}`;
+      if (await redis.get(lockKey)) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return getPlayerStats({ redis, db }, playerId);
+      }
+      await redis.set(lockKey, '1', { expiration: { type: 'EX', value: 5 } });
+
+      const { rows } = await db.query('SELECT * FROM player_stats($1)', [playerId]);
+      if (rows.length === 0) return null;
+      await redis.hSet(key, toStrings(rows[0]));
+      return rows[0];
+    } catch (err) {
+      return null;
+    }
+  }
+  ```
+
+  **`workspace/review/worker.js`** (the end-of-match badge worker)
+
+  ```js
+  // workspace/review/worker.js
+  // end-of-match badge worker. one client, one loop. works on my laptop
+  import { createClient } from 'redis';
+
+  const redis = createClient({ url: process.env.REDIS_URL });
+  await redis.connect();
+
+  async function award(userId, badge) {
+    const conn = createClient({ url: process.env.REDIS_URL });
+    await conn.connect();
+    await conn.sAdd(`badges:${userId}`, badge);
+  }
+
+  export async function run() {
+    for (;;) {
+      const id = await redis.rPop('queue:jobs:pending');
+      if (id === null) {
+        await redis.blPop('queue:jobs:wakeup', 5);
+        continue;
+      }
+      const job = JSON.parse(await redis.hGet(`queue:jobs:job:${id}`, 'payload'));
+      for (const key of await redis.keys('user:*')) {
+        await award(key.slice('user:'.length), job.badge);
+      }
+    }
+  }
+  ```
+
+  **`workspace/review/lock.js`** (only one request may take the last slot of a contest)
+
+  ```js
+  // workspace/review/lock.js
+  // only one request may take the last slot of a contest at a time
+  export async function withContestLock({ redis, db }, contestId, work) {
+    const key = `lock:contest:${contestId}`;
+    const got = await redis.set(key, '1', { condition: 'NX' });
+    if (got !== 'OK') return { ok: false, reason: 'busy' };
+    await redis.expire(key, 30);
+    try {
+      const { rows } = await db.query('SELECT slots FROM contests WHERE id = $1', [contestId]);
+      await work(rows[0]);
+      return { ok: true };
+    } finally {
+      await redis.del(key);
+    }
+  }
+  ```
+
+  How to review it, in the order you would on the day: for each call, **what if it fails**, **what if two run at once**, **what if nobody ever
+  cleans it up**. Then check the lines the author was proud of, because some of them are fine. The three questions below list lines of each file
+  as if they were problems. Some are, and some are lines the game taught you to write: ticking a fine line is a wrong answer, just as
+  missing a real problem is.
+
+task: |
+  Three questions, one per file. In each, tick every problem and only the problems, then press Verify. There is nothing to type in the terminal.
+
+hints:
+  - "For each Redis call ask three things: what if it fails, what if two of them run at once, and what if nobody ever cleans it up."
+  - "Some of the lines described as problems are lines you wrote yourself, earlier in the game, on purpose. Ask which level taught each one before you tick it."
+  - "Each file has between four and six real problems. A tick on a line that is fine counts against you, so do not tick on a hunch."
+
+verify:
+  - type: quiz
+    question: "Tick every problem in workspace/review/cache.js."
+    options:
+      - { id: c-no-ttl, label: "`redis.hSet(key, toStrings(rows[0]))` writes the hash and nothing ever gives it an expiry, so a cached player stays as it was for ever" }
+      - { id: c-key-name, label: "The key `cache:player:<id>` is long and readable: a short random name would save memory" }
+      - { id: c-check-then-set, label: "The lock is taken with a `get` and then a `set`: two requests can both see no lock and both go on to load the player" }
+      - { id: c-hit-test, label: "`Object.keys(cached).length > 0` is the wrong test for a hit: `hGetAll` on a missing key returns null, and the code should compare with null" }
+      - { id: c-swallow, label: "`catch (err) { return null }` turns a Redis outage into `null`, which the page shows as 'no such player'" }
+      - { id: c-wrap-pg, label: "The `try` also covers the Postgres query, so a database error is swallowed as well and never reaches the caller" }
+      - { id: c-lock-key, label: "The lock is its own key, `lock:cache:player:<id>`; it should live inside the player's hash" }
+      - { id: c-no-negative, label: "An id that is not a player returns `null` and caches nothing, so every request for it from a bot is a Postgres query" }
+      - { id: c-to-strings, label: "`toStrings` changes the row before it is cached, so the cache holds different data from Postgres" }
+    correct: [c-no-ttl, c-check-then-set, c-swallow, c-wrap-pg, c-no-negative]
+    explanation: "Real problems, and where each was the lesson. No expiry on the hash: level 2.2, where a cached row with no TTL is stale for ever, and level 4b.4 for memory that only climbs. A get then a set for the lock: level 2.4, where the lock is one `SET ... NX PX` so that exactly one caller wins. `catch` returning null: level 2.10, where a Redis failure is a miss and Postgres answers, and level 2.5, where null means 'not a player'. The `try` that covers Postgres: level 2.10 again, 'do not catch Postgres errors as if they were Redis ones'. No sentinel for an unknown id: level 2.5, negative caching with a shorter TTL. Fine lines: the key name follows the `object-type:id` scheme (the keyspace page, and the checklist of level 5.13); `hGetAll` on a missing key returns an empty object, not null (the first hint of level 2.2); a lock in its own key is the pattern of level 2.4; and `toStrings` is the null-to-empty-string conversion level 2.2 asks for, since a hash holds strings only."
+  - type: quiz
+    question: "Tick every problem in workspace/review/worker.js."
+    options:
+      - { id: w-keys, label: "`redis.keys('user:*')` inside the loop walks the whole keyspace in one command for every job, and blocks Redis for everyone while it does" }
+      - { id: w-payload-hash, label: "The job's data sits in a hash, `queue:jobs:job:<id>`, and only the id is on the list: it should all be one JSON string on the list" }
+      - { id: w-client-per-job, label: "`award` creates a new client for every call and never closes it, so a connection is leaked for every user of every job" }
+      - { id: w-sadd-twice, label: "`sAdd` of the badge can give the same badge twice when a job is retried" }
+      - { id: w-blpop-shared, label: "`redis.blPop(...)` on the shared client holds its connection while it waits, so every other command from this worker queues behind it" }
+      - { id: w-module-client, label: "One client is created at module level and connected once, so the file holds a connection open for ever" }
+      - { id: w-rpop-claim, label: "`redis.rPop(...)` claims the job by removing it from Redis, so a worker that dies holding it loses the job" }
+      - { id: w-set-per-user, label: "Badges are one set per user, `badges:<userId>`: that is too many keys, and one big hash would be better" }
+    correct: [w-keys, w-client-per-job, w-blpop-shared, w-rpop-claim]
+    explanation: "Real problems, and where each was the lesson. KEYS in a loop: level 4b.3, where a cron that ran KEYS stalled the server and SCAN in pages is the cure. A client per call, never closed: level 4b.6, where connected_clients went from 9 to 208. A blocking pop on the shared client: level 4.7, where BLMOVE needs `duplicate()` because a blocking call holds its connection. RPOP to claim: level 4.7, where BLMOVE moves the id into a processing list in one step so a crash does not lose the job. Fine lines: the job's id on the list and its fields in a hash is the job-queue page's design (level 4.7); `SADD` into a set cannot award the same badge twice, so a retried job is harmless there (it is the idempotent part of the file); one shared client per process is the rule of levels 4b.6 and 5.13; and one small set per user is many small keys, which is not the problem of level 4b.2, where it was one hash with three lakh fields."
+  - type: quiz
+    question: "Tick every problem in workspace/review/lock.js."
+    options:
+      - { id: l-nx, label: "`condition: 'NX'` on the `set` is a mistake: the lock should be written every time, so that the newest caller wins" }
+      - { id: l-set-expire, label: "The `set` and the `expire` are two commands: if the process dies between them, the lock has no expiry and nobody can ever take it again" }
+      - { id: l-per-contest, label: "The key is per contest, `lock:contest:<id>`: a single global lock would be safer" }
+      - { id: l-constant-value, label: "The value is always `'1'`, so nobody can tell whose lock it is" }
+      - { id: l-read-inside, label: "The query reads `slots` while the lock is held: it should read before taking the lock, to keep the lock short" }
+      - { id: l-plain-del, label: "`del(key)` in the `finally` removes the lock even when it is now somebody else's, because ours may have expired while `work` ran" }
+      - { id: l-no-timeout, label: "The Postgres query runs under the lock with no timeout, so a slow one can outlive the 30 second lock and let a second caller in while the first is still working" }
+      - { id: l-deps, label: "The function takes `{ redis, db }` from its caller instead of creating a client for the lock" }
+    correct: [l-set-expire, l-constant-value, l-plain-del, l-no-timeout]
+    explanation: "Real problems, and where each was the lesson. SET then EXPIRE: level 4.10, where the lock is a single `SET ... NX PX` so that it can never exist without its deadline. A constant value and a plain DEL: levels 4.10 and 4.11 and the distributed-locks page, where the value is a random token and the release deletes only if the value is still yours (a script, or DELEX ... IFEQ on Redis 8.4). No bound on the work: level 4.11, where a holder that is slower than its lock loses it and two callers are inside at once; set a timeout shorter than the lock. Fine lines: `NX` is what makes exactly one caller win (level 4.10); one lock per contest is the narrowest lock and the best one, because a global lock makes unrelated contests wait; reading the slots under the lock is the whole point, since check and take must happen together; and sharing the app's client through `deps` is the rule of level 4b.6."
+
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+  - https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+  - https://redis.io/docs/latest/develop/use-cases/job-queue
+  - https://redis.io/docs/latest/develop/clients/nodejs/
+
+reward:
+  xp: 120
+  badge: "Approved with comments"
+
+solutions:
+  reference:
+    - c-no-ttl
+    - c-check-then-set
+    - c-swallow
+    - c-wrap-pg
+    - c-no-negative
+    - w-keys
+    - w-client-per-job
+    - w-blpop-shared
+    - w-rpop-claim
+    - l-set-expire
+    - l-constant-value
+    - l-plain-del
+    - l-no-timeout
+  wrong:
+    - option: c-hit-test
+      expect: wrong
+      because: "Not a problem. In node-redis, HGETALL on a key that does not exist returns an empty object, not null, so looking at whether it has any keys is the right test for a hit (the first hint of level 2.2). Comparing with null would treat every miss as a hit."
+    - option: w-sadd-twice
+      expect: wrong
+      because: "Not a problem. A set holds each member once, so adding the same badge again changes nothing: that line is the idempotent part of the file. The real risks are around it: the claim, the blocking pop, the KEYS and the leaked clients."
+    - option: l-read-inside
+      expect: wrong
+      because: "Not a problem. The point of the lock is that check and take happen together: reading the slot count before taking the lock would let two callers read the same number. Keep the work under the lock short and bounded, but do not move the read out."
