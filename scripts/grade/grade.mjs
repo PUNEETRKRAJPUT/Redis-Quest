@@ -487,6 +487,55 @@ async function restoreAfterOps(wasDown) {
       `stack had been recreated: POST /api/progress/restore -> ${r ? r.status : 'no answer'}`,
     );
   }
+  // The topology too: a Sentinel level leaves sentinels and a replica running, and a Sentinel that remembers
+  // another master demotes the returning `redis` to a replica minutes later, after which every write in every
+  // later level answers READONLY (seen in the first ops-mode run: six finale rows). Stop the profile services the
+  // scripts may have started and make `redis` a master again before the next level.
+  if (isolated()) {
+    const profiles = [
+      '--profile',
+      'crash',
+      '--profile',
+      'replica',
+      '--profile',
+      'sentinel',
+      '--profile',
+      'cluster',
+    ];
+    const extras = [
+      'redis-nopersist',
+      'redis-replica',
+      'sentinel-1',
+      'sentinel-2',
+      'sentinel-3',
+      'redis-c1',
+      'redis-c2',
+      'redis-c3',
+      'redis-c4',
+      'redis-c5',
+      'redis-c6',
+    ];
+    const running = String(
+      compose([...profiles, 'ps', '--status', 'running', '--services']).stdout ?? '',
+    )
+      .split('\n')
+      .filter((x) => extras.includes(x.trim()));
+    if (running.length) {
+      const r = compose([...profiles, 'stop', ...running]);
+      notes.push(`stopped profile services left running: ${running.join(', ')} (exit ${r.status})`);
+    }
+    const role = async () => {
+      const r = await cli('INFO replication').catch(() => null);
+      return /role:(\w+)/.exec(String(r?.reply ?? ''))?.[1] ?? null;
+    };
+    if ((await role()) === 'slave') {
+      const r = await cli('REPLICAOF NO ONE').catch(() => null);
+      const master = await waitFor(async () => (await role()) === 'master', 20_000, 1000);
+      notes.push(
+        `redis was a replica after the script; REPLICAOF NO ONE -> ${r?.reply ?? 'no answer'}; ${master ? 'master again' : 'NOTE still not master after 20 s'}`,
+      );
+    }
+  }
   return notes;
 }
 

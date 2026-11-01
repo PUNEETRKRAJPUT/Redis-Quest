@@ -173,6 +173,8 @@ ch5, leave the replica and Sentinels for the next level on purpose). A reference
 a later level is a content bug: list it in `scripts/grade/known-content-bugs.tsv`.
 Expect extra time: the ch5 failovers alone take a few minutes, `./scripts/start` rebuilds the image.
 
+After verify the harness also resets the topology on an isolated project: it stops any profile service the script left running (the no-persistence node, the replica, the sentinels, the cluster nodes) and, if `redis` reports `role:slave`, runs `REPLICAOF NO ONE` and waits for `role:master`. A Sentinel that remembers another master would otherwise demote the returning `redis` minutes later and every later write would answer `READONLY`.
+
 ## Pool levels and the portfolio event (E-04)
 
 **A pool level** (`interview.pool`, see `levels/README.md`) has no `verify` and no `solutions` of its own. The harness
