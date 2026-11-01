@@ -410,13 +410,36 @@ async function verifyWithChannelPublisher(lv, id, answers, channels) {
   const ctx = ctxOf(lv);
   const jobs = new Map(); // verifier index -> { channel, message, delay, timer, started, sent }
   for (const { v, index } of channels) {
+    if (v.kind === 'key_expired') {
+      // The engine sees an expired-key event only while it waits, so the key is set during the wait with a
+      // one second life, once (a second SET would make a new key after the first one expired).
+      const key = renderTemplate(String(v.match.key), ctx);
+      jobs.set(index, {
+        channel: key,
+        command: `SET ${quoteArg(key)} harness-probe EX 1`,
+        once: true,
+        timer: null,
+        delay: null,
+        started: false,
+        sent: 0,
+      });
+      continue;
+    }
     const channel = renderTemplate(String(v.match.channel), ctx);
     const m = v.match.message;
     const message =
       m === undefined
         ? DEFAULT_CHANNEL_MESSAGE
         : renderTemplate(typeof m === 'string' ? m : JSON.stringify(m), ctx);
-    jobs.set(index, { channel, message, timer: null, delay: null, started: false, sent: 0 });
+    jobs.set(index, {
+      channel,
+      command: `PUBLISH ${quoteArg(channel)} ${quoteArg(message)}`,
+      once: false,
+      timer: null,
+      delay: null,
+      started: false,
+      sent: 0,
+    });
   }
   const stop = (job) => {
     clearTimeout(job.delay);
@@ -431,9 +454,9 @@ async function verifyWithChannelPublisher(lv, id, answers, channels) {
     if (name === 'verify_check_started' && !job.started) {
       job.started = true;
       const publish = () => {
-        if (job.sent >= 10) return stop(job);
+        if (job.sent >= 10 || (job.once && job.sent >= 1)) return stop(job);
         job.sent += 1;
-        cli(`PUBLISH ${quoteArg(job.channel)} ${quoteArg(job.message)}`).catch(() => undefined);
+        cli(job.command).catch(() => undefined);
       };
       // SUBSCRIBE needs a moment to land after the check starts, so the first PUBLISH is not immediate.
       job.delay = setTimeout(() => {
@@ -484,7 +507,11 @@ async function verifyWithEvents(lv, id, answers, good) {
   if (scaled) notes.push(await simulateScale(lv, scaled.v.match?.instances));
   if (evs.some(({ v }) => v.kind === 'custom' && v.match?.name === 'ticker_gap'))
     notes.push(await tickerGapDance());
-  const channels = evs.filter(({ v }) => v.kind === 'channel_message' && v.match?.channel);
+  const channels = evs.filter(
+    ({ v }) =>
+      (v.kind === 'channel_message' && v.match?.channel) ||
+      (v.kind === 'key_expired' && v.match?.key),
+  );
   if (channels.length) {
     const r = await verifyWithChannelPublisher(lv, id, answers, channels);
     notes.push(r.note);
@@ -730,6 +757,14 @@ async function gradeLevel(lv) {
     } else if (ext === '.redis') {
       await start(id);
       transcript = await runRedisFile(file, ctxOf(lv));
+      // FT.CREATE indexes the documents that already exist in the background; a check that counts them a
+      // few milliseconds later can see 0. Give it the moment a person typing the next command would.
+      if (transcript.some((t) => /^FT\.CREATE\b/i.test(t.line))) {
+        await sleep(1500);
+        note = [note, 'waited 1.5 s after FT.CREATE for background indexing']
+          .filter(Boolean)
+          .join('; ');
+      }
     } else if (ext === '.sh') {
       await start(id);
       log(`running ${s.path} on this Mac (--run-ops)`);

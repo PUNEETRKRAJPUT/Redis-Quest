@@ -64,7 +64,8 @@ teach: |
 task: |
   The game dropped any old `idx:contest` and wrote eight contests. Run these in the game terminal.
 
-  1. Create the index:
+  1. Create the index (it indexes the existing documents in the background; if a count reads 0 straight after, run
+     `FT.INFO idx:contest` and wait for `percent_indexed` to reach 1 before you press Verify):
      `FT.CREATE idx:contest ON JSON PREFIX 1 contest: SCHEMA $.name AS name TEXT $.hostel AS hostel TAG $.entry AS entry NUMERIC SORTABLE $.tags[*] AS tags TAG`
   2. Find the contests of Shivneri Hostel (`h-c-02-2`) that cost 50 points or less, with their name and entry fee:
      `FT.SEARCH idx:contest '@hostel:{h\-c\-02\-2} @entry:[0 50]' RETURN 2 name entry`

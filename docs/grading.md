@@ -78,8 +78,13 @@ slot's default `undefined`, which the engine reports as the slot failing, so nam
 
 A level can wait for something that happens while it verifies. The harness produces that event for a solution
 declared `right` or `works_but_wrong`, and produces nothing for one declared `wrong` (the same rule `answer` and
-`quiz` follow). Levels without these event kinds are graded exactly as before. Three rules (E-01):
+`quiz` follow). Levels without these event kinds are graded exactly as before. Four rules (E-01, C4):
 
+- **`key_expired`** (`match.key`). The engine subscribes to expired-key events only while the check waits, so
+  when `verify_check_started` arrives for that verifier the harness runs `SET <key> harness-probe EX 1` once through
+  `/api/cli`; the key expires inside the wait. The level's own reference may set the key too; that is for the
+  learner, not for the harness. Also: after a `.redis` solution that ran `FT.CREATE` the harness waits 1.5 s before
+  verifying, because the index fills from existing documents in the background.
 - **`service_scaled`** (`match.instances: N`, N is 2 in Chapter 3). Before calling verify the harness POSTs
   `/internal/metrics` once a second for 3 s as a second instance, id `grader-instance-2` (`routes: {}`,
   `windowMs: 1000`, `at` on a second boundary). The engine's own emitter then fires: the harness never posts the
