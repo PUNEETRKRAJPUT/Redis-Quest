@@ -135,4 +135,116 @@ export const SLOTS: readonly SlotDef[] = [
     returns: 'truthy to allow, falsy to reject (429); { allowed } also accepted',
     baseline: b.rateLimitAllow,
   },
+  {
+    name: 'points.consume',
+    file: 'ch4/points-consume.js',
+    signature: '(deps, matchId, consumer, count)',
+    returns:
+      '{ processed: string[] }: the entry ids this call processed and acked, in order (stream match:<matchId>:balls, group points)',
+    baseline: b.pointsConsume,
+  },
+  {
+    name: 'points.sweep',
+    file: 'ch4/points-sweep.js',
+    signature: '(deps, matchId, consumer, minIdleMs, maxDeliveries)',
+    returns:
+      '{ reclaimed: string[], deadLettered: string[] }: entry ids taken over from dead consumers and entry ids moved to match:<matchId>:balls:dead',
+    baseline: b.pointsSweep,
+  },
+  {
+    name: 'jobs.enqueue',
+    file: 'ch4/jobs-enqueue.js',
+    signature: '(deps, payload)',
+    returns: 'the new job id (a non-empty string)',
+    baseline: b.jobsEnqueue,
+  },
+  {
+    name: 'jobs.claim',
+    file: 'ch4/jobs-claim.js',
+    signature: '(deps, worker, timeoutMs)',
+    returns: '{ id, payload, token, attempts }, or null when nothing arrived within timeoutMs',
+    baseline: b.jobsClaim,
+  },
+  {
+    name: 'jobs.complete',
+    file: 'ch4/jobs-complete.js',
+    signature: '(deps, id, token, result)',
+    returns:
+      'true when this worker still owned the job and it is now completed, false otherwise (409 not_owner)',
+    baseline: b.jobsComplete,
+  },
+  {
+    name: 'jobs.fail',
+    file: 'ch4/jobs-fail.js',
+    signature: '(deps, id, token, error, maxAttempts)',
+    returns:
+      '"retry" (back to pending), "failed" (gave up) or false when this worker no longer owns the job (409 not_owner)',
+    baseline: b.jobsFail,
+  },
+  {
+    name: 'jobs.reclaim',
+    file: 'ch4/jobs-reclaim.js',
+    signature: '(deps, visibilityMs)',
+    returns: 'the number of jobs moved from processing back to pending',
+    baseline: b.jobsReclaim,
+  },
+  {
+    name: 'jobs.schedule',
+    file: 'ch4/jobs-schedule.js',
+    signature: '(deps, payload, runAtMs)',
+    returns:
+      'the new job id; the job becomes pending once runAtMs (epoch ms) has passed and promoteDue has run',
+    baseline: b.jobsSchedule,
+  },
+  {
+    name: 'jobs.promoteDue',
+    file: 'ch4/jobs-promote.js',
+    signature: '(deps, nowMs)',
+    returns: 'the number of jobs moved from queue:jobs:delayed to queue:jobs:pending',
+    baseline: b.jobsPromoteDue,
+  },
+  {
+    name: 'wallet.credit',
+    file: 'ch4/wallet-credit.js',
+    signature: '(deps, userId, amount, idempotencyKey)',
+    returns: '{ credited: boolean, balance: number }; the same idempotencyKey must credit once',
+    baseline: b.walletCredit,
+  },
+  {
+    name: 'contest.claimLastSlot',
+    file: 'ch4/contest-last-slot.js',
+    signature: '(deps, contestId, userId)',
+    returns:
+      'true when this user got a slot, false when none was left (strictly a boolean; 409 contest_full)',
+    baseline: b.contestClaimLastSlot,
+  },
+  {
+    name: 'sessions.expireWithJitter',
+    file: 'ch4/sessions-jitter.js',
+    signature: '(deps, keys, baseSeconds, jitterSeconds)',
+    returns: 'the number of keys given a TTL (a non-negative integer)',
+    baseline: b.sessionsExpireWithJitter,
+  },
+  {
+    name: 'users.usernameTaken',
+    file: 'ch4/username-taken.js',
+    signature: '(deps, name)',
+    returns: '{ taken: boolean, checkedDb: boolean }; checkedDb says whether Postgres was asked',
+    baseline: b.usernameTaken,
+  },
+  {
+    name: 'ops.record',
+    file: 'ch4/ops-record.js',
+    signature: '(deps, sample)',
+    returns:
+      'anything (ignored); sample = { route, status, ms, at }, called in the background for every counted request while the slot is active',
+    baseline: b.opsRecord,
+  },
+  {
+    name: 'ops.range',
+    file: 'ch4/ops-range.js',
+    signature: '(deps, route, fromMs, toMs, bucketMs)',
+    returns: '{ route, buckets: [{ at, requests, errors, avgMs }] }, oldest bucket first',
+    baseline: b.opsRange,
+  },
 ];

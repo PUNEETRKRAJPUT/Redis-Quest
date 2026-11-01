@@ -12,6 +12,7 @@ import { LoopWatchdog } from './watchdog.js';
 import { callSlotInBackground, sleep, type BackgroundDeps } from './workers/common.js';
 import { ChangeConsumer } from './workers/changes.js';
 import { OutboxDrainer } from './workers/outbox.js';
+import { OpsHook } from './workers/ops.js';
 import { TickerSubscriber } from './workers/ticker.js';
 import { loadMatchRows } from './slots/baselines.js';
 import { RequestScope } from './slots/runtime.js';
@@ -106,6 +107,8 @@ const ticker = new TickerSubscriber({
   engineUrl: env.engineUrl,
 });
 
+const ops = new OpsHook({ slots, redis, pool, log });
+
 const app = buildServer({
   instance: env.instance,
   maxRequestsPerSocket: env.maxRequestsPerSocket,
@@ -114,6 +117,7 @@ const app = buildServer({
   pool,
   slots,
   ticker,
+  ops,
   recorder,
   lastWindow: () => pusher.lastBody,
   status: () => ({

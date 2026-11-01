@@ -10,16 +10,28 @@ describe('slot registry', () => {
     expect(validateRegistry(SLOTS)).toEqual([]);
   });
 
-  test('declares the Milestone 1 slots', () => {
+  test('declares every slot (Milestone 1 to Chapter 4)', () => {
     expect(SLOTS.map((s) => s.name).sort()).toEqual([
       'cache.getPlayerStats',
       'cache.invalidatePlayerStats',
+      'contest.claimLastSlot',
       'contest.join',
+      'jobs.claim',
+      'jobs.complete',
+      'jobs.enqueue',
+      'jobs.fail',
+      'jobs.promoteDue',
+      'jobs.reclaim',
+      'jobs.schedule',
       'leaderboard.addPoints',
       'leaderboard.rank',
       'leaderboard.recompute',
       'leaderboard.top',
       'onboarding.registerUser',
+      'ops.range',
+      'ops.record',
+      'points.consume',
+      'points.sweep',
       'prefetch.applyChange',
       'prefetch.bulkLoad',
       'prefetch.getFixtures',
@@ -28,7 +40,10 @@ describe('slot registry', () => {
       'session.destroy',
       'session.destroyAll',
       'session.get',
+      'sessions.expireWithJitter',
       'ticker.publish',
+      'users.usernameTaken',
+      'wallet.credit',
     ]);
     expect(SLOTS.find((s) => s.name === 'cache.getPlayerStats')).toMatchObject({
       file: 'ch2/cache.js',

@@ -6,6 +6,7 @@ import type { MetricsRecorder } from './metrics.js';
 import type { RedisTarget } from './redis.js';
 import { registerRoutes } from './routes.js';
 import { RequestScope, type SlotRuntime } from './slots/runtime.js';
+import type { OpsHook } from './workers/ops.js';
 import type { TickerSubscriber } from './workers/ticker.js';
 
 export interface AppContext {
@@ -18,6 +19,8 @@ export interface AppContext {
   slots: SlotRuntime;
   /** The provided Pub/Sub subscriber behind /app/ticker/*. */
   ticker: TickerSubscriber;
+  /** The provided request hook that feeds slot ops.record (level 4.16); absent in tests that do not need it. */
+  ops?: OpsHook;
   recorder: MetricsRecorder;
   /** The window most recently pushed to the engine (or computed, when no engine is configured). */
   lastWindow: () => unknown;
@@ -75,6 +78,7 @@ export function buildServer(ctx: AppContext): FastifyInstance {
         slotError: reply.hasHeader('x-quest-slot-error'),
         denied: reply.statusCode === 429,
       });
+      ctx.ops?.onCounted(req.method, url, reply.statusCode, reply.elapsedTime);
     }
     finish(req);
   });

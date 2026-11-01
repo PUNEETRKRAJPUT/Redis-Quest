@@ -314,8 +314,229 @@ export async function registerUser(deps: LearnerDeps, user: NewUser): Promise<un
   }
 }
 
+// ---- Chapter 4: work in the background -----------------------------------------------------------
+
+/**
+ * Chapter 4.2 and 4.3: the legacy points path recomputes from the `balls` table and never touches a stream, so
+ * it processes and acks nothing. The SELECT is here so the baseline is honest about where the points come from.
+ */
+export async function pointsConsume(
+  deps: LearnerDeps,
+  matchId: string,
+  _consumer: string,
+  count: number,
+): Promise<{ processed: string[] }> {
+  await deps.db.query(
+    `SELECT "over", ball, batter_id, runs FROM balls WHERE match_id = $1 ORDER BY id LIMIT $2`,
+    [matchId, count],
+  );
+  return { processed: [] };
+}
+
+/** Chapter 4.3 and 4.4: nothing is pending in the legacy path, so there is nothing to reclaim or dead-letter. */
+export async function pointsSweep(): Promise<{ reclaimed: string[]; deadLettered: string[] }> {
+  return { reclaimed: [], deadLettered: [] };
+}
+
+/**
+ * Chapters 4.7 to 4.9: the job queue as most first versions are written, a plain array in this process's memory.
+ * It "works" on one instance, and it is wrong in three ways the levels walk through: a second instance has its
+ * own queue, a restart empties it, and a job a worker took and lost is simply gone (no visibility timeout).
+ */
+interface MemJob {
+  id: string;
+  payload: unknown;
+  token: string;
+  attempts: number;
+}
+const mem = {
+  pending: [] as MemJob[],
+  processing: new Map<string, MemJob>(),
+  completed: 0,
+  failed: 0,
+  delayed: 0,
+};
+const hex16 = (): string => randomBytes(8).toString('hex');
+
+/** What the in-process queue holds right now (reported by GET /app/jobs/stats under `inMemory`). */
+export function inMemoryQueueStats(): {
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+} {
+  return {
+    pending: mem.pending.length,
+    processing: mem.processing.size,
+    completed: mem.completed,
+    failed: mem.failed,
+    delayed: mem.delayed,
+  };
+}
+
+export async function jobsEnqueue(_deps: LearnerDeps, payload: unknown): Promise<string> {
+  if (mem.pending.length >= 100_000) mem.pending.shift(); // a cap so a forgotten loop cannot eat the heap
+  const id = hex16();
+  mem.pending.push({ id, payload, token: '', attempts: 0 });
+  return id;
+}
+
+export async function jobsClaim(
+  _deps: LearnerDeps,
+  _worker: string,
+  timeoutMs: number,
+): Promise<{ id: string; payload: unknown; token: string; attempts: number } | null> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const job = mem.pending.shift();
+    if (job) {
+      job.token = hex16();
+      job.attempts += 1;
+      mem.processing.set(job.id, job);
+      return { id: job.id, payload: job.payload, token: job.token, attempts: job.attempts };
+    }
+    if (Date.now() >= deadline) return null;
+    await new Promise((r) => setTimeout(r, Math.min(25, Math.max(1, deadline - Date.now()))));
+  }
+}
+
+export async function jobsComplete(
+  _deps: LearnerDeps,
+  id: string,
+  token: string,
+): Promise<boolean> {
+  const job = mem.processing.get(id);
+  if (!job || job.token !== token) return false;
+  mem.processing.delete(id);
+  mem.completed += 1;
+  return true;
+}
+
+export async function jobsFail(
+  _deps: LearnerDeps,
+  id: string,
+  token: string,
+  _error: string,
+  maxAttempts: number,
+): Promise<'retry' | 'failed' | false> {
+  const job = mem.processing.get(id);
+  if (!job || job.token !== token) return false;
+  mem.processing.delete(id);
+  if (job.attempts >= maxAttempts) {
+    mem.failed += 1;
+    return 'failed';
+  }
+  mem.pending.push(job);
+  return 'retry';
+}
+
+/** A job lost in `processing` stays there for ever: nobody looks. That is the bug, so the baseline moves nothing. */
+export async function jobsReclaim(): Promise<number> {
+  return 0;
+}
+
+/** A timer in this process: it fires only if this exact process is still alive at `runAtMs`. */
+export async function jobsSchedule(
+  _deps: LearnerDeps,
+  payload: unknown,
+  runAtMs: number,
+): Promise<string> {
+  const id = hex16();
+  mem.delayed += 1;
+  const wait = Math.min(Math.max(0, runAtMs - Date.now()), 2 ** 31 - 1);
+  setTimeout(() => {
+    mem.delayed -= 1;
+    mem.pending.push({ id, payload, token: '', attempts: 0 });
+  }, wait).unref();
+  return id;
+}
+
+/** The timers above fire by themselves, so there is nothing to promote. */
+export async function jobsPromoteDue(): Promise<number> {
+  return 0;
+}
+
+/**
+ * Chapter 4.8: the double-credit bug. Every call adds the amount and writes a ledger row, so a retried
+ * delivery pays twice. `ref` carries the idempotency key but nothing ever looks at it. An unknown user has no
+ * wallet row: nothing is credited and the balance reads 0.
+ */
+export async function walletCredit(
+  deps: LearnerDeps,
+  userId: string,
+  amount: number,
+  idempotencyKey: string,
+): Promise<{ credited: boolean; balance: number }> {
+  const { rows } = await deps.db.query(
+    `WITH up AS (
+       UPDATE wallets SET balance = balance + $2 WHERE user_id = $1 RETURNING user_id, balance
+     ), led AS (
+       INSERT INTO wallet_transactions (user_id, delta, reason, ref, created_at)
+       SELECT user_id, $2::integer, 'contest_payout', $3::text, now() FROM up
+     )
+     SELECT balance FROM up`,
+    [userId, amount, idempotencyKey],
+  );
+  const row = rows[0] as { balance: number } | undefined;
+  return { credited: row !== undefined, balance: row ? Number(row.balance) : 0 };
+}
+
+/**
+ * Chapter 4.10: check, then act. Between the GET and the DECR another request can run the same GET and
+ * also see a slot, so with the counter at 1 several callers can win it. The level fixes it with a lock.
+ */
+export async function contestClaimLastSlot(deps: LearnerDeps, contestId: number): Promise<boolean> {
+  const key = `contest:${contestId}:slots`;
+  const left = Number(await deps.redis.get(key));
+  if (left > 0) {
+    await deps.redis.decr(key);
+    return true;
+  }
+  return false;
+}
+
+/** Chapter 4.13: the expiry storm. Every key gets the same TTL, one round trip each, so they all die in the same second. */
+export async function sessionsExpireWithJitter(
+  deps: LearnerDeps,
+  keys: string[],
+  baseSeconds: number,
+): Promise<number> {
+  let n = 0;
+  for (const key of keys) {
+    if (await deps.redis.expire(key, baseSeconds)) n += 1;
+  }
+  return n;
+}
+
+/** Chapter 4.14: ask Postgres every time, even for names nobody has ever used. */
+export async function usernameTaken(
+  deps: LearnerDeps,
+  name: string,
+): Promise<{ taken: boolean; checkedDb: boolean }> {
+  const { rows } = await deps.db.query('SELECT 1 FROM users WHERE handle = $1', [name]);
+  return { taken: rows.length > 0, checkedDb: true };
+}
+
+/** Chapter 4.16: no ops wall without the learner's time series. The provided hook calls this for every request. */
+export async function opsRecord(): Promise<null> {
+  return null;
+}
+
+export async function opsRange(
+  _deps: LearnerDeps,
+  route: string,
+): Promise<{ route: string; buckets: unknown[] }> {
+  return { route, buckets: [] };
+}
+
 /** Test hook: the in-process baselines keep state; tests reset it. */
 export function resetBaselineState(): void {
   sessions.clear();
   windows.clear();
+  mem.pending.length = 0;
+  mem.processing.clear();
+  mem.completed = 0;
+  mem.failed = 0;
+  mem.delayed = 0;
 }

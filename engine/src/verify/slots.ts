@@ -23,6 +23,21 @@ export const SLOT_FILES: Readonly<Record<string, string>> = {
   'leaderboard.recompute': 'ch3/leaderboard-recompute.js',
   'contest.join': 'ch3/contest-join.js',
   'ticker.publish': 'ch3/ticker-publish.js',
+  'points.consume': 'ch4/points-consume.js',
+  'points.sweep': 'ch4/points-sweep.js',
+  'jobs.enqueue': 'ch4/jobs-enqueue.js',
+  'jobs.claim': 'ch4/jobs-claim.js',
+  'jobs.complete': 'ch4/jobs-complete.js',
+  'jobs.fail': 'ch4/jobs-fail.js',
+  'jobs.reclaim': 'ch4/jobs-reclaim.js',
+  'jobs.schedule': 'ch4/jobs-schedule.js',
+  'jobs.promoteDue': 'ch4/jobs-promote.js',
+  'wallet.credit': 'ch4/wallet-credit.js',
+  'contest.claimLastSlot': 'ch4/contest-last-slot.js',
+  'sessions.expireWithJitter': 'ch4/sessions-jitter.js',
+  'users.usernameTaken': 'ch4/username-taken.js',
+  'ops.record': 'ch4/ops-record.js',
+  'ops.range': 'ch4/ops-range.js',
 };
 
 export function slotFile(slot: string): string | undefined {

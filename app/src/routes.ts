@@ -1,6 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { HttpError } from './errors.js';
-import { loadMatchRows, loadRecomputeRows, type SessionUser } from './slots/baselines.js';
+import {
+  inMemoryQueueStats,
+  loadMatchRows,
+  loadRecomputeRows,
+  type SessionUser,
+} from './slots/baselines.js';
 import type { RequestScope, SlotRuntime } from './slots/runtime.js';
 import { TickerError, type TickerSubscriber } from './workers/ticker.js';
 
@@ -312,6 +317,335 @@ export function registerRoutes(
       throw err;
     }
   });
+
+  // ---- Chapter 4: work in the background ---------------------------------------------------------
+  // Inputs are validated here, in the route, like Chapter 3. Slot results are checked against the contract in
+  // the registry so a wrong return is a 500 with x-quest-slot-error, not a crash.
+
+  const intIn = (v: unknown, min: number, max: number): v is number =>
+    typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+  const strArray = (v: unknown): v is string[] =>
+    Array.isArray(v) && v.every((x) => typeof x === 'string');
+  const idParam = (raw: string, what: string): string => {
+    if (!str(raw, 64)) throw new HttpError(400, `invalid_${what}`);
+    return raw;
+  };
+
+  app.post('/app/workers/points/consume', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    if (!str(b.matchId, 64)) throw new HttpError(400, 'invalid_match_id');
+    if (!str(b.consumer, 64)) throw new HttpError(400, 'invalid_consumer');
+    const count = b.count === undefined ? 10 : b.count;
+    if (!intIn(count, 1, 100))
+      throw new HttpError(400, 'invalid_count', 'count must be an integer from 1 to 100');
+    const result = await slots.call(scopeOf(req), 'points.consume', b.matchId, b.consumer, count);
+    if (!isObj(result) || !strArray(result.processed)) {
+      throw slots.contractError(
+        'points.consume',
+        'must return { processed: string[] } (the entry ids it processed and acked)',
+      );
+    }
+    return { ok: true, result };
+  });
+
+  app.post('/app/workers/points/sweep', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    if (!str(b.matchId, 64)) throw new HttpError(400, 'invalid_match_id');
+    if (!str(b.consumer, 64)) throw new HttpError(400, 'invalid_consumer');
+    const minIdleMs = b.minIdleMs === undefined ? 60_000 : b.minIdleMs;
+    if (!intIn(minIdleMs, 0, 86_400_000))
+      throw new HttpError(
+        400,
+        'invalid_min_idle',
+        'minIdleMs must be an integer from 0 to 86400000',
+      );
+    const maxDeliveries = b.maxDeliveries === undefined ? 5 : b.maxDeliveries;
+    if (!intIn(maxDeliveries, 1, 1000))
+      throw new HttpError(
+        400,
+        'invalid_max_deliveries',
+        'maxDeliveries must be an integer from 1 to 1000',
+      );
+    const result = await slots.call(
+      scopeOf(req),
+      'points.sweep',
+      b.matchId,
+      b.consumer,
+      minIdleMs,
+      maxDeliveries,
+    );
+    if (!isObj(result) || !strArray(result.reclaimed) || !strArray(result.deadLettered)) {
+      throw slots.contractError(
+        'points.sweep',
+        'must return { reclaimed: string[], deadLettered: string[] }',
+      );
+    }
+    return { ok: true, result };
+  });
+
+  // The job queue. Payload is any JSON value up to 4 KB once serialised.
+  const payloadOf = (b: Record<string, unknown>): unknown => {
+    if (!('payload' in b) || b.payload === undefined)
+      throw new HttpError(400, 'invalid_payload', 'body must be { "payload": <any JSON> }');
+    if (JSON.stringify(b.payload).length > 4096)
+      throw new HttpError(400, 'payload_too_large', 'payload must be at most 4 KB of JSON');
+    return b.payload;
+  };
+
+  app.post('/app/jobs', async (req, reply) => {
+    const b = isObj(req.body) ? req.body : {};
+    const id = await slots.call(scopeOf(req), 'jobs.enqueue', payloadOf(b));
+    if (!str(id, 256))
+      throw slots.contractError('jobs.enqueue', 'must return the job id as a non-empty string');
+    return reply.code(201).send({ id });
+  });
+
+  app.post('/app/jobs/claim', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    if (!str(b.worker, 64)) throw new HttpError(400, 'invalid_worker');
+    const timeoutMs = b.timeoutMs === undefined ? 1000 : b.timeoutMs;
+    if (!intIn(timeoutMs, 0, 5000))
+      throw new HttpError(400, 'invalid_timeout', 'timeoutMs must be an integer from 0 to 5000');
+    const job = await slots.call(scopeOf(req), 'jobs.claim', b.worker, timeoutMs);
+    if (job === null || job === undefined) return { job: null };
+    if (
+      !isObj(job) ||
+      !str(job.id, 256) ||
+      !str(job.token, 256) ||
+      typeof job.attempts !== 'number'
+    ) {
+      throw slots.contractError(
+        'jobs.claim',
+        'must return { id, payload, token, attempts } (strings id and token, a number attempts), or null',
+      );
+    }
+    return { job };
+  });
+
+  app.post<{ Params: { id: string } }>('/app/jobs/:id/complete', async (req) => {
+    const id = idParam(req.params.id, 'job_id');
+    const b = isObj(req.body) ? req.body : {};
+    if (!str(b.token, 256)) throw new HttpError(400, 'invalid_token');
+    const ok = await slots.call(scopeOf(req), 'jobs.complete', id, b.token, b.result ?? null);
+    if (typeof ok !== 'boolean')
+      throw slots.contractError(
+        'jobs.complete',
+        'must return true (completed) or false (this worker no longer owns the job)',
+      );
+    if (!ok) throw new HttpError(409, 'not_owner');
+    return { ok: true };
+  });
+
+  app.post<{ Params: { id: string } }>('/app/jobs/:id/fail', async (req) => {
+    const id = idParam(req.params.id, 'job_id');
+    const b = isObj(req.body) ? req.body : {};
+    if (!str(b.token, 256)) throw new HttpError(400, 'invalid_token');
+    if (!str(b.error, 1000)) throw new HttpError(400, 'invalid_error', 'error must be a string');
+    const maxAttempts = b.maxAttempts === undefined ? 3 : b.maxAttempts;
+    if (!intIn(maxAttempts, 1, 100))
+      throw new HttpError(
+        400,
+        'invalid_max_attempts',
+        'maxAttempts must be an integer from 1 to 100',
+      );
+    const outcome = await slots.call(scopeOf(req), 'jobs.fail', id, b.token, b.error, maxAttempts);
+    if (outcome === false) throw new HttpError(409, 'not_owner');
+    if (outcome !== 'retry' && outcome !== 'failed')
+      throw slots.contractError('jobs.fail', 'must return "retry", "failed" or false');
+    return { outcome };
+  });
+
+  app.post('/app/jobs/reclaim', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    const visibilityMs = b.visibilityMs === undefined ? 5000 : b.visibilityMs;
+    if (!intIn(visibilityMs, 0, 86_400_000))
+      throw new HttpError(
+        400,
+        'invalid_visibility',
+        'visibilityMs must be an integer from 0 to 86400000',
+      );
+    const reclaimed = await slots.call(scopeOf(req), 'jobs.reclaim', visibilityMs);
+    if (!intIn(reclaimed, 0, Number.MAX_SAFE_INTEGER))
+      throw slots.contractError('jobs.reclaim', 'must return a non-negative integer');
+    return { reclaimed };
+  });
+
+  app.post('/app/jobs/schedule', async (req, reply) => {
+    const b = isObj(req.body) ? req.body : {};
+    const payload = payloadOf(b);
+    if (!intIn(b.runAtMs, 0, 8.64e15))
+      throw new HttpError(
+        400,
+        'invalid_run_at',
+        'runAtMs must be an integer epoch in milliseconds',
+      );
+    const id = await slots.call(scopeOf(req), 'jobs.schedule', payload, b.runAtMs);
+    if (!str(id, 256))
+      throw slots.contractError('jobs.schedule', 'must return the job id as a non-empty string');
+    return reply.code(201).send({ id });
+  });
+
+  app.post('/app/jobs/promote', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    const nowMs = b.nowMs === undefined ? Date.now() : b.nowMs;
+    if (!intIn(nowMs, 0, 8.64e15))
+      throw new HttpError(400, 'invalid_now', 'nowMs must be an integer epoch in milliseconds');
+    const promoted = await slots.call(scopeOf(req), 'jobs.promoteDue', nowMs);
+    if (!intIn(promoted, 0, Number.MAX_SAFE_INTEGER))
+      throw slots.contractError('jobs.promoteDue', 'must return a non-negative integer');
+    return { promoted };
+  });
+
+  // Not a slot: the route reads the queue keys itself so a level can see the lists whatever the learner wrote.
+  // `inMemory` is the baseline Map queue of this instance (always there; it only moves while the slots are off).
+  app.get('/app/jobs/stats', async (req) => {
+    const r = scopeOf(req).deps.redis;
+    const [pending, processing, completed, failed, delayed] = await Promise.all([
+      r.lLen('queue:jobs:pending'),
+      r.lLen('queue:jobs:processing'),
+      r.lLen('queue:jobs:completed'),
+      r.lLen('queue:jobs:failed'),
+      r.zCard('queue:jobs:delayed'),
+    ]);
+    return { pending, processing, completed, failed, delayed, inMemory: inMemoryQueueStats() };
+  });
+
+  app.post<{ Params: { userId: string } }>('/app/wallets/:userId/credit', async (req) => {
+    const userId = idParam(req.params.userId, 'user_id');
+    const b = isObj(req.body) ? req.body : {};
+    if (!intIn(b.amount, 1, 100_000))
+      throw new HttpError(400, 'invalid_amount', 'amount must be an integer from 1 to 100000');
+    if (!str(b.key, 64))
+      throw new HttpError(400, 'invalid_key', 'key must be a string of at most 64 characters');
+    const out = await slots.call(scopeOf(req), 'wallet.credit', userId, b.amount, b.key);
+    if (!isObj(out) || typeof out.credited !== 'boolean' || typeof out.balance !== 'number') {
+      throw slots.contractError(
+        'wallet.credit',
+        'must return { credited: boolean, balance: number }',
+      );
+    }
+    return { credited: out.credited, balance: out.balance };
+  });
+
+  app.post<{ Params: { contestId: string } }>(
+    '/app/contests/:contestId/last-slot',
+    async (req, reply) => {
+      const contestId = contestIdOf(req.params.contestId);
+      const b = isObj(req.body) ? req.body : {};
+      if (!str(b.userId, 64))
+        throw new HttpError(400, 'invalid_user_id', 'userId must be a string');
+      const got = await slots.call(scopeOf(req), 'contest.claimLastSlot', contestId, b.userId);
+      if (typeof got !== 'boolean')
+        throw slots.contractError(
+          'contest.claimLastSlot',
+          'must return true (got a slot) or false (none left)',
+        );
+      if (!got) return reply.code(409).send({ error: 'contest_full' });
+      return { got: true };
+    },
+  );
+
+  // Expire a batch of keys. Keys under game:* belong to the engine and are refused.
+  app.post('/app/ops/expire-batch', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    const keys = b.keys;
+    if (
+      !Array.isArray(keys) ||
+      keys.length < 1 ||
+      keys.length > 5000 ||
+      !keys.every((k) => str(k, 256))
+    )
+      throw new HttpError(400, 'invalid_keys', 'keys must be 1 to 5000 non-empty strings');
+    if ((keys as string[]).some((k) => k.startsWith('game:')))
+      throw new HttpError(400, 'reserved_key', 'keys under game:* belong to the engine');
+    if (!intIn(b.baseSeconds, 1, 86_400))
+      throw new HttpError(400, 'invalid_base', 'baseSeconds must be an integer from 1 to 86400');
+    if (!intIn(b.jitterSeconds, 0, 3600))
+      throw new HttpError(400, 'invalid_jitter', 'jitterSeconds must be an integer from 0 to 3600');
+    const expired = await slots.call(
+      scopeOf(req),
+      'sessions.expireWithJitter',
+      keys,
+      b.baseSeconds,
+      b.jitterSeconds,
+    );
+    if (!intIn(expired, 0, Number.MAX_SAFE_INTEGER))
+      throw slots.contractError('sessions.expireWithJitter', 'must return a non-negative integer');
+    return { expired };
+  });
+
+  app.get<{ Params: { name: string } }>('/app/usernames/:name', async (req) => {
+    const name = req.params.name;
+    if (!str(name, 64)) throw new HttpError(400, 'invalid_name');
+    const out = await slots.call(scopeOf(req), 'users.usernameTaken', name);
+    if (!isObj(out) || typeof out.taken !== 'boolean' || typeof out.checkedDb !== 'boolean') {
+      throw slots.contractError(
+        'users.usernameTaken',
+        'must return { taken: boolean, checkedDb: boolean }',
+      );
+    }
+    return { name, taken: out.taken, checkedDb: out.checkedDb };
+  });
+
+  // The ops wall. `route` is the metrics route key, e.g. "GET /app/players/:id/stats" (see routeKey() in
+  // workers/ops.ts for how it becomes part of a Redis key). Counted like any game route, but the wall's own
+  // reads and this sample route are not fed back into ops.record.
+  app.post('/app/ops/samples', async (req) => {
+    const b = isObj(req.body) ? req.body : {};
+    if (!str(b.route, 200)) throw new HttpError(400, 'invalid_route');
+    if (!intIn(b.status, 100, 599)) throw new HttpError(400, 'invalid_status');
+    if (typeof b.ms !== 'number' || !Number.isFinite(b.ms) || b.ms < 0)
+      throw new HttpError(400, 'invalid_ms', 'ms must be a number of 0 or more');
+    const at = b.at === undefined ? Date.now() : b.at;
+    if (!intIn(at, 0, 8.64e15))
+      throw new HttpError(400, 'invalid_at', 'at must be an integer epoch in milliseconds');
+    await slots.call(scopeOf(req), 'ops.record', {
+      route: b.route,
+      status: b.status,
+      ms: b.ms,
+      at,
+    });
+    return { ok: true };
+  });
+
+  app.get<{ Querystring: { route?: string; from?: string; to?: string; bucket?: string } }>(
+    '/app/ops/wall',
+    async (req) => {
+      const q = req.query;
+      if (!str(q.route, 200)) throw new HttpError(400, 'invalid_route');
+      const to = q.to === undefined ? Date.now() : Number(q.to);
+      const from = q.from === undefined ? to - 15 * 60_000 : Number(q.from);
+      const bucket = q.bucket === undefined ? 60_000 : Number(q.bucket);
+      if (!intIn(to, 0, 8.64e15)) throw new HttpError(400, 'invalid_to');
+      if (!intIn(from, 0, 8.64e15) || from >= to)
+        throw new HttpError(400, 'invalid_from', 'from must be an epoch in ms before to');
+      if (!intIn(bucket, 1000, 86_400_000))
+        throw new HttpError(400, 'invalid_bucket', 'bucket must be 1000 to 86400000 ms');
+      if ((to - from) / bucket > 10_000)
+        throw new HttpError(400, 'too_many_buckets', 'at most 10000 buckets per call');
+      const out = await slots.call(scopeOf(req), 'ops.range', q.route, from, to, bucket);
+      const buckets = isObj(out) ? out.buckets : undefined;
+      if (
+        !isObj(out) ||
+        typeof out.route !== 'string' ||
+        !Array.isArray(buckets) ||
+        !buckets.every(
+          (x) =>
+            isObj(x) &&
+            typeof x.at === 'number' &&
+            typeof x.requests === 'number' &&
+            typeof x.errors === 'number' &&
+            (typeof x.avgMs === 'number' || x.avgMs === null),
+        )
+      ) {
+        throw slots.contractError(
+          'ops.range',
+          'must return { route: string, buckets: [{ at, requests, errors: numbers, avgMs: number or null }] }',
+        );
+      }
+      return out;
+    },
+  );
 
   app.get('/app/limits/ping', async (req, reply) => {
     const userId = req.headers['x-user-id'];
