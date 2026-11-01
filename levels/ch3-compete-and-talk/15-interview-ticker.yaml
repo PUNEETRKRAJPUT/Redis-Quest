@@ -7,6 +7,34 @@ interview:
   minutes: 15
   rebuild_of: ch3-10-the-ticker
   hint_xp_cost: 10
+  questions:
+    - type: quiz
+      question: "A phone loses signal for ten seconds in the middle of an over. When it comes back, what does it see?"
+      options:
+        - { id: tk1-replay, label: "Redis replays the balls it missed as soon as the phone subscribes again" }
+        - { id: tk1-queued, label: "Redis queued the messages for that phone and delivers them in order" }
+        - { id: tk1-error, label: "An error, until the page is reloaded" }
+        - { id: tk1-last, label: "The broadcast is at-most-once, so the missed balls are gone for subscribers; the page reads the last-ball key to catch up to now, and a feed that must be complete needs a stream" }
+      correct: tk1-last
+      explanation: "Levels 3.10 and 3.11: pub/sub delivers to whoever is subscribed right now and keeps nothing (the pub/sub page: at-most-once). The last-ball key is the durable record the docs advise writing next to the publish, and the seq number tells a page how many balls it missed. A feed that cannot miss one belongs in a stream, which is the next chapter."
+    - type: quiz
+      question: "Your PUBLISH printed 0. Do you panic, or not?"
+      options:
+        - { id: tk2-failed, label: "The publish failed and nothing was sent" }
+        - { id: tk2-nobody, label: "Nobody was subscribed to that channel at that moment; if it stays 0, suspect a typo in the channel name" }
+        - { id: tk2-queued, label: "The message is waiting until a subscriber appears" }
+        - { id: tk2-ok, label: "Nothing is wrong: 0 is the usual success reply" }
+      correct: tk2-nobody
+      explanation: "The pub/sub page: PUBLISH answers with the number of subscribers it reached, and a steady 0 usually means a typo in the channel name (level 3.10's third hint). Channels are not keys, so SCAN will not show them; PUBSUB NUMSUB will (level 3.11)."
+    - type: quiz
+      question: "Why does your subscriber get a connection of its own? One connection would be simpler."
+      options:
+        - { id: tk3-share, label: "It does not need one: node-redis shares a single connection for everything" }
+        - { id: tk3-speed, label: "Subscriptions are faster on a separate connection" }
+        - { id: tk3-login, label: "Subscribers must log in as a different user" }
+        - { id: tk3-own, label: "A subscribed connection can do nothing but subscribe, unsubscribe and ping in the default protocol, so it takes client.duplicate()" }
+      correct: tk3-own
+      explanation: "The pub/sub page: a RESP2 subscribed client may only issue the subscribe commands and PING. In node-redis you duplicate the client, connect the copy and subscribe there (the node-redis guide). The same duplicate() gives a blocking command, such as BLMOVE, its own connection too."
 
 story: |
   Third round, and the interviewer wants to see you ship a small thing end to end. "A ball is bowled. Every page that is open

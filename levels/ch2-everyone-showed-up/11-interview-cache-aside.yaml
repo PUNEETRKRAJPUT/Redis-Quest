@@ -7,6 +7,34 @@ interview:
   minutes: 20
   rebuild_of: ch2-02-cache-aside-v1
   hint_xp_cost: 10
+  questions:
+    - type: quiz
+      question: "Let me walk over and restart your Redis. It comes back empty. What does the stats page do now?"
+      options:
+        - { id: ca1-errors, label: "Every request fails until somebody reloads the cache by hand" }
+        - { id: ca1-refills, label: "It keeps answering: every miss reads Postgres and writes the hash back, so it is slower for a while and then warm again" }
+        - { id: ca1-remembers, label: "It shows the last values the app remembers, because the app keeps a copy of everything it read" }
+        - { id: ca1-null, label: "It returns null for every player until the first write" }
+      correct: ca1-refills
+      explanation: "Reasoned from the cache-aside page and level 2.2: a miss is the normal path. It reads the source of truth, Postgres, and writes the hash back with its TTL, so nothing breaks. The price is a burst of Postgres reads while the hot keys come back, which is what the single-flight lock of level 2.4 is for."
+    - type: quiz
+      question: "Now I put a second copy of your app behind the load balancer. What do you change in the code?"
+      options:
+        - { id: ca2-prefix, label: "Each server needs its own key prefix, and a message between the two when one of them writes" }
+        - { id: ca2-lock, label: "A lock around every read, so the two servers never fill the same key" }
+        - { id: ca2-ttl, label: "Halve the TTL, so that the two copies stay in step" }
+        - { id: ca2-nothing, label: "Nothing: both servers read and write the same Redis key, so the cache is already shared" }
+      correct: ca2-nothing
+      explanation: "The cache lives in Redis, not in the process, so any number of app servers share it. (A counter kept in each process's memory would be the opposite: two copies would each count on their own.) The one thing to watch is a cold key, and level 2.4's single-flight lock already covers any number of copies."
+    - type: quiz
+      question: "One player is on every phone in the stadium, thousands of times a second. Where do you cut the cost?"
+      options:
+        - { id: ca3-ttl-day, label: "Raise the TTL to a day, so the key is almost never refilled" }
+        - { id: ca3-shard, label: "Spread that one player over several Redis nodes in a cluster" }
+        - { id: ca3-local, label: "Keep a very short-lived copy in the app's own memory, or turn on client-side caching, so most reads never leave the process" }
+        - { id: ca3-bigger, label: "Give Redis a bigger machine" }
+      correct: ca3-local
+      explanation: "A hot key is cheap per command, the cost is how many commands ask for the same few bytes, so you stop most of them leaving the app. Use a bounded memo that trusts its copy for a second, or node-redis client-side caching, where Redis tells the client when the key changes. A longer TTL does not reduce reads, and a cluster puts one key in exactly one slot on one node (scaling page), so a hot key stays hot."
 
 story: |
   Placement season. Harry Bhaiya has booked you into a mock interview with a senior from the college's alumni

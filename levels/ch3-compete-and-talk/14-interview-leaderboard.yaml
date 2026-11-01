@@ -7,6 +7,34 @@ interview:
   minutes: 25
   rebuild_of: ch3-06-the-real-leaderboard
   hint_xp_cost: 10
+  questions:
+    - type: quiz
+      question: "Two teams are on the same points. Which one is ranked higher, and who decided that?"
+      options:
+        - { id: lb1-member, label: "Whichever member name sorts higher: equal scores fall back to the member itself, not to who got there first" }
+        - { id: lb1-first, label: "The one that reached the score first" }
+        - { id: lb1-random, label: "Redis picks one at random each time" }
+        - { id: lb1-shared, label: "They share one rank and the next rank is skipped" }
+      correct: lb1-member
+      explanation: "Sorted-sets page: members with the same score are ordered lexicographically by member, with no collation. The leaderboard page warns that ties break by member, so encode a tie-breaker in the score if arrival order matters. Two teams on one score still get two different positions, which is what rank counts (level 3.6)."
+    - type: quiz
+      question: "A thousand people refresh the top ten every second, and there are forty thousand teams. Why does that not hurt?"
+      options:
+        - { id: lb2-sort-on-read, label: "Redis sorts the forty thousand scores on every request, but it is very fast at it" }
+        - { id: lb2-hash, label: "Because a hash lookup is O(1)" }
+        - { id: lb2-ordered, label: "The set is kept ordered as members are added, so the top ten is a short range read: O(log N) to find the start, plus ten" }
+        - { id: lb2-app-cache, label: "The app caches the top ten for an hour" }
+      correct: lb2-ordered
+      explanation: "Sorted-sets page: ordered by the data structure, not sorted on request, and ZRANGE costs O(log(N)+M) for M results. Level 3.6 asks for exactly the limit and measures p99 under 60 ms with no Postgres. Asking for the whole board and cutting it in JavaScript is what would make the page slow."
+    - type: quiz
+      question: "A team scores on two servers at the same instant. Why ZINCRBY and not read, add, write back?"
+      options:
+        - { id: lb3-incr, label: "ZINCRBY adds inside Redis in one step, so neither update overwrites the other" }
+        - { id: lb3-order, label: "ZINCRBY keeps the set ordered and ZADD does not" }
+        - { id: lb3-only, label: "ZINCRBY is the only command that can raise a score" }
+        - { id: lb3-ties, label: "ZADD cannot break ties" }
+      correct: lb3-incr
+      explanation: "The leaderboard page: ZINCRBY is an atomic increment with no read-modify-write cycle. Reading the score, adding in JavaScript and writing it back is the lost update of level 1.2, now on a sorted set. (Level 3.6's twist: ZINCRBY creates a member that is not there, so look with ZSCORE first if an unknown team must stay unknown.)"
 
 story: |
   Second round. The interviewer has your fantasy app open on his laptop and has looked at the contest page. "Forty thousand

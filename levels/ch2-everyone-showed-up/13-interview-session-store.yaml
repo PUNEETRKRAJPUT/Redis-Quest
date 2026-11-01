@@ -7,6 +7,34 @@ interview:
   minutes: 30
   rebuild_of: ch2-08-otp-login-properly
   hint_xp_cost: 10
+  questions:
+    - type: quiz
+      question: "Someone loses a phone with your app logged in. Log that account out of everything, right now. How?"
+      options:
+        - { id: ss1-set, label: "It reads the user's set of session ids, then deletes each session hash and removes the ids from the set, in one multi" }
+        - { id: ss1-keys, label: "KEYS session:*, read each hash's owner, and delete the ones that match" }
+        - { id: ss1-flush, label: "Flush every session and let everybody log in again" }
+        - { id: ss1-wait, label: "Nothing: the 30 minute expiry will log the thief out" }
+      correct: ss1-set
+      explanation: "Level 2.8 and the session-store page: a set per user lists every session id, so logging out everywhere is one SMEMBERS plus DEL and SREM, not a walk over every session. KEYS would block the server, a flush logs out everybody, and waiting does not work because every read of the session slides the expiry forward, so the thief keeps it alive."
+    - type: quiz
+      question: "Security says nobody stays logged in past eight hours, even if they are active. Your expiry slides. How do you fix that?"
+      options:
+        - { id: ss2-ttl-8h, label: "Set the TTL to 8 hours" }
+        - { id: ss2-no-slide, label: "Stop sliding the expiry, so a session ends 30 minutes after login" }
+        - { id: ss2-cookie, label: "Put the expiry time in the cookie and trust it" }
+        - { id: ss2-cap, label: "An absolute cap: on every read compare created_at, which is already in the hash, with now, and destroy the session when it is older than 8 hours" }
+      correct: ss2-cap
+      explanation: "Reasoned from the session-store page: sliding expiration decides how long a stolen cookie stays useful, so the page recommends a separate absolute cap. Your hash already holds created_at (level 2.8), so the cap is one comparison on read. An 8 hour sliding TTL still renews for ever for an active user, and a cookie the user can edit cannot be the authority."
+    - type: quiz
+      question: "I restart Redis in the middle of lunch. Are your users still logged in?"
+      options:
+        - { id: ss3-always, label: "Always: sessions are stored with their TTL, so they come back" }
+        - { id: ss3-depends, label: "It depends on persistence: with a snapshot and the log on they come back, losing at most about a second with everysec; with none, everybody logs in again" }
+        - { id: ss3-never, label: "Never: Redis forgets everything on a restart" }
+        - { id: ss3-minute, label: "Only the sessions that have more than a minute left" }
+      correct: ss3-depends
+      explanation: "Persistence is a setting you choose. The session-store page relies on AOF and RDB so that sessions survive a restart within their TTL, the persistence page says everysec may lose about a second, and a node with no persistence starts blank."
 
 story: |
   Third round of the mock interview, and the senior from the alumni network has stopped smiling in a way that means the

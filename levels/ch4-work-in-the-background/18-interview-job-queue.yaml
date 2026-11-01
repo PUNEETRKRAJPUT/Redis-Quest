@@ -7,6 +7,34 @@ interview:
   minutes: 30
   rebuild_of: ch4-07-the-job-queue
   hint_xp_cost: 10
+  questions:
+    - type: quiz
+      question: "A worker takes a job and I kill its box a second later. Where is the job?"
+      options:
+        - { id: jq1-gone, label: "Gone: it was popped off the list and nothing remembers it" }
+        - { id: jq1-processing, label: "In the processing list, because BLMOVE put it there in one step; the reclaimer returns it to pending after the visibility timeout" }
+        - { id: jq1-pending, label: "Back on the pending list, because Redis notices the dead connection" }
+        - { id: jq1-completed, label: "On the completed list, marked as failed" }
+      correct: jq1-processing
+      explanation: "Level 4.7 and the job-queue page: BLMOVE pending processing is atomic, so the id is always in exactly one list. RPOP would have removed it from Redis the moment it was popped. The reclaimer sweeps the processing list for jobs claimed longer ago than the visibility timeout."
+    - type: quiz
+      question: "The reclaimer hands a slow job to a second worker, and then the first one finishes as well. What did your claim token do, and what did it not do?"
+      options:
+        - { id: jq2-once, label: "It makes the job run exactly once: the second finish is impossible" }
+        - { id: jq2-lock, label: "It locks the job, so the second worker never starts" }
+        - { id: jq2-label, label: "Nothing: the token only labels the job in the logs" }
+        - { id: jq2-fence, label: "It fenced the late complete, which changes nothing because the stored token is no longer the first worker's; it did not undo a side effect the first worker already caused, so a credit or a charge still needs an idempotency key" }
+      correct: jq2-fence
+      explanation: "Level 4.7 and the job-queue page: complete and fail are scripts that check the claim token first and return 0 if the worker no longer owns the job. Delivery is still at-least-once, so work with side effects (the credit of level 4.8) needs an idempotency key or a low retry count."
+    - type: quiz
+      question: "Why does claim open a second connection? Redis is fast; just block on the one you have."
+      options:
+        - { id: jq3-block, label: "BLMOVE holds its connection while it waits, so on the shared client it would hold up every other request; take deps.redis.duplicate()" }
+        - { id: jq3-cluster, label: "So that the job can be routed to a different cluster node" }
+        - { id: jq3-speed, label: "A dedicated connection makes BLMOVE faster" }
+        - { id: jq3-token, label: "The claim token needs its own connection to be unique" }
+      correct: jq3-block
+      explanation: "Level 4.7 and the job-queue page: node-redis sends everything over one connection, so a blocking call on the shared client holds up every other request. duplicate() and connect() give the blocking call its own (the game closes it). The page's advice is one shared client, except for a long BLMOVE."
 
 story: |
   The panel for the next interview is a staff engineer from a ride-hailing company, and the question is the one every backend candidate gets. "Build me a job queue on Redis. Workers take jobs one at a time, a worker can die while holding one, and I do not want to lose it or run it twice at once. I will watch the clock and then kill things."

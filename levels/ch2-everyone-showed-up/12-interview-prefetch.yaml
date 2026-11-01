@@ -7,6 +7,34 @@ interview:
   minutes: 30
   rebuild_of: ch2-07-fixtures-must-never-miss
   hint_xp_cost: 10
+  questions:
+    - type: quiz
+      question: "Suppose someone deletes every cache:match key before the toss. What does your getFixtures do, and why that and not the easy thing?"
+      options:
+        - { id: pf1-null, label: "It returns null without asking Postgres, so the app answers with an error and somebody finds out the sync pipeline is broken" }
+        - { id: pf1-fallback, label: "It reads the matches from Postgres for that request, so the page never breaks" }
+        - { id: pf1-empty, label: "It returns an empty list and logs nothing, since there is nothing to show" }
+        - { id: pf1-retry, label: "It retries the SCAN until the keys appear" }
+      correct: pf1-null
+      explanation: "Level 2.7 and the prefetch-cache page: this cache reads Redis only, and a miss means the sync pipeline is broken, which is an incident. A quiet fallback to Postgres hides it, and when the whole crowd lands on the fixtures page every phone becomes a Postgres query."
+    - type: quiz
+      question: "Say the sync worker falls asleep for ten minutes and misses a change. How does your cache ever find out?"
+      options:
+        - { id: pf2-ttl, label: "The TTL expires the stale hash, so it heals by itself within the minute" }
+        - { id: pf2-next-read, label: "The next read notices and refreshes the hash from Postgres" }
+        - { id: pf2-restart, label: "Restarting Redis makes it read Postgres again" }
+        - { id: pf2-reload, label: "A periodic reload against Postgres repairs it (the game's reprefetch button is that reload); the one hour TTL is only a safety net" }
+      correct: pf2-reload
+      explanation: "Level 2.7 and the prefetch-cache page: change events can be lost (a crashed worker, a gap), so the docs advise a periodic reload against the source. The TTL is a long safety net refreshed on every upsert, not how data stays fresh, and a prefetch cache never reads Postgres on a read."
+    - type: quiz
+      question: "You delete the hash and write it again. A plain HSET is less typing. Why not that?"
+      options:
+        - { id: pf3-faster, label: "DEL then HSET is cheaper than HSET alone" }
+        - { id: pf3-dropped-fields, label: "So that a field the new row no longer has cannot linger from the old one" }
+        - { id: pf3-cannot-overwrite, label: "HSET cannot change a field that already exists" }
+        - { id: pf3-lock, label: "It takes a lock, so that two sync workers cannot clash" }
+      correct: pf3-dropped-fields
+      explanation: "Level 2.7 and the prefetch-cache page: the DEL goes first, so a field that the new row no longer has cannot linger from the old one. HSET only sets the fields you give it (and overwrites the ones that exist), so without the DEL an old field would stay. The multi is there so a reader never sees the hash half written; it is not a lock."
 
 story: |
   Second round of the mock interview. The senior from the alumni network slides a printout across the table: a league

@@ -7,6 +7,34 @@ interview:
   minutes: 20
   rebuild_of: ch4-16-the-ops-wall
   hint_xp_cost: 10
+  questions:
+    - type: quiz
+      question: "Three samples per request, all day, every route. What stops your memory growing for ever?"
+      options:
+        - { id: ow1-expire, label: "An EXPIRE of one day on each series" }
+        - { id: ow1-cron, label: "A nightly cron that runs KEYS ts:* and deletes the old series" }
+        - { id: ow1-nothing, label: "Nothing is needed: time series compress themselves" }
+        - { id: ow1-retention, label: "RETENTION 86400000 on each series: it drops samples older than a day, measured against the newest, and the series lives on" }
+      correct: ow1-retention
+      explanation: "Level 4.16 and the time-series page: RETENTION trims relative to the newest sample, so the series keeps a rolling window and needs no EXPIRE. An EXPIRE on the key would delete the whole series at the deadline and the graph would go blank."
+    - type: quiz
+      question: "Your minute buckets change shape every time the graph refreshes. What did you forget?"
+      options:
+        - { id: ow2-align, label: "ALIGN 0 on TS.RANGE, so every bucket starts on a multiple of the bucket size and the boundaries stay put" }
+        - { id: ow2-retention, label: "The retention is too short" }
+        - { id: ow2-avg, label: "sum is the wrong aggregator: use avg for everything" }
+        - { id: ow2-sort, label: "The series has to be sorted again after each write" }
+      correct: ow2-align
+      explanation: "Level 4.16 and the time-series page: ALIGN 0 keeps bucket boundaries stable while the window moves. Without it the buckets start at the first sample of the requested range, so the same minute is cut differently on every refresh (the level's own explanation)."
+    - type: quiz
+      question: "The CTO wants p99 latency across every route and says storing every request time is a waste. What do you use?"
+      options:
+        - { id: ow3-zset, label: "A sorted set with every latency, then ZRANGE to the 99th percent position" }
+        - { id: ow3-average, label: "Average the per-minute averages and call it the p99" }
+        - { id: ow3-hll, label: "A HyperLogLog of the latencies" }
+        - { id: ow3-tdigest, label: "A t-digest: TDIGEST.ADD for each latency and TDIGEST.QUANTILE 0.99 for an estimate, in small fixed space" }
+      correct: ow3-tdigest
+      explanation: "Level 4.16 and the t-digest page: it estimates percentiles without storing every point, and COMPRESSION trades accuracy for memory. The answer is an estimate, which is the right trade for an ops wall. A sorted set grows with every request, and an average of averages is not a percentile."
 
 story: |
   The last interviewer of the day is the head of an observability team, and she wants to see how you think about numbers over time. "Your service handles a thousand requests a second. I want a wall that shows requests, errors and average latency per minute for the last day, and a 99th percentile for latency. Redis only. I will feed it samples and read it back."
@@ -146,8 +174,8 @@ verify:
     explanation: "The page says RETENTION trims relative to the newest sample, so the series keeps a rolling window and needs no EXPIRE. An EXPIRE on the key removes everything at the deadline, and a graph of the last day would go blank."
 
 show_me:
-  component: kv_card
-  keys: ["ts:requests:GET_app_players_:id_stats", "td:latency"]
+  component: ts_chart
+  keys: ["ts:requests:GET_app_players_:id_stats"]
 docs:
   - https://redis.io/docs/latest/develop/use-cases/time-series-dashboard
   - https://redis.io/docs/latest/develop/data-types/timeseries/

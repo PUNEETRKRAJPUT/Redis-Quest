@@ -7,6 +7,33 @@ interview:
   minutes: 20
   rebuild_of: ch3-03-token-bucket
   hint_xp_cost: 10
+  questions:
+    - type: quiz
+      question: "Say I unplug Redis for ten seconds. What does allow() do, and who decided that?"
+      options:
+        - { id: tb1-open, label: "Always allow: a limiter must never be the reason a student cannot log in" }
+        - { id: tb1-closed, label: "Always refuse: a limiter that cannot count must assume the worst" }
+        - { id: tb1-retry, label: "Retry in a loop until Redis answers" }
+        - { id: tb1-policy, label: "It is a decision for this limiter: weigh a bad request let through against a good one refused. For OTPs prefer a weaker local limit to either extreme, for the wallet refuse, and log it loudly in every case" }
+      correct: tb1-policy
+      explanation: "Level 3.5 and the rate-limiter page ('fail open or closed depending on your policy'). For OTPs the level's answer is the middle path: count in the process's own memory, weaker but a ceiling. For the wallet it was closed, because a join let through unchecked is entries nobody paid for. A silent failure either way is the real fault, so log it and alert on it."
+    - type: quiz
+      question: "I fire a hundred requests at once. Why one Lua script and not two commands?"
+      options:
+        - { id: tb2-roundtrip, label: "Two commands cost two round trips, and that is the only reason" }
+        - { id: tb2-atomic, label: "Read, decide and write must be one atomic step, or concurrent requests all read a full bucket and all get through" }
+        - { id: tb2-hash-only, label: "Redis only lets a script write hashes" }
+        - { id: tb2-memory, label: "A script stores the bucket in less memory" }
+      correct: tb2-atomic
+      explanation: "Level 3.3 and the programmability page: a script runs without anything else interleaving. Written as HMGET then HSET from JavaScript, a hundred concurrent requests all see a full bucket before any of them writes, which is exactly what the level's concurrency check catches. The saved round trip is a bonus, not the reason."
+    - type: quiz
+      question: "Your two servers disagree about the time by a few seconds, and your script takes now from the caller. What does that cost you?"
+      options:
+        - { id: tb3-nothing, label: "Nothing: Redis never looks at the app's clock" }
+        - { id: tb3-expire, label: "Keys expire early or late, because Redis takes TTLs from the app" }
+        - { id: tb3-cost, label: "The bucket inherits each caller's clock error: a server running ahead refills early, one behind refills late. Reading TIME inside the script gives one clock, at the price of a script that is no longer a function of its arguments" }
+      correct: tb3-cost
+      explanation: "The docs' token bucket takes now from the client, and level 3.3 passes it in ARGV so the script stays a function of its inputs. The docs' other limiters call TIME inside the script to avoid clock drift between app servers. With a 60 second refill, a few seconds of skew moves a refill by a few seconds, which may be fine: say so, and move the clock into the script if it is not."
 
 story: |
   The placement season has reached the part of the day where the interviewer is a backend lead from a payments company,

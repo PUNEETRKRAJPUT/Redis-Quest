@@ -75,8 +75,8 @@ start early if everything it depends on is `done`.
 | E-04 | Engine for the Finale: interview pools (random draw, blank start, follow-up questions), verdict metrics kept in progress, portfolio page route and button, harness rules (spec: specs/E-04, handoff: handoffs/E-04) | done (check 112 PASS; the draw is sha256(player:level) over the entries not yet drawn; blank files backed up as <file>.before-<level>) |
 | CF | Finale "The architect": three drawn mock interviews, the gauntlet, the neighbours, the code review, your story (spec: specs/CF, handoff: handoffs/CF) | done (static check 247 PASS; G-01: 37/37 with the drawn levels' solutions; mock interview one and your story played by hand; tag v1.0.0-rc1) |
 | F-13 | Show-me panels for stream groups, time series, Bloom, Search and ACL; the impact log on What you built (spec: specs/F-13, handoff: handoffs/F-13) | done (check 45 PASS; also fixed the terminal-reply parser dropping entries from nested arrays of ten or more) |
-| E-05 | `interview.questions` on the chapter interview levels; `--run-ops` grades ops levels against the harness's own stack (`G01_RUN_OPS=1`) (spec: specs/E-05) | in progress |
-| C-POL | The learner's README, tester docs on the current tag, follow-up questions on the nine chapter interviews (spec: specs/C-POL) | in progress |
+| E-05 | `interview.questions` on the chapter interview levels; `--run-ops` grades ops levels against the harness's own stack (`G01_RUN_OPS=1`) (spec: specs/E-05, handoff: handoffs/E-05) | done (check 89 PASS; real ops levels of ch0, ch3 and ch5 graded by their scripts on an isolated stack, 12/12) |
+| C-POL | The learner's README, tester docs on the current tag, follow-up questions on the nine chapter interviews (spec: specs/C-POL, handoff: handoffs/C-POL) | done (check 157 PASS; README with the eight-chapter table; tester docs on v1.0.0-rc2) |
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, tag v0.1.0) | started 2026-11-01 |
 
 ## Decisions log (newest first)

@@ -7,6 +7,34 @@ interview:
   minutes: 25
   rebuild_of: ch4-03-a-worker-died
   hint_xp_cost: 10
+  questions:
+    - type: quiz
+      question: "Your worker adds the runs and dies before the XACK, and the sweep hands the ball to another worker. How many times are the runs added?"
+      options:
+        - { id: st1-skip, label: "Redis remembers the work was done and skips it" }
+        - { id: st1-rollback, label: "The unacknowledged add is rolled back, so the runs are counted exactly once" }
+        - { id: st1-lost, label: "They are lost, because a claimed entry is deleted from the stream" }
+        - { id: st1-twice, label: "They are added twice, because delivery is at-least-once; the fix is to make the processing idempotent, with an idempotency key as in level 4.8" }
+      correct: st1-twice
+      explanation: "Levels 4.3 and 4.8: a consumer group keeps delivering an entry until somebody acknowledges it (streams page), which says nothing about its effect happening once, and Redis does not roll anything back (transactions page). The sweep is only safe if the work is idempotent: a marker written with SET NX in the same script as the INCRBY, so the second delivery changes nothing."
+    - type: quiz
+      question: "I plant one ball that crashes every worker that touches it. What stops it going round for ever?"
+      options:
+        - { id: st2-xdel, label: "XDEL it the first time it fails" }
+        - { id: st2-delivery, label: "Read its delivery count from XPENDING and, at or over a limit, copy it to a dead-letter stream and XACK it on the group" }
+        - { id: st2-idle, label: "Raise the minimum idle time so that nobody claims it" }
+        - { id: st2-workers, label: "Add more workers until one of them survives" }
+      correct: st2-delivery
+      explanation: "Level 4.4 and the streams page: the delivery counter goes up on every claim and is the signal for a poison message. The dead-letter stream keeps the evidence for a human, and the XACK on the original removes the entry from the group's pending list; without it the ball is both dead-lettered and still pending."
+    - type: quiz
+      question: "Which command shows me the stuck balls, how long they have been stuck and how many times each was tried?"
+      options:
+        - { id: st3-xlen, label: "XLEN on the stream" }
+        - { id: st3-xrange, label: "XRANGE - +, which marks the unacknowledged ones" }
+        - { id: st3-info, label: "INFO persistence" }
+        - { id: st3-xpending, label: "XPENDING on the group in its extended form: id, consumer, idle milliseconds and delivery count for each pending entry" }
+      correct: st3-xpending
+      explanation: "Level 4.3: XPENDING key group is the summary, and with - + and a count it lists each pending entry with its consumer, idle time and delivery count. XLEN only counts entries, acknowledged or not, and XRANGE shows contents without any delivery state."
 
 story: |
   The placement season has reached the interviewer who runs the data platform of a logistics company, and she has one scenario she gives everybody. "Our events go into a stream and two workers share them. In the middle of a batch one worker is killed. A day later we find that some events were never counted, and one event has been tried four hundred times. Rebuild the recovery. I will run it with a dead worker and a poison event."
