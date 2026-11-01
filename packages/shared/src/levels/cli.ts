@@ -5,7 +5,7 @@
 
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { loadAllLevels, type LoadedChapter } from './loader.js';
+import { chapterOrder, interviewReferenceErrors, loadAllLevels, type LoadedChapter } from './loader.js';
 import { compareErrors, formatLevelError, type LevelError } from './source.js';
 
 function findRepoRoot(from: string): string | undefined {
@@ -32,10 +32,12 @@ async function main(argv: string[]): Promise<number> {
   const errors: LevelError[] = [];
   const chapters = new Map<string, LoadedChapter>();
   for (const d of dirs) {
-    const r = await loadAllLevels(d);
+    const r = await loadAllLevels(d, { skipInterviewCheck: true });
     errors.push(...r.errors);
     for (const c of r.chapters) chapters.set(c.dir, c);
   }
+  // rebuild_of may point into another directory given on the same command line, so check the union.
+  errors.push(...(await interviewReferenceErrors([...chapters.values()].sort(chapterOrder))));
   errors.sort(compareErrors);
   for (const e of errors) console.log(formatLevelError(e, base));
 

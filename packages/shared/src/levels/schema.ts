@@ -579,6 +579,30 @@ const showMeSchema = z
   ])
   .transform((v): ShowMe => (typeof v === 'string' ? { component: v, keys: [] } : v));
 
+/**
+ * F-12. A timed blank rebuild: the level is graded like any other, but there is no teaching, a countdown
+ * runs, hints cost XP, and the elapsed time is recorded. `rebuild_of` must name a level in the same chapter
+ * (earlier) or an earlier chapter; that needs the whole tree, so the loader checks it, not this schema.
+ */
+export const INTERVIEW_MINUTES_MIN = 5;
+export const INTERVIEW_MINUTES_MAX = 60;
+export const INTERVIEW_DEFAULT_HINT_XP_COST = 10;
+export const interviewSchema = z.strictObject({
+  minutes: z
+    .number({ error: 'must be a whole number of minutes' })
+    .int('must be a whole number of minutes')
+    .min(INTERVIEW_MINUTES_MIN, `must be at least ${INTERVIEW_MINUTES_MIN} minutes`)
+    .max(INTERVIEW_MINUTES_MAX, `must be at most ${INTERVIEW_MINUTES_MAX} minutes`),
+  rebuild_of: levelId,
+  hint_xp_cost: z
+    .number({ error: 'must be a whole number of XP' })
+    .int('must be a whole number of XP')
+    .min(0, 'must not be negative')
+    .max(1000, 'must be at most 1000')
+    .default(INTERVIEW_DEFAULT_HINT_XP_COST),
+});
+export type Interview = z.output<typeof interviewSchema>;
+
 const levelBase = {
   id: levelId,
   chapter: chapterId,
@@ -607,12 +631,21 @@ const levelBase = {
   reward: z.strictObject({ xp: z.number().int().positive(), badge: text.optional() }),
 };
 
-const fileModeLevel = <M extends Exclude<LevelMode, 'decision'>>(mode: M) =>
+const fileModeLevel = <M extends Exclude<LevelMode, 'decision' | 'code'>>(mode: M) =>
   z.strictObject({ ...levelBase, mode: z.literal(mode), solutions: fileSolutions });
+
+// Only a code level can be an interview rebuild, and only then may `teach` be left out.
+const codeLevel = z.strictObject({
+  ...levelBase,
+  teach: text.optional(),
+  interview: interviewSchema.optional(),
+  mode: z.literal('code'),
+  solutions: fileSolutions,
+});
 
 const levelUnion = z.discriminatedUnion('mode', [
   fileModeLevel('cli'),
-  fileModeLevel('code'),
+  codeLevel,
   fileModeLevel('ops'),
   z.strictObject({ ...levelBase, mode: z.literal('decision'), solutions: decisionSolutions }),
 ]);
@@ -621,6 +654,10 @@ type LevelUnion = z.output<typeof levelUnion>;
 
 function checkLevel(level: LevelUnion, ctx: z.RefinementCtx): void {
   const types = level.verify.map((v) => v.type);
+
+  if (level.mode === 'code' && level.teach === undefined && level.interview === undefined) {
+    ctx.addIssue({ code: 'custom', path: ['teach'], message: 'required (it may only be left out on an interview level)' });
+  }
 
   // Decision solutions name quiz option ids, so a decision level needs a quiz; `answer`
   // verifiers belong in cli and ops levels (typed values read back from Redis).

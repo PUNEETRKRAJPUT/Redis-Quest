@@ -55,19 +55,27 @@ export interface Aggregate {
   /** Sums of the additive per-request counters the app pushes (P0-07); 0 when no instance sent them. */
   dbQueries: number;
   redisCommands: number;
+  /** 429 responses (the app pushes it per route since A-01). */
+  denied?: number;
   noDbCount: number;
   slotErrors: number;
 }
 
 /** Fields that add up across seconds and instances (unlike percentiles). */
-export const ADDITIVE_FIELDS = ['dbQueries', 'redisCommands', 'noDbCount', 'slotErrors'] as const;
+export const ADDITIVE_FIELDS = [
+  'dbQueries',
+  'redisCommands',
+  'noDbCount',
+  'slotErrors',
+  'denied',
+] as const;
 
 function aggregate(stats: RouteStat[]): Aggregate {
   let count = 0;
   let errors = 0;
   let p50w = 0;
   let p99 = 0;
-  const sums = { dbQueries: 0, redisCommands: 0, noDbCount: 0, slotErrors: 0 };
+  const sums = { dbQueries: 0, redisCommands: 0, noDbCount: 0, slotErrors: 0, denied: 0 };
   for (const s of stats) {
     count += s.count;
     errors += s.errors;

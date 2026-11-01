@@ -5,6 +5,7 @@ import { Stage } from '../level/Stage';
 import { Thread } from '../level/Thread';
 import { ChecksList, VerdictBanner } from '../level/VerifyPanel';
 import { Workbench } from '../level/Workbench';
+import { Countdown, hintButtonLabel, hintCostCopy, rebuiltIn } from '../level/interview';
 import { IconBulb, IconCheck, IconSpinner } from '../icons';
 import { Markdown } from '../markdown';
 import { PainPanel } from '../panels/MetricsPanel';
@@ -30,6 +31,8 @@ export function LevelScreen({ id }: { id: string }) {
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [wantIdeal, setWantIdeal] = useState(false);
   const [hintBusy, setHintBusy] = useState(false);
+  const [confirmingHint, setConfirmingHint] = useState(false);
+  const keepXpRef = useRef<HTMLButtonElement>(null);
   const [bsOption, setBsOption] = useState<string>('');
   const [bsText, setBsText] = useState('');
   const [bsEditing, setBsEditing] = useState(false);
@@ -65,6 +68,7 @@ export function LevelScreen({ id }: { id: string }) {
     setVerifyError(null);
     setAnswers({});
     setWantIdeal(false);
+    setConfirmingHint(false);
     setBsEditing(false);
     setOpen({ 1: true });
     started.current = null;
@@ -104,6 +108,11 @@ export function LevelScreen({ id }: { id: string }) {
     if (level) void load();
     // `stamp` is the dependency on purpose: it changes exactly when this level's progress entry changes.
   }, [stamp]);
+
+  // The prompt opens on the safe choice, so Enter or Space keeps the XP.
+  useEffect(() => {
+    if (confirmingHint) keepXpRef.current?.focus();
+  }, [confirmingHint]);
 
   useEffect(() => {
     if (level?.brainstormAnswer && !bsEditing) {
@@ -166,6 +175,7 @@ export function LevelScreen({ id }: { id: string }) {
   };
 
   const revealHint = async () => {
+    setConfirmingHint(false);
     setHintBusy(true);
     try {
       await api.hint(id);
@@ -206,6 +216,9 @@ export function LevelScreen({ id }: { id: string }) {
   const firstInChapter = chapter?.levels[0]?.id === id;
   const benchStart = level.mode === 'cli' ? 'terminal' : level.mode === 'code' ? 'editor' : null;
   const hintsShown = level.hints.length;
+  const interview = level.interview;
+  const hintCost = interview?.hintXpCost ?? 0;
+  const rebuilt = rebuiltIn(interview);
 
   return (
     <main
@@ -229,6 +242,22 @@ export function LevelScreen({ id }: { id: string }) {
                 <span className="pill badge">Badge: {level.reward.badge}</span>
               </>
             ) : null}
+            {interview ? (
+              <>
+                {' '}
+                <span className="pill interview" data-testid="interview-pill">
+                  Interview: {interview.minutes} min, hints cost {interview.hintXpCost} XP
+                </span>
+                {interview.hintsBought > 0 ? (
+                  <>
+                    {' '}
+                    <span className="pill" data-testid="hints-bought">
+                      Hints bought: {interview.hintsBought}
+                    </span>
+                  </>
+                ) : null}
+              </>
+            ) : null}
             {level.minRedisVersion ? (
               <>
                 {' '}
@@ -237,9 +266,12 @@ export function LevelScreen({ id }: { id: string }) {
             ) : null}
           </p>
         </div>
-        <span className={`status-chip ${level.status}`} data-testid="level-status">
-          {level.status.replace('_', ' ')}
-        </span>
+        <div className="level-head-side">
+          <span className={`status-chip ${level.status}`} data-testid="level-status">
+            {level.status.replace('_', ' ')}
+          </span>
+          <Countdown level={level} />
+        </div>
       </header>
 
       <Stage n={1} title="Scenario" open={!!open[1]} onToggle={() => toggle(1)}>
@@ -381,26 +413,42 @@ export function LevelScreen({ id }: { id: string }) {
         )}
       </Stage>
 
-      <Stage n={4} title="Teach" open={!!open[4]} onToggle={() => toggle(4)}>
-        <Markdown source={level.teach} />
-        {level.docs.length ? (
-          <p className="docs">
-            Official docs:{' '}
-            {level.docs.map((d, i) => (
-              <span key={d}>
-                {i ? ', ' : ''}
-                <a href={d} target="_blank" rel="noopener noreferrer">
-                  {d.replace('https://', '')}
-                  <span className="sr-only"> (opens in a new tab)</span>
-                </a>
-              </span>
-            ))}
-          </p>
-        ) : null}
-        <button type="button" className="btn" onClick={() => openStage(5)}>
-          Next: build
-        </button>
-      </Stage>
+      {interview ? (
+        <Stage
+          n={4}
+          title="Teach"
+          chip="skipped"
+          tone="locked"
+          open={!!open[4]}
+          onToggle={() => toggle(4)}
+        >
+          <p data-testid="no-teaching">No teaching here: this is the interview.</p>
+          <button type="button" className="btn" onClick={() => openStage(5)}>
+            Next: build
+          </button>
+        </Stage>
+      ) : (
+        <Stage n={4} title="Teach" open={!!open[4]} onToggle={() => toggle(4)}>
+          <Markdown source={level.teach} />
+          {level.docs.length ? (
+            <p className="docs">
+              Official docs:{' '}
+              {level.docs.map((d, i) => (
+                <span key={d}>
+                  {i ? ', ' : ''}
+                  <a href={d} target="_blank" rel="noopener noreferrer">
+                    {d.replace('https://', '')}
+                    <span className="sr-only"> (opens in a new tab)</span>
+                  </a>
+                </span>
+              ))}
+            </p>
+          ) : null}
+          <button type="button" className="btn" onClick={() => openStage(5)}>
+            Next: build
+          </button>
+        </Stage>
+      )}
 
       <Stage
         n={5}
@@ -466,14 +514,50 @@ export function LevelScreen({ id }: { id: string }) {
             <button
               type="button"
               className="btn ghost"
-              onClick={() => void revealHint()}
-              disabled={hintBusy || hintsShown >= level.hintsTotal}
+              onClick={() => (interview ? setConfirmingHint(true) : void revealHint())}
+              disabled={hintBusy || hintsShown >= level.hintsTotal || confirmingHint}
               data-testid="hint-button"
             >
-              {hintsShown >= level.hintsTotal
-                ? 'No more hints'
-                : `Show a hint (${hintsShown} of ${level.hintsTotal})`}
+              {interview
+                ? hintButtonLabel(hintCost, hintsShown, level.hintsTotal)
+                : hintsShown >= level.hintsTotal
+                  ? 'No more hints'
+                  : `Show a hint (${hintsShown} of ${level.hintsTotal})`}
             </button>
+          ) : null}
+          {interview && confirmingHint ? (
+            <div
+              className="hint-confirm"
+              role="group"
+              aria-labelledby="hint-confirm-text"
+              data-testid="hint-confirm"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setConfirmingHint(false);
+              }}
+            >
+              <p id="hint-confirm-text" data-testid="hint-confirm-text">
+                {hintCostCopy(hintCost, progress.xp)} Take it?
+              </p>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void revealHint()}
+                data-testid="hint-confirm-yes"
+              >
+                {hintCost === 0
+                  ? 'Show the hint'
+                  : `Spend ${Math.min(hintCost, progress.xp)} XP and show it`}
+              </button>{' '}
+              <button
+                type="button"
+                className="btn ghost"
+                ref={keepXpRef}
+                onClick={() => setConfirmingHint(false)}
+                data-testid="hint-confirm-no"
+              >
+                Keep my XP
+              </button>
+            </div>
           ) : null}
         </div>
         <button type="button" className="btn" onClick={() => openStage(6)}>
@@ -520,6 +604,12 @@ export function LevelScreen({ id }: { id: string }) {
           </p>
         ) : null}
         <ChecksList level={level} result={result} verifying={verifying} />
+        {result?.overtime ? (
+          <p className="callout warn" role="status" data-testid="overtime-note">
+            Overtime: this verify came after the {interview?.minutes}-minute limit. It was graded
+            like any other, and the result is marked overtime.
+          </p>
+        ) : null}
         {result ? <VerdictBanner result={result} /> : null}
         {passed ? (
           <div className="passed" data-testid="passed-panel">
@@ -527,6 +617,12 @@ export function LevelScreen({ id }: { id: string }) {
               <IconCheck size={18} /> Level passed. +{level.reward.xp} XP
               {level.reward.badge ? `, badge "${level.reward.badge}"` : ''}.
             </p>
+            {rebuilt ? (
+              <p className="passed-line rebuilt" data-testid="rebuilt-in">
+                {rebuilt[0]?.toUpperCase()}
+                {rebuilt.slice(1)}.
+              </p>
+            ) : null}
             {level.showMe ? <ShowMe spec={level.showMe} playerId={progress.player.id} /> : null}
             {next ? (
               <a

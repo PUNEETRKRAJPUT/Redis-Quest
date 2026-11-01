@@ -7,8 +7,9 @@
 > `applyChange` events are `{ aggregate, aggregateId, op, payload }` with a parsed payload and arrive for
 > every aggregate (the learner filters `matches`); the fail-fast errors are `Error: The client is offline`
 > (Redis stopped, about 10 ms) and `RedisCommandTimeoutError` (Redis hung, 2 s), so level 10 teaches a
-> catch-all around the Redis calls. The `interview` field is confirmed against `docs/handoffs/F-12.md`
-> by the orchestrator before this is spawned.
+> catch-all around the Redis calls. The `interview` field is confirmed from `docs/handoffs/F-12.md`:
+> `interview: { minutes: 5..60, rebuild_of: <level id>, hint_xp_cost: <int, default 10> }` on a `code` level, and
+> `teach` may be omitted only then; see `levels/_examples/example-interview/` for a complete example.
 
 **Goal.** Finish Chapter 2: negative caching, the hit ratio as the number, the prefetch cache fed by
 CDC, sessions done properly, eviction, the Redis-is-down drill, and the first three interview rebuilds.

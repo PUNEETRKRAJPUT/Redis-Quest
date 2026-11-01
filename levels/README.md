@@ -122,7 +122,7 @@ solutions:                             # beat 7, and the CI proof of every verif
 | `mode` | yes | `cli`, `code`, `ops` or `decision`: the main way the learner builds. A level can still mix verifiers (an `ops` level with a `quiz`) |
 | `story` | yes | markdown, or `{ file: ./x.md }` |
 | `brainstorm` | yes | `prompt`, `options: [{ id, label, is_reasonable }]`. The learner always writes one free-text line as well; there is no field for it |
-| `teach` | yes | markdown, or `{ file: ./x.md }` |
+| `teach` | yes | markdown, or `{ file: ./x.md }`. Optional only on a `code` level that sets `interview` |
 | `task` | yes | markdown, or `{ file: ./x.md }` |
 | `verify` | yes | non-empty list of verifiers (below) |
 | `reward` | yes | `xp` (positive integer), optional `badge` |
@@ -131,6 +131,7 @@ solutions:                             # beat 7, and the CI proof of every verif
 | `scenario` | no | load scenario id for the live pain panel (e.g. `toss-time-100`) |
 | `hints` | no | ordered list of strings |
 | `show_me` | no | `{ component, keys, title? }`, see below; a bare component id is still accepted |
+| `interview` | no | `code` levels only: makes the level a timed blank rebuild, see "Interview levels" |
 | `docs` | no | URLs starting with `https://redis.io/docs/` |
 | `min_redis_version` | no | quoted, e.g. `"8.4"`, for commands that need it |
 
@@ -150,6 +151,30 @@ Rules that cut across fields:
   `works_but_wrong` solution needs an `antipattern` verifier (each detector is proven to fire).
 - `setup` and fixtures may not run `FLUSHALL`, `FLUSHDB` or `SHUTDOWN`, and may not touch any key
   starting with `game:`. That prefix belongs to the engine (the learner's save file).
+
+## Interview levels
+
+A `code` level can be a timed blank rebuild of an earlier level (PLAN.md section 5, "Interview mode"):
+
+```yaml
+interview:
+  minutes: 10                          # 5 to 60, whole minutes
+  rebuild_of: example-code-01-cache-aside   # the guided level this repeats
+  hint_xp_cost: 10                     # whole XP per hint, default 10
+```
+
+- Leave `teach` out. The UI replaces the Teach beat with one line, "no teaching here: this is the
+  interview", and the engine never sends `teach` for an interview level. If you write one anyway, it is not shown.
+- `rebuild_of` must be a level in the same chapter that is listed before this one, or in an earlier chapter
+  (canonical chapter order). The check needs the whole tree, so the engine's loader does it, and so does the
+  validator when you pass every directory involved:
+  `node packages/shared/dist/levels/cli.js levels/_examples/example-code levels/_examples/example-interview`.
+  Validating the interview chapter alone reports that `rebuild_of` was not loaded.
+- The verifiers are the same kind as any code level; the timer never changes the verdict. The clock starts when
+  the level is first started, a verify after the deadline still grades and is marked overtime, each hint
+  subtracts `hint_xp_cost` from the learner's XP (never below 0), and a pass records "rebuilt in m:ss".
+- Write the task in interview wording ("Design a ... that ...") and keep hints few; they cost XP here.
+- A full example is `levels/_examples/example-interview/`.
 
 ## The seven beats
 

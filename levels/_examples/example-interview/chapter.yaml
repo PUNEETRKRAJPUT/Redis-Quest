@@ -1,0 +1,11 @@
+id: example-interview
+title: "Example: the interview"
+incident:
+  - from: senior
+    time: "10:02"
+    text: "Okay, whiteboard time. Same cache-aside you built last week, but from a blank file and with the clock running."
+  - from: you
+    time: "10:03"
+    text: "No notes. Ten minutes. Let's go."
+levels:
+  - example-interview-01-cache-aside-rebuild

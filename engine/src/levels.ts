@@ -78,7 +78,7 @@ export function renderLevel(
     {
       title: lv.title,
       story: lv.story,
-      teach: lv.teach,
+      teach: lv.mode === 'code' && lv.interview ? '' : (lv.teach ?? ''),
       task: lv.task,
       brainstorm: lv.brainstorm,
       hints: lv.hints ?? [],

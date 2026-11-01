@@ -12,6 +12,10 @@ export const SLOT_FILES: Readonly<Record<string, string>> = {
   'prefetch.getFixtures': 'ch2/prefetch.js',
   'session.create': 'ch3/session-create.js',
   'session.get': 'ch3/session-get.js',
+  'prefetch.bulkLoad': 'ch2/prefetch-bulk.js',
+  'prefetch.applyChange': 'ch2/prefetch-apply.js',
+  'session.destroy': 'ch3/session-destroy.js',
+  'session.destroyAll': 'ch3/session-destroy-all.js',
   'leaderboard.top': 'ch3/leaderboard.js',
   'ratelimit.allow': 'ch3/ratelimit.js',
 };

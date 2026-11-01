@@ -1,0 +1,69 @@
+id: example-interview-01-cache-aside-rebuild
+chapter: example-interview
+title: "Interview: cache the player stats page"
+mode: code
+
+# F-12 example of an interview level: a timed blank rebuild of example-code-01-cache-aside.
+# There is no `teach`; the UI shows a one-line "no teaching here" instead. Hints cost XP.
+interview:
+  minutes: 10
+  rebuild_of: example-code-01-cache-aside
+  hint_xp_cost: 10
+
+story: |
+  The interviewer slides a marker across the table. "Player stats pages are slow because every request
+  runs the same Postgres query. You have ten minutes and a blank file. Show me."
+
+brainstorm:
+  prompt: "Before you type: what is your first move, and what is the one thing you will not forget?"
+  options:
+    - id: cache-aside-ttl
+      label: "Cache-aside with a TTL, so a stale entry fixes itself"
+      is_reasonable: true
+    - id: cache-forever
+      label: "Cache it in Redis with no expiry"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: add an index or a read replica first"
+      is_reasonable: true
+
+task: |
+  Design a read-through cache for player stats. Fill in `getPlayerStats(deps, playerId)` in
+  `workspace/ch2/cache.js` from a blank file.
+
+  - Cache key: `cache:player:<playerId>`, a hash.
+  - On a miss, load from Postgres with `db.query('SELECT * FROM player_stats($1)', [playerId])`.
+  - Keep cached stats for **30 seconds**.
+
+hints:
+  - "HGETALL on a missing key returns an empty object, not null."
+  - "Write the hash and its expiry in one MULTI so the key never exists without a TTL."
+
+verify:
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/01-cold-cache.yaml
+    assertions:
+      - call: { args: ["p-028"] }
+        sideEffect:
+          - cmd: [TYPE, "cache:player:p-028"]
+            equals: hash
+            message: "After a miss, cache:player:p-028 should be a hash in Redis. Nothing was cached."
+          - cmd: [TTL, "cache:player:p-028"]
+            between: [1, 30]
+            message: "The cached entry should expire within 30 seconds."
+
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+min_redis_version: "8.0"
+
+reward:
+  xp: 150
+  badge: "Cache, under pressure"
+
+solutions:
+  reference: solutions/01-reference.js
+  wrong:
+    - path: solutions/01-wrong-no-cache.js
+      expect: wrong
+      because: "Reads Postgres every time; nothing is cached."

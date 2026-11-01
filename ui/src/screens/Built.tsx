@@ -3,7 +3,8 @@ import { api } from '../api';
 import { IconExternal } from '../icons';
 import { ShowMe } from '../showme';
 import { useQuest } from '../store';
-import type { ShowMeSpec } from '../types';
+import { rebuiltIn } from '../level/interview';
+import type { LevelData } from '../types';
 
 const DEFAULT_INSIGHT_PORT = '5540';
 
@@ -46,17 +47,27 @@ function BuiltCard({
   chapter: string;
   playerId: string;
 }) {
-  const [showMe, setShowMe] = useState<ShowMeSpec | null | undefined>(undefined);
+  const [info, setInfo] = useState<Pick<LevelData, 'showMe' | 'interview'> | null | undefined>(
+    undefined,
+  );
   useEffect(() => {
     api
       .level(levelId)
-      .then((l) => setShowMe(l.showMe))
-      .catch(() => setShowMe(null));
+      .then((l) => setInfo({ showMe: l.showMe, interview: l.interview ?? null }))
+      .catch(() => setInfo(null));
   }, [levelId]);
+  const showMe = info === undefined ? undefined : (info?.showMe ?? null);
+  const rebuilt = rebuiltIn(info?.interview);
   return (
     <section className="built-card" data-testid={`built-${levelId}`}>
       <h2>{title}</h2>
       <p className="muted">{chapter}</p>
+      {rebuilt ? (
+        <p className="rebuilt" data-testid={`built-rebuilt-${levelId}`}>
+          {rebuilt[0]?.toUpperCase()}
+          {rebuilt.slice(1)}.
+        </p>
+      ) : null}
       {showMe === undefined ? (
         <p className="muted">Loading...</p>
       ) : showMe ? (

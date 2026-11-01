@@ -510,7 +510,7 @@ async function findChapterDirs(dir: string, errors: LevelError[]): Promise<strin
   return out;
 }
 
-function chapterOrder(a: LoadedChapter, b: LoadedChapter): number {
+export function chapterOrder(a: LoadedChapter, b: LoadedChapter): number {
   const rank = (c: LoadedChapter) => {
     const i = (CANONICAL_CHAPTER_DIRS as readonly string[]).indexOf(c.dirName);
     return i === -1 ? CANONICAL_CHAPTER_DIRS.length : i;
@@ -519,7 +519,7 @@ function chapterOrder(a: LoadedChapter, b: LoadedChapter): number {
 }
 
 /** Loads every chapter under `root` (normally `levels/`). The engine should refuse to start if `errors` is non-empty. */
-export async function loadAllLevels(root: string): Promise<LevelsLoadResult> {
+export async function loadAllLevels(root: string, opts: { skipInterviewCheck?: boolean } = {}): Promise<LevelsLoadResult> {
   root = resolve(root);
   if (!(await isDir(root))) return { chapters: [], errors: [fileError(root, 'directory not found')] };
   const errors: LevelError[] = [];
@@ -532,7 +532,45 @@ export async function loadAllLevels(root: string): Promise<LevelsLoadResult> {
   }
   errors.push(...duplicateChapterErrors(chapters));
   chapters.sort(chapterOrder);
+  // A caller that merges several roots (the validator) runs this once over the union instead.
+  if (!opts.skipInterviewCheck) errors.push(...(await interviewReferenceErrors(chapters)));
   return { chapters, errors: dedupe(errors).sort(compareErrors) };
+}
+
+/**
+ * F-12: an interview level's `rebuild_of` must name a level in the same chapter (listed before it) or in an
+ * earlier chapter, by the chapter order of `chapters`. Needs the whole tree, so it runs here and not in the
+ * level schema. Validating one chapter on its own therefore cannot resolve a reference into another one:
+ * pass both directories to the validator.
+ */
+export async function interviewReferenceErrors(chapters: readonly LoadedChapter[]): Promise<LevelError[]> {
+  const position = new Map<string, { chapter: number; level: number }>();
+  chapters.forEach((c, ci) => c.levels.forEach((l, li) => position.set(l.level.id, { chapter: ci, level: li })));
+  const errors: LevelError[] = [];
+  for (const [ci, c] of chapters.entries()) {
+    for (const [li, l] of c.levels.entries()) {
+      if (l.level.mode !== 'code' || !l.level.interview) continue;
+      const target = l.level.interview.rebuild_of;
+      const found = position.get(target);
+      let message: string | undefined;
+      if (!found) {
+        message = `${target} is not a level that was loaded; rebuild_of must name an existing level in this chapter or an earlier one (when validating one chapter alone, pass the chapter holding it too)`;
+      } else if (found.chapter > ci || (found.chapter === ci && found.level >= li)) {
+        message = `${target} comes ${found.chapter === ci ? 'after this level in its chapter' : 'in a later chapter'}; rebuild_of must name a level in this chapter (listed before this one) or an earlier chapter`;
+      }
+      if (!message) continue;
+      const path: PathSegment[] = ['interview', 'rebuild_of'];
+      let pos = { line: 1, col: 1 };
+      try {
+        const parsed = parseYaml(l.file, await readFile(l.file, 'utf8'));
+        if (!parsed.errors.length) pos = positionOf(parsed.source, path);
+      } catch {
+        // keep 1:1; the message still names the problem
+      }
+      errors.push({ file: l.file, line: pos.line, col: pos.col, path: formatPath(path), message });
+    }
+  }
+  return errors;
 }
 
 function duplicateChapterErrors(chapters: LoadedChapter[]): LevelError[] {
@@ -552,12 +590,13 @@ export async function validateLevels(dirs: string | readonly string[]): Promise<
   const errors: LevelError[] = [];
   const chapters: LoadedChapter[] = [];
   for (const d of list) {
-    const r = await loadAllLevels(d);
+    const r = await loadAllLevels(d, { skipInterviewCheck: true });
     errors.push(...r.errors);
     chapters.push(...r.chapters);
   }
   // The same chapter reached twice (overlapping arguments) is not a duplicate.
   const unique = [...new Map(chapters.map((c) => [c.dir, c])).values()];
   errors.push(...duplicateChapterErrors(unique));
+  errors.push(...(await interviewReferenceErrors([...unique].sort(chapterOrder))));
   return dedupe(errors).sort(compareErrors);
 }

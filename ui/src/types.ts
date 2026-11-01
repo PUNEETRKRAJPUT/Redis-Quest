@@ -19,6 +19,11 @@ export interface ProgressLevel {
   completedAt?: string;
   startedAt?: string;
   hintsRevealed?: number;
+  /** F-12, interview levels only. */
+  interviewStartedAt?: string;
+  hintsBought?: number;
+  interviewElapsedMs?: number;
+  overtime?: boolean;
 }
 
 export interface Progress {
@@ -69,6 +74,21 @@ export type VerifierInfo =
   | { index: number; type: 'answer'; prompt: string }
   | { index: number; type: string };
 
+/** F-12: `interview` of GET /api/levels/:id (null on an ordinary level); `remainingMs` is its sibling. */
+export interface InterviewInfo {
+  minutes: number;
+  hintXpCost: number;
+  rebuildOf: { id: string; title: string | null };
+  startedAt: string | null;
+  deadlineAt: string | null;
+  overtime: boolean;
+  /** Past the deadline by this much when the response was made (or when the level was passed). */
+  overtimeMs: number;
+  hintsBought: number;
+  /** Set once passed: the time it took. */
+  elapsedMs: number | null;
+}
+
 export interface LevelData {
   id: string;
   chapter: string;
@@ -92,6 +112,9 @@ export interface LevelData {
   brainstormAnswer: { optionId: string; text: string; at: string } | null;
   startedAt: string | null;
   completedAt: string | null;
+  interview: InterviewInfo | null;
+  /** Milliseconds left on the interview clock when the response was made; null on other levels or before the start. */
+  remainingMs: number | null;
 }
 
 /** One entry of `checks` in the verify response (P0-09 spec). Everything but `ok` is optional for safety. */
@@ -113,6 +136,9 @@ export interface VerifyResponse {
   metrics?: Record<string, unknown>;
   /** Present when the engine allows the ideal way (passed, or 3 attempts). Shape: docs/handoffs/P0-09.md. */
   ideal?: Ideal;
+  /** Interview levels only: the deadline had passed when the verify was asked for, and the time since the start. */
+  overtime?: boolean;
+  elapsedMs?: number | null;
   [extra: string]: unknown;
 }
 

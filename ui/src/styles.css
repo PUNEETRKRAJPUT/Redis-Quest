@@ -549,6 +549,52 @@ a.level-link:hover {
   align-items: flex-start;
   margin-bottom: 14px;
 }
+.level-head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.pill.interview {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.countdown {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1.15rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.countdown.running {
+  color: var(--accent);
+}
+.countdown.overtime {
+  color: var(--bad);
+}
+.countdown.done {
+  color: var(--ok);
+  font-size: 0.95rem;
+}
+.countdown.waiting {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+.hint-confirm {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 8px 0;
+}
+.hint-confirm p {
+  margin: 0 0 8px;
+}
+.rebuilt {
+  font-weight: 600;
+}
 .status-chip {
   text-transform: capitalize;
   font-size: 0.8rem;

@@ -7,13 +7,20 @@ export type LevelStatus = 'locked' | 'available' | 'in_progress' | 'passed';
 export interface LevelProgress {
   status: LevelStatus;
   attempts: number;
-  verdicts: { at: string; verdict: string }[];
+  verdicts: { at: string; verdict: string; overtime?: true }[];
   brainstorm?: { optionId: string; text: string; at: string };
   completedAt?: string;
   /** Additive to the P0-06 spec: set by POST /levels/:id/start (the event verifier looks back to this). */
   startedAt?: string;
   /** Additive: how many hints the learner has revealed. */
   hintsRevealed?: number;
+  /** F-12, interview levels only. When the clock started; the first start wins. */
+  interviewStartedAt?: string;
+  /** F-12: hints bought on an interview level (each cost XP). */
+  hintsBought?: number;
+  /** F-12: set on the first pass: the time it took, and whether the deadline had passed by then. */
+  interviewElapsedMs?: number;
+  overtime?: boolean;
 }
 
 export interface ProgressFile {

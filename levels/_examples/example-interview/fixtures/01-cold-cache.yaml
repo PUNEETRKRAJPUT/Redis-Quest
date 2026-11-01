@@ -1,0 +1,3 @@
+# Run before this behavior verifier, every time, so the first call is always a miss.
+steps:
+  - cmd: [DEL, "cache:player:p-028"]

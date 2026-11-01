@@ -13,6 +13,14 @@ import type { Config } from './config.js';
 import type { EventBus } from './events.js';
 import { renderLevel, templateContext, type LevelIndexEntry, type LevelService } from './levels.js';
 import { LOG_SERVICES, type LogService, type LogTail } from './logtail.js';
+import {
+  chargeHint,
+  interviewSpec,
+  interviewView,
+  settlePass,
+  startInterview,
+  verifyTiming,
+} from './interview.js';
 import { KEY_BOOTS, type Mirror } from './mirror.js';
 import { MetricsStore, parsePush } from './metrics.js';
 import { newProgress, reconcileLevels, type ProgressFile, type ProgressStore } from './progress.js';
@@ -190,11 +198,19 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
     return out;
   }
 
-  function markPassed(draft: ProgressFile, entry: LevelIndexEntry, now: string): void {
+  /** `atMs` is when the learner asked for the verdict (an interview deadline is judged at the click, not after a slow load run). */
+  function markPassed(
+    draft: ProgressFile,
+    entry: LevelIndexEntry,
+    now: string,
+    atMs: number = Date.parse(now),
+  ): void {
     const lp = draft.levels[entry.level.level.id];
     if (!lp || lp.status === 'passed') return;
     lp.status = 'passed';
     lp.completedAt = now;
+    const iv = interviewSpec(entry.level);
+    if (iv) settlePass(iv, lp, atMs);
     draft.xp += entry.level.level.reward.xp;
     const badge = entry.level.level.reward.badge;
     if (badge && !draft.badges.includes(badge)) draft.badges.push(badge);
@@ -381,8 +397,13 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const lp = p.levels[entry.level.level.id];
         if (!lp || lp.status === 'locked')
           throw new HttpError(409, 'level_locked', `${req.params.id} is locked`);
+        const iv = interviewSpec(entry.level);
+        const timing = iv
+          ? interviewView(iv, lp, Date.now(), levels.get(iv.rebuildOf)?.level.level.title ?? null)
+          : { interview: null, remainingMs: null };
         return {
           ...renderLevel(entry, templateContext(cfg, p, entry), lp),
+          ...timing,
           status: lp.status,
           attempts: lp.attempts,
           brainstormAnswer: lp.brainstorm ?? null,
@@ -414,6 +435,7 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]>;
           if (l.status === 'available') l.status = 'in_progress';
           l.startedAt = now;
+          if (interviewSpec(entry.level)) startInterview(l, now);
           return l;
         });
         bus.emit('level.event', { kind: 'custom', name: 'level_started', data: { levelId: id } });
@@ -465,15 +487,19 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
             'all hints for this level are already revealed',
             { hintsTotal: hints.length },
           );
-        await commit('hint', id, (draft) => {
-          (draft.levels[id] as NonNullable<ProgressFile['levels'][string]>).hintsRevealed =
-            revealed + 1;
+        const iv = interviewSpec(entry.level);
+        const paid = await commit('hint', id, (draft) => {
+          const l = draft.levels[id] as NonNullable<ProgressFile['levels'][string]>;
+          l.hintsRevealed = revealed + 1;
+          return iv ? chargeHint(iv, draft, l) : null;
         });
         return {
           index: revealed,
           hint: hints[revealed],
           revealed: revealed + 1,
           hintsTotal: hints.length,
+          // Interview levels only: what this hint cost, the XP left, and how many were bought.
+          ...(paid ? { xpCost: paid.charged, xp: paid.xp, hintsBought: paid.hintsBought } : {}),
         };
       });
 
@@ -502,6 +528,10 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           }
         }
         const lp = p.levels[id] as NonNullable<ProgressFile['levels'][string]>;
+        const requestedAtMs = Date.now();
+        const iv = interviewSpec(entry.level);
+        // Interview levels: grade as usual, but note whether the deadline had passed when it was asked for.
+        const timing = iv ? verifyTiming(iv, lp, requestedAtMs) : null;
         const done = verifier.begin(p.player.id); // 409 verify_in_progress on overlap
         let outcome;
         try {
@@ -526,6 +556,7 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           at: now,
           verdict: outcome.verdict,
           durationMs: outcome.durationMs,
+          ...(timing?.overtime ? { overtime: true as const } : {}),
           checks: outcome.checks.map((c) => ({
             index: c.index,
             type: c.type,
@@ -541,7 +572,7 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           };
           l.attempts += 1;
           l.verdicts.push(record);
-          if (outcome.verdict === 'right') markPassed(draft, entry, now);
+          if (outcome.verdict === 'right') markPassed(draft, entry, now, requestedAtMs);
           const access = idealAccess(l.status, l.attempts);
           if (access.allowed) l.idealRevealedAt ??= now;
           return { attempts: l.attempts, status: l.status, allowed: access.allowed };
@@ -550,6 +581,7 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           ...outcome,
           attempts: result.attempts,
           status: result.status,
+          ...(timing ? { overtime: timing.overtime, elapsedMs: timing.elapsedMs } : {}),
           ...(result.allowed ? { ideal } : {}),
         };
       });

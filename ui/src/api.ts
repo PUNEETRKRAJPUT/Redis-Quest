@@ -82,11 +82,16 @@ export const api = {
       { optionId, text },
     ),
   hint: (id: string) =>
-    call<{ index: number; hint: string; revealed: number; hintsTotal: number }>(
-      'POST',
-      `/api/levels/${enc(id)}/hint`,
-      {},
-    ),
+    call<{
+      index: number;
+      hint: string;
+      revealed: number;
+      hintsTotal: number;
+      /** Interview levels only: XP actually taken, XP left, hints bought so far. */
+      xpCost?: number;
+      xp?: number;
+      hintsBought?: number;
+    }>('POST', `/api/levels/${enc(id)}/hint`, {}),
   verify: (id: string, answers: Record<string, string | string[]>) =>
     call<VerifyResponse>('POST', `/api/levels/${enc(id)}/verify`, { answers }),
   ideal: (id: string) => call<IdealResponse>('GET', `/api/levels/${enc(id)}/ideal`),

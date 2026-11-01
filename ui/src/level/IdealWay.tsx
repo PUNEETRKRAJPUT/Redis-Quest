@@ -3,6 +3,7 @@ import { api, ApiError } from '../api';
 import { highlight, Markdown } from '../markdown';
 import type { Ideal, IdealFile, LevelData, VerifierInfo } from '../types';
 import { lineDiff, workspaceFileFromTask } from './diff';
+import { RebuildLink } from './interview';
 
 const MonacoEditor = lazy(() => import('../panels/MonacoEditor'));
 
@@ -230,6 +231,7 @@ export function IdealWay({
   if (!ideal) {
     return (
       <div className="ideal" data-testid="ideal-locked">
+        {level.interview ? <RebuildLink interview={level.interview} /> : null}
         {allowed ? (
           <p className="muted">Loading the ideal way...</p>
         ) : (
@@ -258,6 +260,7 @@ export function IdealWay({
 
   return (
     <div className="ideal" data-testid="ideal" data-mode={ideal.mode}>
+      {level.interview ? <RebuildLink interview={level.interview} /> : null}
       {reason && !allowed ? (
         <p className="muted small-print" data-testid="ideal-revealed-note">
           Revealed early. {reason}
