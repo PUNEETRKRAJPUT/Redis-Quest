@@ -5,8 +5,9 @@ A story-driven game that takes a backend engineer with basic JavaScript from "ne
 machine. Every level makes you do something real against a real Redis, a real Postgres and real
 traffic, and shows you what broke and what you fixed.
 
-**Status: under construction.** Nothing is playable yet. The design is in [docs/PLAN.md](docs/PLAN.md)
-and the build board is in [docs/BUILD.md](docs/BUILD.md).
+**Status: Milestone 1 playtest.** Chapters 0 and 1 and the opening of Chapter 2 are playable. If you are
+one of the testers, start with [docs/TESTING.md](docs/TESTING.md). The design is in
+[docs/PLAN.md](docs/PLAN.md) and the build board in [docs/BUILD.md](docs/BUILD.md).
 
 ## What you will need (when it is ready)
 

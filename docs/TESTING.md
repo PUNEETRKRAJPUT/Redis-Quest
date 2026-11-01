@@ -62,7 +62,8 @@ docker compose ps
 tail -50 logs/engine/engine.log
 ```
 
-Send it all to Puneet. Do not fix anything yourself first; the raw experience is the data.
+Send it all to Puneet, or open an issue with the "Playtest finding" template on GitHub. Do not fix
+anything yourself first; the raw experience is the data.
 
 ## Verified
 
