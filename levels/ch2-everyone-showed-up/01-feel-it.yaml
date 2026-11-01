@@ -1,0 +1,95 @@
+id: ch2-01-feel-it
+chapter: ch2
+title: "Feel it"
+mode: decision
+
+story: |
+  It is 7:25 pm. The toss is in five minutes and the mess hall has filled up. Every phone in the room
+  is about to open the same three pages: Ganapathi "Anna Express" Chengappa, Jithin "Lightning Rod"
+  Varghese and Hitesh "Gulabi Toofan" Bhatt.
+
+  Each stats page runs one slow query in Postgres, a season of ball-by-ball aggregates joined to how
+  many teams picked the player. On your laptop, alone, it takes about a fifth of a second. With a hundred
+  people tapping at once, the live panel on the right shows what the senior is watching on the big
+  screen: the wait climbing past several seconds and Postgres doing the same work again for every
+  single tap.
+
+  The roommate is reading Postgres logs aloud. "Same query. Same query. Same query." He is right, and
+  that is the whole problem: the answer to that query barely changes, and nobody is reusing it.
+
+scenario: stats-hot-100   # drives the live pain panel while the level is open
+
+brainstorm:
+  prompt: "A hundred people, three pages, one slow query whose answer changes about once a match. What would you reach for in the next five minutes?"
+  options:
+    - id: cache-redis
+      label: "Keep the answer in Redis and only ask Postgres when it is missing"
+      is_reasonable: true
+    - id: more-servers
+      label: "Run more app servers so more requests are answered at once"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: make the Postgres query itself cheaper"
+      is_reasonable: true
+
+teach: |
+  Look at what the panel is telling you before you pick a tool. The query is slow, and it is asked
+  again for every request, although its answer is the same for everyone and changes rarely. Two
+  different problems hide in that sentence: how long one run takes, and how many times it runs.
+
+  A **cache** attacks the second one. The docs' cache-aside pattern keeps the database as the source
+  of truth and Redis as a copy that is allowed to be briefly stale: read Redis first, and only on a
+  miss ask the database, then write the answer back with a time to live. After the first request, a
+  hundred taps cost one query, not a hundred.
+
+  Each of the other fixes helps a different problem, or only for tonight's crowd. An index makes one run
+  cheaper and is real work for whoever owns the schema. More Postgres hardware makes every run a
+  bit faster and every run still happens. A variable in the app's memory is a cache, but a private
+  one: it is lost on every restart, and every app instance would hold its own copy.
+
+  On this practice stack the uncached stats call takes roughly 200 ms alone and a cached read a few
+  milliseconds (measured by this project's own check scripts, not an industry figure).
+
+task: |
+  Pick the answer you would ship at 7:27 pm. The next three levels build it: the cache itself, keeping
+  it honest when a player's data changes, and keeping it alive when everyone arrives at the same
+  second.
+
+hints:
+  - "Ask what repeats: the slowness of one query, or the number of times it runs?"
+  - "More than one of these helps eventually. Only one of them stops the same question from reaching Postgres a hundred times in a row."
+
+verify:
+  - type: quiz
+    question: "100 users open the same three player stats pages at once, Postgres is running the same slow aggregate for every request, and the data changes about once a match. It is 7:27 pm. What do you do?"
+    options:
+      - id: cache-redis
+        label: "Cache the stats in Redis, so Postgres answers once and Redis answers the rest"
+      - id: add-index
+        label: "Add an index on the tables the query scans"
+      - id: bigger-pg
+        label: "Move Postgres to a bigger machine"
+      - id: app-memory
+        label: "Cache the stats in a Map inside the app process"
+    correct: cache-redis
+    explanation: "The pain is the same query running again for every request. A Redis cache removes the repeats, so a hundred taps become one query. An index is also a good idea, but it is a schema change that makes one run cheaper, every request still runs it, and it is the DBA's lesson, not tonight's. A bigger Postgres makes each of the hundred runs a little faster and still runs all of them, at a price. A Map in the app's memory is a cache nobody else can see: each app instance fills its own copy, a restart empties it, and tonight's fix would stop working the moment you run a second instance."
+
+show_me: stats_latency_panel
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+
+reward:
+  xp: 30
+
+solutions:
+  reference: cache-redis
+  wrong:
+    - option: add-index
+      expect: wrong
+      because: "An index can make one run of the query cheaper, but every request still runs it, and it needs a schema change on the live database at 7:27. Worth doing later, with the DBA. It does not stop a hundred identical queries."
+    - option: bigger-pg
+      expect: wrong
+      because: "More hardware makes each run a little faster and leaves the real problem alone: the same query still runs once per request. You would be paying for a bigger machine to repeat work nobody needed repeated."
+    - option: app-memory
+      expect: wrong
+      because: "A Map inside the app is a private cache. Every app instance has its own copy, a restart empties it, and nothing expires it. Redis is the shared copy every instance reads."

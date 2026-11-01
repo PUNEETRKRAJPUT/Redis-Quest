@@ -1,0 +1,35 @@
+# Chapter 2, levels 2.1 and 2.2: 100 users, 60% of requests on the three hot players, 40% spread over
+# twelve colder ones. Used by the live pain panel and by the cache-aside traffic verifier.
+id: stats-hot-100
+description: "100 users with Zipf skew: 60% of stats requests on the three hot players (p-028, p-101, p-151), 40% on twelve colder ones."
+durationSec: 10
+connections: 50
+pipelining: 1
+seed: 20260102
+# Discarded warmup: a correct cache fills its keys here, so the graded run measures the steady state
+# (stampedes have their own level and scenario).
+warmup:
+  durationSec: 2
+  connections: 5
+users:
+  count: 100
+  distribution: zipf
+  zipfSkew: 1.1
+params:
+  hot:
+    values: [p-028, p-101, p-151]
+    distribution: zipf
+    zipfSkew: 1.1
+  cold:
+    values: [p-001, p-007, p-013, p-021, p-034, p-047, p-062, p-078, p-093, p-118, p-134, p-166]
+    distribution: zipf
+    zipfSkew: 1.1
+requests:
+  - method: GET
+    path: /app/players/{hot}/stats
+    weight: 6
+    userIdHeader: x-user-id
+  - method: GET
+    path: /app/players/{cold}/stats
+    weight: 4
+    userIdHeader: x-user-id

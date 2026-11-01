@@ -1,0 +1,29 @@
+id: ch2
+title: "Everyone showed up"
+incident:
+  - from: senior
+    time: "19:25"
+    text: "Toss is at 7:30. Mess hall screen is on. Why is the stats page still a spinner?"
+  - from: roommate
+    time: "19:26"
+    text: "bhai it says 4 seconds. FOUR. I counted. I also counted 100 people refreshing 😭"
+  - from: you
+    time: "19:26"
+    text: "it is the same three players every time. what is Postgres doing"
+  - from: roommate
+    time: "19:27"
+    text: "reading me its logs. same query. same query. same query. it sounds very tired"
+  - from: senior
+    time: "19:27"
+    text: "I am standing in front of 100 people and a projector. Fix it or I start doing the commentary myself"
+  - from: roommate
+    time: "19:28"
+    text: "should we add more servers? or just restart everything? restarting fixes things 🙏"
+  - from: you
+    time: "19:28"
+    text: "more servers means more people asking Postgres the same question. give me two minutes"
+levels:
+  - ch2-01-feel-it
+  - ch2-02-cache-aside-v1
+  - ch2-03-stale-is-a-bug
+  - ch2-04-stampede-at-the-toss

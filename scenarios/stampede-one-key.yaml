@@ -1,0 +1,16 @@
+# Chapter 2, level 2.4: the toss. 200 connections all ask for the same player at the same instant, with
+# no warmup, so a cache that is empty for that key meets the whole crowd at once.
+id: stampede-one-key
+description: "200 connections, 5 s, all on GET /app/players/p-028/stats against an empty cache key."
+durationSec: 5
+connections: 200
+pipelining: 1
+seed: 20260103
+users:
+  count: 200
+  distribution: uniform
+requests:
+  - method: GET
+    path: /app/players/p-028/stats
+    weight: 1
+    userIdHeader: x-user-id

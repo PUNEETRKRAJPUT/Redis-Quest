@@ -1,0 +1,127 @@
+id: ch2-04-stampede-at-the-toss
+chapter: ch2
+title: "Stampede at the toss"
+mode: code
+
+story: |
+  It is 7:30 pm. The toss happens, the commentator says a name, and every phone in the mess hall
+  refreshes Chengappa's page in the same second. Two hundred requests arrive together.
+
+  Your cache is working, but it is empty for that one key: it expired, or someone just invalidated it
+  in the last level. Two hundred requests all read the cache, all see a miss, and all ask Postgres the
+  same slow question at the same moment. That is a **cache stampede**: the cache protects you right up to
+  the instant it is empty, which is exactly when everyone shows up.
+
+  The roommate is reading the Postgres log aloud again. "Same query. Same query. Same query..." He
+  stops counting at forty. The page goes grey for the whole room.
+
+  The fix is to let one request go to Postgres while the other hundred and ninety-nine wait for its answer.
+
+scenario: stampede-one-key   # drives the live pain panel while the level is open
+
+brainstorm:
+  prompt: "Two hundred requests arrive for a key that has just gone missing. What should the 199 that are not first do?"
+  options:
+    - id: wait-for-winner
+      label: "Let one request load it, and have the others wait briefly for the cache to fill"
+      is_reasonable: true
+    - id: all-load
+      label: "Everyone loads it themselves and writes the result, the last write wins"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: refresh the hot keys on a timer so they never expire during a match"
+      is_reasonable: true
+
+teach: |
+  The docs' cache-aside page calls the answer **single-flight**: only one caller loads a missing key, and
+  the others wait for it. The lock is a key in Redis, taken with one command:
+
+  `SET lock:cache:player:p-028 <token> NX PX 5000`
+
+  `NX` means set only if the key does not already exist, so exactly one caller gets `OK`. `PX 5000` is
+  the lock's own expiry in milliseconds, so a winner that crashes cannot hold everyone up forever.
+  The token is a random value unique to this caller.
+
+  The winner loads from Postgres, writes the cache, and releases the lock **only if the token is still
+  its own**: after the lock has expired, plain `DEL` could remove somebody else's lock. The docs release
+  with a Lua script through `EVAL`: get the key, and if it equals the token, delete it.
+
+  The losers do not hit Postgres. They re-read the cache every few milliseconds until the winner fills it
+  or the lock's time is up, and only then fall back to loading it themselves. The lock's TTL must be
+  longer than a worst-case Postgres read.
+
+  Hit an id that is not a player and there is nothing to cache, but the lock must still be released.
+
+task: |
+  Extend `getPlayerStats(deps, playerId)` in `workspace/ch2/cache.js`, the same function as level 2.
+
+  - On a miss, try `SET lock:cache:player:<playerId> <token> NX PX 5000`. Use a fresh random token per
+    call (`crypto.randomUUID()` is fine).
+  - If you got the lock, load from Postgres, write the hash with its 30 second expiry as before, and release
+    the lock only if the token still matches. Release it on every path, including when the id is not a
+    player and you return `null`.
+  - If you did not, poll `cache:player:<playerId>` every 50 ms or so until the hash appears or the lock's
+    5 seconds are up. Only then load it yourself.
+  - A hit still returns straight from the hash. An id that is not a player still returns `null`.
+
+  The stampede test sends 200 requests at once at an empty `cache:player:p-028`. Postgres may answer at
+  most three queries.
+
+hints:
+  - "node-redis: redis.set(lockKey, token, { condition: 'NX', expiration: { type: 'PX', value: 5000 } }) resolves to 'OK' for the winner and null for everyone else."
+  - "Release with redis.eval(script, { keys: [lockKey], arguments: [token] }) and a script that GETs the key and DELs it only if it equals ARGV[1]."
+  - "Wrap the load in try/finally so the lock is released even when the id is not a player or Postgres throws."
+  - "After you win the lock, read the cache once more before loading: another winner may have filled it between your miss and your lock."
+
+setup:
+  - cmd: [DEL, "cache:player:p-028", "lock:cache:player:p-028"]
+
+verify:
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/04-cold-and-unlocked.yaml
+    assertions:
+      - call: { args: ["p-101"] }
+        message: "Calling getPlayerStats for p-101 on an empty cache should cache it as a hash, and leave no lock behind."
+        sideEffect:
+          - cmd: [TYPE, "cache:player:p-101"]
+            equals: hash
+            message: "cache:player:p-101 should be a hash after the call. Nothing was cached."
+      - call: { args: ["p-999"] }
+        expect: null
+        message: "p-999 is not a player. getPlayerStats should return null for it, and release the lock it took."
+  - type: traffic
+    scenario: stampede-one-key
+    baseline: false
+    assertions:
+      db_queries_lte: 3
+      error_rate_lte: 0
+    message: "Two hundred requests hit an empty cache:player:p-028 and Postgres was asked more than three times, or some requests failed. Only one request should load the key; the rest wait for its answer."
+  - type: antipattern
+    checks:
+      - cmd: [EXISTS, "lock:cache:player:p-101"]
+        equals: 0
+        message: "This passes today, but a lock is left behind: either it was taken with no PX, or it was never released. A lock with no expiry that is not released is held forever, and every future miss on that key waits for a winner that is long gone."
+      - cmd: [EXISTS, "lock:cache:player:p-999"]
+        equals: 0
+        message: "This passes today, but a lock is left behind when the id is not a player: no PX, or no release on that path. One bad id and that key is locked forever. Release the lock on every path and always give it a PX."
+
+show_me: stats_latency_panel
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+  - https://redis.io/docs/latest/develop/clients/patterns/distributed-locks
+  - https://redis.io/docs/latest/develop/programmability/eval-intro
+
+reward:
+  xp: 150
+  badge: "Held the line"
+
+solutions:
+  reference: solutions/04-reference.js
+  wrong:
+    - path: solutions/04-wrong-plain-cache-aside.js
+      expect: wrong
+      because: "This is the level 2 cache-aside. It is correct for one request at a time, but when 200 requests all miss together, every one of them asks Postgres, so the stampede test sees about 200 queries instead of at most 3."
+    - path: solutions/04-works-but-wrong-lock-no-expiry.js
+      expect: works_but_wrong
+      because: "It does single-flight and survives the stampede, but the lock is taken with SET NX and no PX and only released after a successful load. A lookup that does not find a player returns before the DEL, and that lock then lives forever."

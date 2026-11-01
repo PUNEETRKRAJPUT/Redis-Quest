@@ -1,0 +1,124 @@
+id: ch2-02-cache-aside-v1
+chapter: ch2
+title: "Cache-aside, version one"
+mode: code
+
+story: |
+  It is 7:28 pm. You know what to build. The stats page calls `getPlayerStats(deps, playerId)`, and right
+  now that function is a single Postgres query: `SELECT * FROM player_stats($1)`, the slow one the
+  roommate keeps reading out of the logs. Your job is to put Redis in front of it.
+
+  The toss is in two minutes. The live panel will tell you in plain numbers whether you got it right:
+  how many times faster the page is than with no cache, and how many fewer questions Postgres is
+  being asked. The grader runs your function against a real hundred-user crowd, not a polite test.
+
+  One thing the senior will not forgive: a page that shows a different player's numbers, or no numbers.
+  If the id is not a real player, the function returns `null`, exactly as the plain query does today.
+
+scenario: stats-hot-100   # drives the live pain panel while the level is open
+
+brainstorm:
+  prompt: "Reads by the hundred, data that changes about once a match, and every field of a player is read together. How do you store one player's stats in Redis, and for how long?"
+  options:
+    - id: hash-with-ttl
+      label: "One hash per player with a short expiry, refilled from Postgres on a miss"
+      is_reasonable: true
+    - id: json-string-forever
+      label: "One string per player holding the whole row as JSON, no expiry"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: keep a table of precomputed stats in Postgres and refresh it on a schedule"
+      is_reasonable: true
+
+teach: |
+  **Cache-aside** keeps Postgres as the source of truth and Redis as a copy that is allowed to be briefly
+  stale:
+
+  1. Read the cache key. If it has data, return it (a hit).
+  2. If not (a miss), ask the database, write the answer into the cache **with an expiry**, return it.
+
+  The docs store one entity as a **hash** (`HSET key field value ...`, read back with `HGETALL`) and give
+  the key a time to live with `EXPIRE key seconds`. The TTL is your staleness budget: shorter means
+  fresher and more misses. A hash holds only strings, and `HGETALL` on a key that does not exist returns
+  an empty result, not an error.
+
+  A worked example in the docs' own domain, not your task:
+
+  ```js
+  const hit = await redis.hGetAll(`cache:product:${id}`);
+  if (Object.keys(hit).length > 0) return hit;
+  ```
+
+  The key never has to be without an expiry: queue `HSET` and `EXPIRE` together in one `multi()` and
+  `exec()` it, and a crash between the two cannot leave a cached row that never goes away.
+
+task: |
+  Fill in `getPlayerStats(deps, playerId)` in `workspace/ch2/cache.js`. It receives `{ redis, db }`
+  as `deps`, like every learner file.
+
+  - The cache key is `cache:player:<playerId>` and it is a **hash**.
+  - On a miss, load from Postgres with `db.query('SELECT * FROM player_stats($1)', [playerId])`. The
+    result's `rows[0]` is the stats row, or `undefined` for an id that is not a player: return `null`
+    for that, and cache nothing.
+  - Keep cached stats for **30 seconds**, set when you write the hash.
+  - Return the stats row in the shape the page expects: on a miss, the row as Postgres gave it; on a hit,
+    the fields from the cached hash.
+
+hints:
+  - "HGETALL on a key that is not there returns an empty object, not null. Check its keys."
+  - "A hash stores strings only, and a null column cannot be written as-is. Turn null into an empty string and every other value into a string before HSET."
+  - "Put HSET and EXPIRE in one multi().exec() so the key is never written without its expiry."
+
+verify:
+  - type: behavior
+    slot: cache.getPlayerStats
+    fixtures: fixtures/02-cold-cache.yaml
+    assertions:
+      - call: { args: ["p-151"] }
+        repeat: 2
+        message: "Calling getPlayerStats for p-151 twice should leave a hash named cache:player:p-151 in Redis."
+        sideEffect:
+          - cmd: [TYPE, "cache:player:p-151"]
+            equals: hash
+            message: "cache:player:p-151 should be a hash after the call. Nothing was cached."
+          - cmd: [HGET, "cache:player:p-151", player_id]
+            equals: "p-151"
+            message: "The cached hash for p-151 should hold p-151's own stats, with a player_id field of p-151."
+      - call: { args: ["p-999"] }
+        expect: null
+        message: "p-999 is not a player. getPlayerStats should return null for it."
+        sideEffect:
+          - cmd: [EXISTS, "cache:player:p-999"]
+            equals: 0
+            message: "An id that is not a player should not leave a cache:player key behind."
+  - type: traffic
+    scenario: stats-hot-100
+    baseline: true
+    assertions:
+      p99_ratio_lte: 0.2        # p99 at least 5x better than with no cache
+      db_calls_ratio_lte: 0.1   # at least 90% fewer Postgres calls per request
+    message: "Under toss-time load the stats page is not meaningfully faster than with no cache, or Postgres is still being asked nearly as often."
+  - type: antipattern
+    checks:
+      - cmd: [TTL, "cache:player:p-151"]
+        gte: 1
+        message: "This passes today, but a cached row with no TTL is stale forever and memory only grows. The day Chengappa scores a century, the page still shows yesterday's runs until somebody deletes the key by hand."
+
+show_me: stats_latency_panel
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+  - https://redis.io/docs/latest/develop/data-types/hashes/
+
+reward:
+  xp: 100
+  badge: "First cache"
+
+solutions:
+  reference: solutions/02-reference.js
+  wrong:
+    - path: solutions/02-wrong-no-cache.js
+      expect: wrong
+      because: "Asks Postgres for every request and stores nothing in Redis, so there is no cache:player:p-151 hash and the page is exactly as slow as before."
+    - path: solutions/02-works-but-wrong-no-ttl.js
+      expect: works_but_wrong
+      because: "A correct cache-aside that never sets an expiry. Fast today, but every cached row is stale forever and every player ever opened stays in memory."

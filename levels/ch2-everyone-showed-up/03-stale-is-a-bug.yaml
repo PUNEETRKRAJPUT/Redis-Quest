@@ -1,0 +1,88 @@
+id: ch2-03-stale-is-a-bug
+chapter: ch2
+title: "Stale is a bug"
+mode: code
+
+story: |
+  It is 7:29 pm and the page is flying. The mess hall has gone quiet, which in a mess hall means it is
+  working. Then the roommate leans over: "Bhai, Chengappa's runs on the page are wrong. I fixed his
+  record in Postgres a minute ago and the page still shows the old number."
+
+  He is right, and he is also describing a feature, not a fluke. The cache holds a copy for up to 30
+  seconds. For those 30 seconds the page cheerfully shows data Postgres no longer has, to a hundred
+  people with a projector. Waiting for the TTL is a safety net, not a plan. When the app changes a
+  player, it also has to tell the cache.
+
+  The app calls `invalidatePlayerStats(deps, playerId)` after it writes a player. Right now that slot
+  does nothing useful for your cache. Fill it in.
+
+brainstorm:
+  prompt: "A player's row just changed in Postgres. What should happen to the cached copy of that player?"
+  options:
+    - id: delete-key
+      label: "Delete the cached key, and let the next read load fresh data"
+      is_reasonable: true
+    - id: rewrite-cache
+      label: "Read the new row from Postgres and write it straight into the cache"
+      is_reasonable: false
+    - id: not-redis
+      label: "Not Redis: lower the TTL to one second so nothing stays stale for long"
+      is_reasonable: true
+
+teach: |
+  The cache-aside page is blunt about writes: after you update the primary database, **delete the cache
+  key**. Its words are to never try to keep the cache and the database in sync directly, just delete.
+
+  Why delete and not update? The next reader pays one miss and gets fresh data through the same read path
+  you already wrote and tested. If your invalidation code builds a cache entry itself, you now have two
+  places that know how a cache entry is shaped, and they will drift.
+
+  The command is `DEL key`. If the key is not there, there is simply nothing to remove, so the function
+  never has to check first.
+
+  The same page keeps a TTL as the backstop. A shorter TTL narrows how stale a copy can get, at the cost
+  of a lower hit ratio, so it is a dial you can turn, not a substitute for deleting on write.
+
+  In node-redis the command is `redis.del(key)`.
+
+task: |
+  Fill in `invalidatePlayerStats(deps, playerId)` in `workspace/ch2/invalidate.js`. It receives `{ redis }`
+  as `deps`.
+
+  Remove the cached stats for that player, the hash at `cache:player:<playerId>`, so the next call to
+  `getPlayerStats` goes back to Postgres. Return nothing in particular.
+
+hints:
+  - "One command is enough: DEL cache:player:<id>."
+  - "Do not read Postgres here. This function only removes the stale copy; getPlayerStats refills it."
+
+verify:
+  - type: behavior
+    slot: cache.invalidatePlayerStats
+    fixtures: fixtures/03-stale-chengappa.yaml
+    assertions:
+      - call: { args: ["p-028"] }
+        message: "After invalidating p-028 there should be no cache:player:p-028 key left."
+        sideEffect:
+          - cmd: [EXISTS, "cache:player:p-028"]
+            equals: 0
+            message: "cache:player:p-028 is still in Redis, so the page keeps showing the old runs. Delete the key."
+
+show_me: stats_latency_panel
+docs:
+  - https://redis.io/docs/latest/develop/use-cases/cache-aside
+  - https://redis.io/docs/latest/develop/using-commands/keyspace/
+
+reward:
+  xp: 60
+  badge: "Fresh on write"
+
+solutions:
+  reference: solutions/03-reference.js
+  wrong:
+    - path: solutions/03-wrong-noop.js
+      expect: wrong
+      because: "Does nothing, so the stale hash stays until its TTL runs out. The page keeps showing the old runs, which is the bug the roommate reported."
+    - path: solutions/03-wrong-write-through.js
+      expect: wrong
+      because: "Re-reads Postgres and writes the new row into the cache. With one writer that looks fine. With two writers, a slower one can overwrite a newer value with an older one, and the cache is wrong until its TTL, and the schema cannot show that race yet. It also puts a second copy of the cache entry's shape in a second place. The docs' rule is to delete and let the next read refill."

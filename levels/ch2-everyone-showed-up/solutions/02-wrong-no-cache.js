@@ -1,0 +1,5 @@
+// Wrong: every call goes to Postgres and nothing is written to Redis.
+export default async function getPlayerStats({ db }, playerId) {
+  const { rows } = await db.query('SELECT * FROM player_stats($1)', [playerId]);
+  return rows[0] ?? null;
+}

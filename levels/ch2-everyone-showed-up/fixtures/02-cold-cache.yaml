@@ -1,0 +1,3 @@
+# Run before the behavior verifier, every time, so the first call for each player is always a miss.
+steps:
+  - cmd: [DEL, "cache:player:p-151", "cache:player:p-028", "cache:player:p-999"]

@@ -1,0 +1,5 @@
+# A cached copy of p-028 that disagrees with Postgres: the runs field is stale on purpose.
+steps:
+  - cmd: [DEL, "cache:player:p-028"]
+  - cmd: [HSET, "cache:player:p-028", player_id, "p-028", name, "Ganapathi Chengappa", runs, "1"]
+  - cmd: [EXPIRE, "cache:player:p-028", 300]

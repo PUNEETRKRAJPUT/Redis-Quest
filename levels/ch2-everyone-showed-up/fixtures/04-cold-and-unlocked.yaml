@@ -1,0 +1,6 @@
+# Run before the behavior verifier and, because traffic runs last, right before the stampede:
+# p-028 (the key the stampede hits) is empty and unlocked, and so are the keys this verifier touches.
+steps:
+  - cmd: [DEL, "cache:player:p-028", "lock:cache:player:p-028"]
+  - cmd: [DEL, "cache:player:p-101", "lock:cache:player:p-101"]
+  - cmd: [DEL, "cache:player:p-999", "lock:cache:player:p-999"]
