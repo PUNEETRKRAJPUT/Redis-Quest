@@ -579,7 +579,7 @@ export function LevelScreen({ id }: { id: string }) {
         leading={passed ? <RotateCcw size={17} aria-hidden /> : <Play size={17} aria-hidden />}
         data-testid="verify-button"
       >
-        {passed ? 'Check again' : 'Check my work'}
+        {passed ? 'Verify again' : 'Verify my work'}
       </Button>
       <p className="m-0 flex items-center justify-between px-0.5 text-xs text-chalk-dim">
         <span className="tabular">
@@ -704,7 +704,7 @@ export function LevelScreen({ id }: { id: string }) {
             {!shownResult && !verifying && !pending ? (
               <p className="m-0 text-sm leading-relaxed text-chalk-dim">
                 {level.verifiers.length} check{level.verifiers.length === 1 ? '' : 's'} run when you
-                press Check my work. Each one says what it saw.
+                press Verify my work. Each one says what it saw.
               </p>
             ) : null}
           </div>

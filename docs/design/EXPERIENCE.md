@@ -65,7 +65,8 @@ move), `msg` (chat message arrives), `tock` (bat on ball: a level passes), `out`
 - **Match view.** A level is one focused workbench: the brief, the workspace (terminal or editor), and the
   scoreboard of checks, in resizable panes.
 - **Decision pending.** Checking your work plays like a third-umpire review: "Decision pending", then the
-  verdict on the big screen. Plain words stay on the button ("Check my work").
+  verdict on the big screen. The button says "Verify my work": plain words, and the word every lesson uses
+  ("press Verify").
 - **Celebration.** A pass sweeps the floodlights, bursts confetti, flips the XP and plays `tock`.
 - **Helpful terminal.** Command completion with argument hints read from the running Redis's own command docs;
   commands in lesson text are clickable chips.

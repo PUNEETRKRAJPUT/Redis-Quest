@@ -343,7 +343,7 @@ function Review({ onPass, onReset }: { onPass: () => void; onReset: () => void }
             disabled={verdict === 'passed'}
             leading={<Play size={16} aria-hidden />}
           >
-            Check my work
+            Verify my work
           </Button>
           {verdict === 'passed' && (
             <Button
@@ -1220,7 +1220,7 @@ export function Gallery() {
                 Not now
               </Button>
               <Button onClick={() => setDialog(null)} shortcut="↵">
-                Check my work
+                Verify my work
               </Button>
             </>
           }
@@ -1260,7 +1260,7 @@ export function Gallery() {
 
 function Row({ variant }: { variant: 'primary' | 'ghost' | 'quiet' | 'danger' }) {
   const label = {
-    primary: 'Check my work',
+    primary: 'Verify my work',
     ghost: 'Show hint',
     quiet: 'Skip',
     danger: 'Flush all',

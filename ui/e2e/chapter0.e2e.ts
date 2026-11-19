@@ -72,7 +72,7 @@ async function brainstorm(page: Page): Promise<void> {
   await expect(vis(page, 'brainstorm-locked')).toBeVisible();
 }
 
-/** Click "Check my work". Returns the verdict the engine gave. */
+/** Click "Verify my work". Returns the verdict the engine gave. */
 async function verify(page: Page): Promise<string> {
   await openStage(page, 6);
   await vis(page, 'verify-button').click();
