@@ -1,3 +1,4 @@
+import { ToolPage } from '@/career/ToolPage';
 import { LogsPanel } from '@/panels/LogsPanel';
 
 // The page renders inside GameShell, which shows only the boot state until the engine answers in the browser, so
@@ -6,9 +7,14 @@ export const instant = false;
 
 export default function LogsPage() {
   return (
-    <main className="page">
-      <h1>Logs</h1>
-      <LogsPanel height={520} />
-    </main>
+    <ToolPage
+      eyebrow="Tools"
+      title="Logs"
+      blurb="What every service is saying, live. Pause the feed to read, filter to find the one line that matters."
+    >
+      <div style={{ height: 'clamp(440px, calc(100dvh - 270px), 820px)' }}>
+        <LogsPanel height="fill" />
+      </div>
+    </ToolPage>
   );
 }

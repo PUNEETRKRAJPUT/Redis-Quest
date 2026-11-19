@@ -1,9 +1,12 @@
 // E-03: which Redis the game talks to. A select in the terminal's header with the presets Chapter 5 walks through
 // (single node, no persistence, replica, Sentinel, cluster) and a custom string. Choosing one asks the engine
 // (`PUT /api/target`); the app and the runner follow the engine within about two seconds.
+import { clsx } from 'clsx';
+import { ChevronDown, CircleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { create } from 'zustand';
 import { api } from '../api';
+import { Button } from '../design';
 import { useQuest } from '../store';
 import type { TargetInfo } from '../types';
 
@@ -119,38 +122,63 @@ export function TargetSwitchView({
     ? `${info.description}${info.master ? `, master ${info.master}` : ''}`
     : 'asking the engine…';
   return (
-    <div className="target-switch" data-testid="target-switch">
-      <div className="target-row">
-        <label className="target-label" htmlFor="target-select">
+    <div
+      data-ds=""
+      data-testid="target-switch"
+      className="flex flex-col gap-2 rounded-lg border border-night-600 bg-night-900 px-4 py-3 shadow-raise"
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <label className="label-caps text-xs text-chalk-dim" htmlFor="target-select">
           Redis target
         </label>
-        <select
-          id="target-select"
-          data-testid="target-select"
-          value={selected}
-          disabled={busy}
-          onChange={(e) => onSelect?.(e.target.value)}
-        >
-          {TARGET_PRESETS.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
+        <span className="relative inline-flex">
+          <select
+            id="target-select"
+            data-testid="target-select"
+            value={selected}
+            disabled={busy}
+            onChange={(e) => onSelect?.(e.target.value)}
+            className="h-9 min-w-64 cursor-pointer appearance-none rounded-sm border border-night-600 bg-night-800 pl-3 pr-9 text-md font-medium text-chalk shadow-hairline transition-colors duration-fast hover:border-chalk-faint/70 disabled:cursor-progress disabled:opacity-60"
+          >
+            {TARGET_PRESETS.map((p) => (
+              <option key={p.id} value={p.id} className="bg-night-800 text-chalk">
+                {p.label}
+              </option>
+            ))}
+            <option value={CUSTOM_ID} className="bg-night-800 text-chalk">
+              {CUSTOM_LABEL}
             </option>
-          ))}
-          <option value={CUSTOM_ID}>{CUSTOM_LABEL}</option>
-        </select>
+          </select>
+          <ChevronDown
+            size={16}
+            aria-hidden
+            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-chalk-dim"
+          />
+        </span>
         <span
-          className={up ? 'target-dot up' : 'target-dot down'}
+          className={clsx(
+            'ds-still size-2.5 shrink-0 rounded-full',
+            up
+              ? 'animate-live bg-turf shadow-[0_0_10px_rgb(46_226_129/0.9)]'
+              : 'bg-wicket shadow-[0_0_10px_rgb(255_84_104/0.8)]',
+          )}
           data-testid="target-dot"
           data-state={info ? info.state : 'unknown'}
           role="img"
           aria-label={up ? 'connected' : 'not connected'}
         />
-        <span className="target-desc" data-testid="target-description">
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-sm text-chalk-dim"
+          data-testid="target-description"
+        >
           {where}
         </span>
+        <p className="text-xs text-chalk-dim">
+          <small>{FOLLOW_COPY}</small>
+        </p>
       </div>
       {selected === CUSTOM_ID ? (
-        <div className="target-row">
+        <div className="flex items-center gap-2">
           <input
             type="text"
             data-testid="target-custom"
@@ -162,20 +190,30 @@ export function TargetSwitchView({
             onKeyDown={(e) => {
               if (e.key === 'Enter') onCustomGo?.();
             }}
+            spellCheck={false}
+            className="h-9 min-w-0 flex-1 rounded-sm border border-night-600 bg-night-950/70 px-3 font-mono text-sm text-chalk placeholder:text-chalk-faint hover:border-chalk-faint/60 disabled:opacity-60"
           />
-          <button type="button" disabled={busy} onClick={onCustomGo} data-testid="target-connect">
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={onCustomGo}
+            data-testid="target-connect"
+            loading={busy}
+          >
             Connect
-          </button>
+          </Button>
         </div>
       ) : null}
       {message ? (
-        <p className="target-msg" role="alert" data-testid="target-message">
-          {message}
+        <p
+          className="flex items-start gap-2 rounded-sm border border-wicket/40 bg-wicket/10 px-3 py-2 text-sm text-chalk"
+          role="alert"
+          data-testid="target-message"
+        >
+          <CircleAlert size={15} className="mt-0.5 shrink-0 text-wicket" aria-hidden />
+          <span>{message}</span>
         </p>
       ) : null}
-      <p className="target-note">
-        <small>{FOLLOW_COPY}</small>
-      </p>
     </div>
   );
 }

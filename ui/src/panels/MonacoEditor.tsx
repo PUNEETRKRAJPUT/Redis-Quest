@@ -1,6 +1,7 @@
 'use client';
 
 import Editor, { loader } from '@monaco-editor/react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as monaco from 'monaco-editor/editor';
 import 'monaco-editor/languages/definitions/javascript/register';
 import 'monaco-editor/languages/definitions/redis/register';
@@ -12,6 +13,8 @@ import 'monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching';
 import 'monaco-editor/editor/contrib/comment/browser/comment';
 import 'monaco-editor/editor/contrib/indentation/browser/indentation';
 import 'monaco-editor/editor/contrib/wordOperations/browser/wordOperations';
+import { isReducedMotionNow } from '../design/motion';
+import { monoFontStack, nightTheme, THEME_NAME } from '../career/tools/monacoTheme';
 
 // Bundle Monaco instead of letting the loader fetch it from a CDN: the game must work offline. The bundler turns
 // `new Worker(new URL(..., import.meta.url))` into a worker chunk of its own (Turbopack and Vite both understand
@@ -26,6 +29,10 @@ import 'monaco-editor/editor/contrib/wordOperations/browser/wordOperations';
 };
 loader.config({ monaco });
 
+// The night theme (literal hex values from the design tokens; Monaco cannot read CSS variables). Defined once at
+// module load, which only ever happens in the browser.
+monaco.editor.defineTheme(THEME_NAME, nightTheme);
+
 export default function MonacoEditor({
   value,
   language,
@@ -33,6 +40,8 @@ export default function MonacoEditor({
   onSave,
   readOnly = false,
   height = '100%',
+  path,
+  onCursor,
 }: {
   value: string;
   language: string;
@@ -40,28 +49,90 @@ export default function MonacoEditor({
   onSave: () => void;
   readOnly?: boolean;
   height?: string;
+  /** A model per path keeps each file's undo history and scroll position when the tabs switch. */
+  path?: string;
+  onCursor?: (line: number, column: number) => void;
 }) {
-  const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+  // The editor binds Cmd+S once, at mount: go through a ref so it always saves what is on screen now.
+  const saveRef = useRef(onSave);
+  const cursorRef = useRef(onCursor);
+  useEffect(() => {
+    saveRef.current = onSave;
+    cursorRef.current = onCursor;
+  }, [onSave, onCursor]);
+
+  // The `value` prop is controlled, and a render that lags behind fast typing would hand the editor an older text
+  // than it holds, which the wrapper applies as an edit (dropped and doubled characters). So the editor is only
+  // given a new `value` when the text changed from outside (a file opened, reloaded); an echo of its own last
+  // edit keeps the previous prop, which the wrapper ignores.
+  const sync = useRef<{ path: string | undefined; shown: string; emitted: string | null }>({
+    path,
+    shown: value,
+    emitted: null,
+  });
+  if (sync.current.path !== path) sync.current = { path, shown: value, emitted: null };
+  else if (value !== sync.current.emitted) sync.current.shown = value;
+  const shown = sync.current.shown;
+
+  // `options` identity triggers updateOptions on every render: build it once per readOnly change.
+  const options = useMemo(() => {
+    const mono = getComputedStyle(document.documentElement).getPropertyValue(
+      '--font-jetbrains-mono',
+    );
+    return {
+      minimap: { enabled: false },
+      fontFamily: monoFontStack(mono),
+      fontSize: 13,
+      lineHeight: 21,
+      fontLigatures: false,
+      scrollBeyondLastLine: false,
+      automaticLayout: true,
+      tabSize: 2,
+      readOnly,
+      padding: { top: 14, bottom: 14 },
+      lineNumbersMinChars: 3,
+      lineDecorationsWidth: 10,
+      glyphMargin: false,
+      folding: false,
+      renderLineHighlight: 'line' as const,
+      overviewRulerLanes: 0,
+      hideCursorInOverviewRuler: true,
+      overviewRulerBorder: false,
+      cursorBlinking: isReducedMotionNow() ? ('solid' as const) : ('smooth' as const),
+      cursorSmoothCaretAnimation: isReducedMotionNow() ? ('off' as const) : ('on' as const),
+      smoothScrolling: !isReducedMotionNow(),
+      scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
+      guides: { indentation: true, bracketPairs: false },
+      ariaLabel: readOnly ? 'Reference solution (read only)' : 'Code editor',
+    };
+  }, [readOnly]);
+
   return (
     <Editor
       height={height}
       language={language}
-      value={value}
-      theme={dark ? 'vs-dark' : 'vs'}
-      onChange={(v) => onChange(v ?? '')}
+      path={path}
+      value={shown}
+      theme={THEME_NAME}
+      onChange={(v) => {
+        sync.current.emitted = v ?? '';
+        onChange(v ?? '');
+      }}
       onMount={(ed) => {
-        ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, onSave);
+        ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current());
+        ed.onDidChangeCursorPosition((e) =>
+          cursorRef.current?.(e.position.lineNumber, e.position.column),
+        );
+        // Monaco measures glyphs once: if the self-hosted mono font finishes loading after that, re-measure so
+        // the cursor and selections line up with the text.
+        void document.fonts?.ready.then(() => monaco.editor.remeasureFonts());
       }}
-      options={{
-        minimap: { enabled: false },
-        fontSize: 13,
-        scrollBeyondLastLine: false,
-        automaticLayout: true,
-        tabSize: 2,
-        readOnly,
-        ariaLabel: readOnly ? 'Reference solution (read only)' : 'Code editor',
-      }}
-      loading={<p className="muted pad">Loading the editor...</p>}
+      options={options}
+      loading={
+        <p className="px-4 py-3 font-mono text-sm text-chalk-dim" role="status">
+          Loading the editor...
+        </p>
+      }
     />
   );
 }

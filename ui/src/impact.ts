@@ -30,11 +30,89 @@ export function metricPhrases(m: VerdictMetrics): string[] {
   return out;
 }
 
+/** One measured number for the scoreboard: a value, and the value before when the check measured one. */
+export interface ImpactFigure {
+  key: string;
+  label: string;
+  before?: string;
+  value: string;
+  unit?: string;
+  /** Percent change from before to value (negative is lower), only when both are measured and before > 0. */
+  change?: number;
+  /** Lower is better for latency and calls; the rest are plain readings. */
+  lowerIsBetter?: boolean;
+}
+
 export interface ImpactEntry {
   levelId: string;
   title: string;
   chapter: string;
   phrases: string[];
+  /** The same numbers as `phrases`, split for the scoreboard. */
+  figures: ImpactFigure[];
+  /** When the passing verdict was recorded (ISO), if the save says. */
+  at?: string;
+}
+
+const pct = (before: number, after: number): number | undefined =>
+  before > 0 ? Math.round(((after - before) / before) * 1000) / 10 : undefined;
+
+/** The numbers of a traffic check as scoreboard figures (same numbers as `metricPhrases`). */
+export function metricFigures(m: VerdictMetrics): ImpactFigure[] {
+  const out: ImpactFigure[] = [];
+  if (m.p99Ms !== undefined)
+    out.push({
+      key: 'p99',
+      label: 'p99',
+      before: m.baselineP99Ms !== undefined ? ms(m.baselineP99Ms) : undefined,
+      value: ms(m.p99Ms),
+      unit: 'ms',
+      change: m.baselineP99Ms !== undefined ? pct(m.baselineP99Ms, m.p99Ms) : undefined,
+      lowerIsBetter: true,
+    });
+  if (m.dbPerRequest !== undefined)
+    out.push({
+      key: 'db',
+      label: 'Postgres calls per request',
+      before: m.baselineDbPerRequest !== undefined ? small(m.baselineDbPerRequest) : undefined,
+      value: small(m.dbPerRequest),
+      change:
+        m.baselineDbPerRequest !== undefined
+          ? pct(m.baselineDbPerRequest, m.dbPerRequest)
+          : undefined,
+      lowerIsBetter: true,
+    });
+  if (m.redisPerRequest !== undefined)
+    out.push({
+      key: 'redis',
+      label: 'Redis commands per request',
+      value: small(m.redisPerRequest),
+    });
+  if (m.hitRatio !== undefined)
+    out.push({
+      key: 'hit',
+      label: 'Requests with no Postgres call',
+      value: String(Math.floor(m.hitRatio * 1000) / 10),
+      unit: '%',
+    });
+  if (m.rps !== undefined)
+    out.push({ key: 'rps', label: 'Requests per second', value: group(m.rps), unit: 'rps' });
+  return out;
+}
+
+/** The biggest measured win across the log: the p99 (else Postgres-calls) pair with the largest drop. */
+export function headlineWin(
+  entries: ImpactEntry[],
+): { title: string; figure: ImpactFigure } | null {
+  let best: { title: string; figure: ImpactFigure; drop: number } | null = null;
+  for (const e of entries)
+    for (const f of e.figures) {
+      if (!f.lowerIsBetter || f.before === undefined || f.change === undefined || f.change >= 0)
+        continue;
+      const drop = -f.change + (f.key === 'p99' ? 1000 : 0);
+      if (!best || drop > best.drop) best = { title: e.title, figure: f, drop };
+    }
+  return best ? { title: best.title, figure: best.figure } : null;
 }
 
 export interface Impact {
@@ -56,12 +134,21 @@ export function buildImpact(chapters: ChapterSummary[], progress: Progress): Imp
       passed += 1;
       const first = lp.verdicts.find((v) => v.verdict === 'right');
       const phrases = first?.metrics ? metricPhrases(first.metrics) : [];
-      if (lp.interviewElapsedMs !== undefined)
+      const figures = first?.metrics ? metricFigures(first.metrics) : [];
+      if (lp.interviewElapsedMs !== undefined) {
         phrases.push(
           `rebuilt in ${formatClock(lp.interviewElapsedMs)}${lp.overtime ? ', over the time limit' : ''}`,
         );
-      if (phrases.length > 0)
-        entries.push({ levelId: l.id, title: l.title, chapter: c.title, phrases });
+        figures.push({
+          key: 'rebuilt',
+          label: lp.overtime ? 'Rebuilt, over the time limit' : 'Rebuilt in',
+          value: formatClock(lp.interviewElapsedMs),
+        });
+      }
+      if (phrases.length > 0) {
+        const at = first?.at && !Number.isNaN(Date.parse(first.at)) ? first.at : undefined;
+        entries.push({ levelId: l.id, title: l.title, chapter: c.title, phrases, figures, at });
+      }
     }
   }
   const chapterWord = chapters.length === 1 ? 'chapter' : 'chapters';
