@@ -1,3 +1,4 @@
+import { CommandDocs } from './command-docs.js';
 import { loadConfig } from './config.js';
 import { EventBus } from './events.js';
 import { LevelService } from './levels.js';
@@ -60,6 +61,8 @@ async function main(): Promise<void> {
   };
 
   const redis = new RedisManager(log, bus);
+  const commandDocs = new CommandDocs(redis, log);
+  redis.onUp(() => void commandDocs.ensure());
   const mirror = new Mirror(redis, log);
   // Count this boot as soon as Redis is reachable; never blocks startup and retries on every reconnect until it lands.
   let giftChecked = false;
@@ -94,6 +97,7 @@ async function main(): Promise<void> {
     logtail,
     metrics,
     runtime,
+    commandDocs,
   });
 
   const tick = setInterval(() => {

@@ -9,6 +9,7 @@ import type { Logger } from 'pino';
 import { parseTarget, SLOT_NAME, TemplateError } from '@quest/shared';
 import { etagOf, matchesEtag, type AppConfig } from './appconfig.js';
 import { cliCommandLabel, DANGEROUS_COMMANDS, isBusyReply, isScriptKilled, runCli } from './cli.js';
+import { CommandDocsInputError, parseNames, pickDocs, type CommandDocs } from './command-docs.js';
 import type { Config } from './config.js';
 import type { EventBus, LevelEventData } from './events.js';
 import {
@@ -77,6 +78,8 @@ export interface Deps {
   logtail: LogTail;
   metrics: MetricsStore;
   runtime: Runtime;
+  /** E-06: the one snapshot of Redis's command docs; main.ts feeds it on every "up". Absent means unavailable. */
+  commandDocs?: CommandDocs;
   /** Test seam: replaces autocannon for traffic runs (verifier and on-demand). */
   runLoad?: LoadRunner;
 }
@@ -171,6 +174,9 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
     }
     if (err instanceof SetupRefusedError) {
       return reply.code(500).send({ error: 'setup_refused', message: err.message });
+    }
+    if (err instanceof CommandDocsInputError) {
+      return reply.code(400).send({ error: 'invalid_names', message: err.message });
     }
     if (err instanceof LoadRequestError) {
       return reply.code(400).send({ error: err.code, message: err.message });
@@ -330,6 +336,7 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
       boots,
       levels: levels.errors.length === 0 ? 'ok' : 'error',
       insightUrl: insightUrlFor(req.headers.host, process.env.INSIGHT_PORT),
+      commandDocs: true,
     };
   });
 
@@ -884,6 +891,17 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
           data: { from, to: url, kind: info.kind },
         } satisfies LevelEventData);
         return { redisUrl: url, ...info };
+      });
+
+      // E-06: answered from the snapshot in memory; these routes never send a command to Redis.
+      api.get('/command-docs/names', async () => {
+        const snap = d.commandDocs?.snapshot();
+        return snap ? { names: snap.names } : { available: false };
+      });
+      api.get('/command-docs', async (req) => {
+        const names = parseNames((req.query as Record<string, unknown>).names);
+        const snap = d.commandDocs?.snapshot();
+        return snap ? { reply: pickDocs(snap, names) } : { available: false };
       });
 
       api.get('/slots', async () => ({ active: activeSlots() }));
