@@ -91,15 +91,16 @@ the full local run is green.
 | F-14 | The UI runs on Next.js 16.4 App Router with full parity: eight real routes, GameShell, QuestLink, legacy hash redirect, Monaco through a Turbopack worker; the Vite app is removed (spec: specs/F-14, handoff: handoffs/F-14) | done (check: build lists the eight routes, lint, 106 tests) |
 | F-15 | The stack serves the Next.js UI from its own `ui` service (standalone server, 3100, 384m); Caddy routes pages to it; the engine is API-only (spec: specs/F-15, handoff: handoffs/F-15) | done in an isolated project (check green there; rerun by the orchestrator against the ported UI pending) |
 | F-16 | The "Night match" design system: tokens, self-hosted fonts, primitives, motion, synthesised sound, settings, the `/design` gallery (spec: specs/F-16, handoff: handoffs/F-16) | done (check 93 PASS) |
-| F-17 | Scoreboard shell: HUD, command palette, shortcuts, rain delay, event toasts, route transitions (spec: specs/F-17) | in progress |
-| F-18 | The first five minutes: opening scene, name form, kick-off (spec: specs/F-18) | in progress |
-| F-19 | Season map and caps shelf (spec: specs/F-19) | in progress |
-| F-20 | Live chat thread (spec: specs/F-20) | in progress |
-| F-21 | The level as a match view: resizable panes, decision pending, celebration (spec: specs/F-21) | in progress |
-| F-22 | A terminal that helps: completion and argument hints from the server's own command docs, send-to-terminal in lessons (spec: specs/F-22) | in progress |
-| F-23 | Show-me panels restyled and hands-on after a pass; the nets (spec: specs/F-23) | in progress |
-| F-24 | Tools pages and the career page (spec: specs/F-24) | in progress |
-| F-25 | Integration: e2e tests, UI checks, the legacy stylesheet removed, README images (spec: specs/F-25) | todo (after F-17 to F-24) |
+| F-17 | Scoreboard shell: HUD, command palette, shortcuts, rain delay, event toasts, route transitions (spec: specs/F-17, handoff: handoffs/F-17) | done (check green) |
+| F-18 | The first five minutes: opening scene, name form with jersey, kick-off (spec: specs/F-18, handoff: handoffs/F-18) | done (check green) |
+| F-19 | Season map and caps shelf (spec: specs/F-19, handoff: handoffs/F-19) | done (check green) |
+| F-20 | Live chat thread (spec: specs/F-20, handoff: handoffs/F-20) | done (check green) |
+| F-21 | The level as a match view: resizable panes, decision pending, celebration (spec: specs/F-21, handoff: handoffs/F-21) | done (check green; behaviour sent to the API unchanged) |
+| F-22 | A terminal that helps: completion and argument hints from the server's own command docs, send-to-terminal in lessons (spec: specs/F-22, handoff: handoffs/F-22) | done (check green); the help stays dormant until E-06, because helper commands through `/api/cli` are not safe |
+| F-23 | Show-me panels restyled and hands-on after a pass; the nets (spec: specs/F-23, handoff: handoffs/F-23) | done (check green) |
+| F-24 | Tools pages and the career page (spec: specs/F-24, handoff: handoffs/F-24) | done (check green; two editor bugs fixed on the way) |
+| F-25 | Integration: e2e tests, UI checks, the legacy stylesheet removed, README images (spec: specs/F-25) | in progress |
+| E-06 | The engine serves Redis's own command docs from one snapshot, so the terminal's completion never sends a helper command during a level (spec: specs/E-06) | in progress |
 
 ## Decisions log (newest first)
 - 2026-11-19 The UI moves to Next.js 16.4 (App Router) as its own compose service; all game data stays client-side (static shells, Cache Components, Partial Prefetching, the experimental offline mode), so the build needs no stack and the page survives a stack that is down. Agents read the version-matched docs bundled in `ui/node_modules/next/dist/docs/` (ui/AGENTS.md). The root `.gitignore` rule `logs/` had to become `/logs/` (it hid the new `/logs` route folder). The game stays Apple Silicon Mac-only; the 10-day open-source plan is parked, not cancelled.
