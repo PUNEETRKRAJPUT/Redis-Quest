@@ -1,1 +1,499 @@
-/* Design tokens for the "Night match" system. Filled in by F-16; imported by src/app/globals.css. */
+/*
+ * "Night match" design tokens (docs/design/EXPERIENCE.md is the brief).
+ *
+ * Cascade note: src/styles.css (legacy, unlayered) loads before this file. Tailwind puts its own rules in cascade
+ * layers, and an unlayered rule beats every layered rule regardless of specificity. So everything here that must
+ * win over the legacy file is unlayered on purpose, and `[data-ds]` regions revert the legacy element rules (h1,
+ * p, a, code...) back to the layered cascade so Tailwind utilities work inside them.
+ */
+
+/* ---------------------------------------------------------------- theme (generates the utilities) */
+
+@theme static {
+  /* One palette only: Tailwind's default colours are removed so nothing off-brand is one class away. */
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-black: #000000;
+  --color-white: #ffffff;
+
+  --color-night-950: #070a12;
+  --color-night-900: #0b1020;
+  --color-night-800: #111833;
+  --color-night-700: #1a2344;
+  --color-night-600: #27325c;
+  --color-chalk: #eef2fa;
+  --color-chalk-dim: #a9b4cc;
+  --color-chalk-faint: #6f7b97;
+  --color-flood-400: #ffb347;
+  --color-flood-500: #ff9a1f;
+  --color-flood-600: #e67e00;
+  --color-on-flood: #1a1206;
+  --color-turf: #2ee281;
+  --color-wicket: #ff5468;
+  --color-sky: #5cc8ff;
+  --color-cap-purple: #b58cff;
+
+  /* Fonts: the next/font variables are set on <html> by fontClassNames (src/design/fonts.ts). */
+  --font-*: initial;
+  --font-display: var(--font-barlow-condensed), 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-sans:
+    var(--font-inter), 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:
+    var(--font-jetbrains-mono), 'JetBrains Mono Variable', ui-monospace, Menlo, monospace;
+
+  /* The brief's scale: 12 13 14 16 18 22 28 40 64. */
+  --text-*: initial;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-md: 0.875rem;
+  --text-md--line-height: 1.375rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.6;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.3;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 1.15;
+  --text-3xl: 2.5rem;
+  --text-3xl--line-height: 1.05;
+  --text-4xl: 4rem;
+  --text-4xl--line-height: 0.95;
+
+  --tracking-label: 0.14em;
+  --tracking-display: 0.02em;
+
+  --radius-*: initial;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Raised surfaces: a 1px top highlight (light from above) plus a soft drop. */
+  --shadow-*: initial;
+  --shadow-hairline: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  --shadow-raise:
+    inset 0 1px 0 rgb(255 255 255 / 0.05), 0 1px 2px rgb(0 0 0 / 0.4),
+    0 8px 24px -12px rgb(0 0 0 / 0.6);
+  --shadow-pop:
+    inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.4),
+    0 24px 48px -16px rgb(0 0 0 / 0.75);
+  --shadow-glow: 0 0 0 1px rgb(255 154 31 / 0.35), 0 8px 28px -6px rgb(255 154 31 / 0.45);
+  --shadow-glow-turf: 0 0 0 1px rgb(46 226 129 / 0.3), 0 8px 28px -8px rgb(46 226 129 / 0.4);
+  --shadow-glow-wicket: 0 0 0 1px rgb(255 84 104 / 0.3), 0 8px 28px -8px rgb(255 84 104 / 0.4);
+
+  --ease-*: initial;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-snap: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --duration-instant: 90ms;
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 400ms;
+  --duration-celebrate: 900ms;
+
+  --animate-*: initial;
+  --animate-spin: spin 0.8s linear infinite;
+  --animate-live: live 1.8s var(--ease-in-out) infinite;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-typing: typing 1.2s var(--ease-in-out) infinite;
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes live {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 150% 0;
+    }
+    to {
+      background-position: -50% 0;
+    }
+  }
+  @keyframes typing {
+    0%,
+    60%,
+    100% {
+      opacity: 0.3;
+    }
+    30% {
+      opacity: 1;
+    }
+  }
+}
+
+/* Durations as utilities: `duration-fast`, `duration-base` and so on. */
+@utility duration-instant {
+  transition-duration: var(--duration-instant);
+}
+@utility duration-fast {
+  transition-duration: var(--duration-fast);
+}
+@utility duration-base {
+  transition-duration: var(--duration-base);
+}
+@utility duration-slow {
+  transition-duration: var(--duration-slow);
+}
+@utility duration-celebrate {
+  transition-duration: var(--duration-celebrate);
+}
+/* Scoreboard label: condensed, uppercase, tracked. */
+@utility label-caps {
+  font-family: var(--font-display);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+/* A hairline that fades out at both ends: section dividers, header rules. */
+@utility rule-fade {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-night-600) 15%,
+    var(--color-night-600) 85%,
+    transparent
+  );
+}
+
+/*
+ * `motion-ok:` applies a class only when movement is allowed. The runtime (DesignRuntime) writes the resolved
+ * preference to <html data-motion="full|reduce"> from the OS setting and the in-game setting; before it runs, the
+ * OS media query decides. Use it for every translate, scale and rotate: `motion-ok:hover:-translate-y-px`.
+ */
+@custom-variant motion-ok {
+  :root[data-motion='full'] & {
+    @slot;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :root:not([data-motion]) & {
+      @slot;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------- legacy variables (unlayered: they must win) */
+
+/*
+ * Every variable src/styles.css declares, re-declared with the night palette. The legacy file sets them on :root
+ * and again inside a dark-scheme media query; these come later with the same specificity and no media condition,
+ * so they win under both colour schemes. The design is dark regardless of the OS setting.
+ */
+:root {
+  --bg: #070a12;
+  --surface: #0b1020;
+  --surface-2: #111833;
+  --ink: #eef2fa;
+  --muted: #a9b4cc;
+  --line: #27325c;
+  --accent: #ff9a1f;
+  --accent-ink: #1a1206;
+  --accent-soft: #2a1f12;
+  --ok: #2ee281;
+  --ok-soft: #0e2a22;
+  --warn: #ffb347;
+  --warn-soft: #2b2112;
+  --bad: #ff5468;
+  --bad-soft: #321420;
+  --info-soft: #10233a;
+  --term-bg: #05070d;
+  --term-fg: #eef2fa;
+  --radius: 10px;
+  --gutter: 16px;
+  --mono: var(--font-mono);
+  --sans: var(--font-sans);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+/* ---------------------------------------------------------------- base (unlayered: overrides legacy rules) */
+
+html {
+  background: var(--color-night-950);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Floodlights: two pylons in the top corners and a faint wash over the pitch, 6 to 10 percent amber. */
+body {
+  min-height: 100dvh;
+  color: var(--color-chalk);
+  font-family: var(--font-sans);
+  background-color: var(--color-night-950);
+  background-image:
+    radial-gradient(60rem 36rem at -8% -12%, rgb(255 154 31 / 0.1), transparent 60%),
+    radial-gradient(60rem 36rem at 108% -12%, rgb(255 179 71 / 0.08), transparent 60%),
+    radial-gradient(90rem 50rem at 50% 120%, rgb(92 200 255 / 0.04), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Pitch grain: an SVG noise tile at a few percent, under the content, never intercepting input. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::selection {
+  background: rgb(92 200 255 / 0.32);
+  color: var(--color-chalk);
+}
+
+/* The brief: a 2px sky ring on every control. Replaces the legacy 3px accent outline. */
+:focus-visible {
+  outline: 2px solid var(--color-sky);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+a {
+  color: var(--color-sky);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-night-600) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-night-600);
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/*
+ * Inside a design-system region (any element with `data-ds`, which every primitive root carries), the legacy
+ * element rules from styles.css are rolled back to the layered cascade: Tailwind's preflight and utilities apply.
+ */
+:where([data-ds], [data-ds] *):is(h1, h2, h3, h4, p, a, code, pre) {
+  font-size: revert-layer;
+  line-height: revert-layer;
+  margin: revert-layer;
+  color: revert-layer;
+  background: revert-layer;
+  padding: revert-layer;
+  border-radius: revert-layer;
+  font-family: revert-layer;
+  text-transform: revert-layer;
+  letter-spacing: revert-layer;
+}
+
+/* ---------------------------------------------------------------- reduced motion */
+
+/* Resolved preference (data-motion) first, OS setting before the runtime has run. */
+:root[data-motion='reduce'] *,
+:root[data-motion='reduce'] *::before,
+:root[data-motion='reduce'] *::after {
+  scroll-behavior: auto !important;
+}
+:root[data-motion='reduce'] .ds-still,
+:root[data-motion='reduce'] .ds-still::before,
+:root[data-motion='reduce'] .ds-still::after {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion]) .ds-still,
+  :root:not([data-motion]) .ds-still::before,
+  :root:not([data-motion]) .ds-still::after {
+    animation: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------- dialog (native <dialog>, top layer) */
+
+.ds-dialog {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  transition:
+    opacity var(--duration-base) var(--ease-out-expo),
+    transform var(--duration-base) var(--ease-out-expo),
+    overlay var(--duration-base) allow-discrete,
+    display var(--duration-base) allow-discrete;
+}
+.ds-dialog[open] {
+  opacity: 1;
+  transform: none;
+}
+@starting-style {
+  .ds-dialog[open] {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+.ds-dialog::backdrop {
+  background: rgb(4 6 12 / 0);
+  backdrop-filter: blur(0);
+  transition:
+    background var(--duration-base) var(--ease-out-expo),
+    backdrop-filter var(--duration-base) var(--ease-out-expo),
+    overlay var(--duration-base) allow-discrete,
+    display var(--duration-base) allow-discrete;
+}
+.ds-dialog[open]::backdrop {
+  background: rgb(4 6 12 / 0.72);
+  backdrop-filter: blur(3px);
+}
+@starting-style {
+  .ds-dialog[open]::backdrop {
+    background: rgb(4 6 12 / 0);
+    backdrop-filter: blur(0);
+  }
+}
+:root[data-motion='reduce'] .ds-dialog,
+:root[data-motion='reduce'] .ds-dialog[open] {
+  transform: none;
+  transition-duration: var(--duration-fast);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion]) .ds-dialog,
+  :root:not([data-motion]) .ds-dialog[open] {
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------- floodlight sweep (celebration overlay) */
+
+.ds-flood {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  overflow: hidden;
+}
+.ds-flood__beam {
+  position: absolute;
+  top: -20vh;
+  width: 46vw;
+  height: 150vh;
+  opacity: 0;
+  mix-blend-mode: screen;
+  filter: blur(18px);
+  background: linear-gradient(
+    180deg,
+    rgb(255 236 200 / 0.55),
+    rgb(255 179 71 / 0.22) 35%,
+    rgb(255 154 31 / 0.06) 70%,
+    transparent
+  );
+  clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%);
+}
+.ds-flood__beam--left {
+  left: -6vw;
+  transform-origin: 50% 0;
+  animation: ds-sweep-left var(--duration-celebrate) var(--ease-in-out) both;
+}
+.ds-flood__beam--right {
+  right: -6vw;
+  transform-origin: 50% 0;
+  animation: ds-sweep-right var(--duration-celebrate) var(--ease-in-out) both;
+}
+.ds-flood__wash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(70% 55% at 50% 0%, rgb(255 179 71 / 0.16), transparent 70%);
+  animation: ds-wash var(--duration-celebrate) var(--ease-out-expo) both;
+}
+@keyframes ds-sweep-left {
+  0% {
+    opacity: 0;
+    transform: rotate(-38deg);
+  }
+  25% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(22deg);
+  }
+}
+@keyframes ds-sweep-right {
+  0% {
+    opacity: 0;
+    transform: rotate(38deg);
+  }
+  25% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(-22deg);
+  }
+}
+@keyframes ds-wash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+}
+/* Reduced motion: no sweep, only the wash, shortened to a 150ms-in fade. */
+:root[data-motion='reduce'] .ds-flood__beam {
+  display: none;
+}
+:root[data-motion='reduce'] .ds-flood__wash {
+  animation-duration: 600ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion]) .ds-flood__beam {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- split-flap digit */
+
+.ds-flap {
+  perspective: 300px;
+}
+.ds-flap__card {
+  backface-visibility: hidden;
+  transform-origin: 50% 50%;
+}

@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+// Imported from its client module, not the '@/design' barrel: a server component must not pull hooks in.
+import { DesignRuntime } from '@/design/components/feedback';
 import { fontClassNames } from '@/design/fonts';
 import { GameShell } from '@/shell/GameShell';
 // Legacy rules first, then Tailwind and the design tokens, so the tokens win where both set a variable.
@@ -15,7 +17,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={fontClassNames}>
       <body>
-        <GameShell>{children}</GameShell>
+        {/* Settings, toasts, confetti and floodlights for every screen: mounted once, around the game. */}
+        <DesignRuntime>
+          <GameShell>{children}</GameShell>
+        </DesignRuntime>
       </body>
     </html>
   );
