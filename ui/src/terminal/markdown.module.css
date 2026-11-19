@@ -1,0 +1,152 @@
+/*
+ * Lesson code on the Night match tokens, plus the "send to terminal" action on Redis commands.
+ * The legacy classes (.inline-code, .codeblock, .hljs-*) stay on the markup because tests and the old stylesheet
+ * know them; the doubled selectors below win over the legacy rules whichever sheet loads last.
+ */
+
+/* ---------------------------------------------------------------- inline code */
+
+:global(.inline-code).inline {
+  padding: 1px 6px;
+  border: 1px solid var(--color-night-600);
+  border-radius: var(--radius-xs);
+  background: var(--color-night-800);
+  color: var(--color-chalk);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  overflow-wrap: anywhere;
+}
+
+.cmd {
+  position: relative;
+  display: inline;
+}
+
+/*
+ * The action reserves no space: it floats over the code's top-right corner, so a line of lesson text is exactly
+ * as wide and as tall with it as without it. Hidden until the code is hovered or something inside is focused.
+ * (A fenced block is styled through its data-night attribute: a test pins its exact class attribute.)
+ */
+.send {
+  position: absolute;
+  right: -7px;
+  top: -11px;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--color-night-600);
+  border-radius: 9999px;
+  background: var(--color-night-700);
+  color: var(--color-chalk-dim);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-out-expo),
+    background-color var(--duration-fast) var(--ease-out-expo),
+    color var(--duration-fast) var(--ease-out-expo);
+}
+.cmd:hover > .send,
+.cmd:focus-within > .send,
+:global(.codeblock)[data-night]:hover .send,
+:global(.codeblock)[data-night]:focus-within .send,
+.send:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.send:hover {
+  background: var(--color-flood-500);
+  border-color: var(--color-flood-500);
+  color: var(--color-on-flood);
+}
+.send:focus-visible {
+  outline: 2px solid var(--color-sky);
+  outline-offset: 2px;
+}
+.sent,
+.sent:hover {
+  background: var(--color-turf);
+  border-color: var(--color-turf);
+  color: var(--color-on-flood);
+}
+@media (hover: none) {
+  /* No hover on touch: a quiet always-on mark instead of nothing. */
+  .send {
+    opacity: 0.7;
+    pointer-events: auto;
+  }
+}
+
+/* ---------------------------------------------------------------- fenced blocks */
+
+:global(.codeblock)[data-night] {
+  position: relative;
+  margin: 12px 0;
+  border: 1px solid var(--color-night-600);
+  border-radius: var(--radius-md);
+  background: var(--color-night-950);
+  color: var(--color-chalk);
+  box-shadow: var(--shadow-hairline);
+}
+:global(.codeblock-bar).bar {
+  padding: 3px 12px;
+  background: var(--color-night-900);
+  border-bottom: 1px solid var(--color-night-700);
+  color: var(--color-chalk-dim);
+  font-family: var(--font-sans);
+  font-size: 11px;
+}
+.body {
+  position: relative;
+}
+.pre {
+  margin: 0;
+  padding: 10px 44px 10px 14px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  tab-size: 2;
+}
+.pre code {
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+/* One action per sendable line: lines never wrap in a block, so line n is exactly n x 20px down. */
+.lineActions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 20px;
+  bottom: 10px;
+  pointer-events: none;
+}
+.lineSend {
+  right: 0;
+  margin-top: 0;
+}
+:global(.codeblock)[data-night] :global(.hljs-keyword) {
+  color: var(--color-flood-400);
+  font-weight: 600;
+}
+:global(.codeblock)[data-night] :global(.hljs-string) {
+  color: var(--color-turf);
+}
+:global(.codeblock)[data-night] :global(.hljs-number),
+:global(.codeblock)[data-night] :global(.hljs-meta),
+:global(.codeblock)[data-night] :global(.hljs-attr) {
+  color: var(--color-sky);
+}
+:global(.codeblock)[data-night] :global(.hljs-comment) {
+  color: var(--color-chalk-faint);
+  font-style: italic;
+}
+:global(.codeblock)[data-night] :global(.hljs-title),
+:global(.codeblock)[data-night] :global(.hljs-built_in) {
+  color: var(--color-flood-400);
+}

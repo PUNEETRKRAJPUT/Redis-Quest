@@ -1,0 +1,439 @@
+/*
+ * The terminal frame on the Night match design system. Plain CSS over the tokens (var(--color-*), var(--font-mono));
+ * no @apply, so it does not depend on Tailwind being in scope. Motion is transform and opacity only and switches
+ * off under reduced motion (the in-game setting writes html[data-motion], the OS media query is the fallback).
+ */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+.rootFill {
+  height: 100%;
+}
+
+.frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-night-600);
+  border-radius: var(--radius-lg);
+  background: var(--color-night-950);
+  box-shadow: var(--shadow-raise);
+  transition: border-color var(--duration-fast) var(--ease-out-expo);
+}
+/* Inside the workbench the pane draws its own border and corners. */
+:global([data-workbench]) .frame {
+  border-radius: 0;
+  border-width: 0;
+  box-shadow: none;
+}
+.frame:focus-within {
+  outline: 2px solid var(--color-sky);
+  outline-offset: -1px;
+}
+
+/* ------------------------------------------------------------------ title bar */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 8px 0 14px;
+  background: var(--color-night-900);
+  border-bottom: 1px solid var(--color-night-700);
+}
+.light {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--color-chalk-faint);
+}
+.light[data-state='up'] {
+  background: var(--color-turf);
+  box-shadow: 0 0 0 3px rgb(46 226 129 / 0.16);
+  animation: live 2.4s var(--ease-in-out) infinite;
+}
+.light[data-state='down'] {
+  background: var(--color-wicket);
+  box-shadow: 0 0 0 3px rgb(255 84 104 / 0.18);
+}
+.title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-chalk);
+}
+.targetBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--color-night-600);
+  border-radius: var(--radius-sm);
+  background: var(--color-night-800);
+  color: var(--color-chalk-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out-expo),
+    color var(--duration-fast) var(--ease-out-expo);
+}
+.targetBtn:hover {
+  background: var(--color-night-700);
+  color: var(--color-chalk);
+}
+.targetBtn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.targetBtn svg {
+  flex: none;
+  transition: transform var(--duration-fast) var(--ease-out-expo);
+}
+.targetBtn[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.spacer {
+  flex: 1 1 auto;
+}
+.barBtn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-chalk-dim);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-out-expo),
+    color var(--duration-fast) var(--ease-out-expo);
+}
+.barBtn:hover {
+  background: var(--color-night-700);
+  color: var(--color-chalk);
+}
+
+/* The target switcher (its own file, restyled by another task) sits quietly under the bar. */
+.targetRegion {
+  border-bottom: 1px solid var(--color-night-700);
+  background: var(--color-night-900);
+}
+.targetRegion :global(.target-switch) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* ------------------------------------------------------------------ the terminal itself */
+
+.viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--color-night-950);
+}
+.term {
+  position: absolute;
+  inset: 0;
+  padding: 10px 6px 6px 14px;
+}
+.term :global(.xterm-viewport) {
+  background-color: transparent !important;
+}
+.term :global(.xterm) {
+  height: 100%;
+}
+.term :global(.xterm-helper-textarea) {
+  /* xterm parks its input textarea where the cursor is; never let focusing it scroll the page (F-06). */
+  position: absolute;
+}
+
+/* ------------------------------------------------------------------ popup */
+
+.popup {
+  position: absolute;
+  z-index: 5;
+  overflow: hidden;
+  border: 1px solid var(--color-night-600);
+  border-radius: var(--radius-md);
+  background: var(--color-night-800);
+  box-shadow: var(--shadow-pop);
+  font-family: var(--font-sans);
+  animation: pop-in var(--duration-fast) var(--ease-out-expo) both;
+}
+.above {
+  transform-origin: bottom left;
+}
+.below {
+  transform-origin: top left;
+  --pop-from: -4px;
+}
+.popupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 26px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--color-night-700);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-chalk-dim);
+}
+.popupKeys {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.rows {
+  margin: 0;
+  padding: 3px;
+  list-style: none;
+}
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 30px;
+  padding: 0 10px 0 12px;
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+.row[data-selected] {
+  background: var(--color-night-700);
+}
+.row[data-selected]::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  bottom: 7px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--color-flood-500);
+}
+.rowName {
+  flex: none;
+  min-width: 92px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--color-chalk);
+}
+.rowName b {
+  color: var(--color-flood-400);
+  font-weight: 700;
+}
+.rowName i {
+  color: var(--color-chalk-dim);
+  font-style: normal;
+}
+.rowSummary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--color-chalk-dim);
+}
+.rowGroup {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--color-night-600);
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  color: var(--color-chalk-dim);
+}
+
+/* ------------------------------------------------------------------ syntax bar */
+
+.assist {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  height: 54px;
+  padding: 0 14px;
+  border-top: 1px solid var(--color-night-700);
+  background: var(--color-night-900);
+}
+.syntaxLine {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.syntaxCmd {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre;
+}
+.syntax {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--color-chalk-dim);
+  padding-left: 14px;
+  /* a long syntax fades out at both edges instead of wrapping (which would move the terminal) */
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    #000 14px,
+    #000 calc(100% - 32px),
+    transparent
+  );
+}
+.seg_cmd {
+  color: var(--color-chalk);
+  font-weight: 700;
+}
+.seg_token {
+  font-weight: 600;
+}
+.state_done {
+  color: var(--color-turf);
+}
+.state_active {
+  background: rgb(255 154 31 / 0.22);
+  color: var(--color-flood-400);
+  box-shadow: 0 1px 0 var(--color-flood-500);
+}
+.seg_cmd.state_done {
+  color: var(--color-chalk);
+}
+.extra {
+  flex: none;
+  margin-left: 12px;
+  font-size: 12px;
+  color: var(--color-wicket);
+}
+.metaLine {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-chalk-dim);
+}
+.summary {
+  flex: 1 1 120px;
+  min-width: 60px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  flex: 0 1 auto;
+  max-width: 46%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 6px;
+  border: 1px solid var(--color-night-600);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--color-chalk-dim);
+}
+.keyhints {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 12px;
+  color: var(--color-chalk-dim);
+}
+.keyhints span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ motion */
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--pop-from, 4px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes live {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+:global(html[data-motion='reduce']) .popup {
+  animation: pop-fade 120ms linear both;
+}
+:global(html[data-motion='reduce']) .light[data-state='up'] {
+  animation: none;
+}
+@keyframes pop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(html:not([data-motion='full'])) .popup {
+    animation: pop-fade 120ms linear both;
+  }
+  :global(html:not([data-motion='full'])) .light[data-state='up'] {
+    animation: none;
+  }
+}

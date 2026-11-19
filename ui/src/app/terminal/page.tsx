@@ -6,9 +6,11 @@ export const instant = false;
 
 export default function TerminalPage() {
   return (
-    <main className="page">
-      <h1>Terminal</h1>
-      <p className="muted">
+    <main data-ds="" className="mx-auto w-full max-w-[1100px] px-6 py-8">
+      <h1 className="font-display text-2xl font-semibold uppercase tracking-display text-chalk">
+        Terminal
+      </h1>
+      <p className="mb-5 mt-1 text-md text-chalk-dim">
         The same Redis your app uses. Dangerous commands get a warning, they are not blocked.
       </p>
       <TerminalPanel height={520} />
