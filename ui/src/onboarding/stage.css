@@ -1,0 +1,209 @@
+/* Plain stylesheet, not a CSS module: next.config.ts routes every *.css through the Tailwind loader with `as: '*.css'`,
+   which strips CSS-module semantics in this repo, so every name is prefixed `rqw-`. */
+/* The opening scene's set: four pylons, their beams, rain in the light, and the pitch below. Opacity and
+   transform only. Everything under .still stops under reduced motion (the design runtime's data-motion). */
+
+.rqw-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 50% 100%, rgb(46 226 129 / 0.05), transparent 70%),
+    var(--color-night-950);
+}
+
+.rqw-pitch {
+  position: absolute;
+  left: 50%;
+  bottom: -46vh;
+  width: 150vw;
+  height: 80vh;
+  translate: -50% 0;
+  border-radius: 50%;
+  border: 1px solid rgb(238 242 250 / 0.07);
+  background: radial-gradient(
+    closest-side,
+    rgb(46 226 129 / 0.07),
+    rgb(46 226 129 / 0.02) 70%,
+    transparent
+  );
+  opacity: 0;
+  transition: opacity 1600ms var(--ease-out-expo) 300ms;
+}
+.rqw-pitch::after {
+  content: '';
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  border: 1px dashed rgb(238 242 250 / 0.06);
+}
+.rqw-lit .rqw-pitch {
+  opacity: 1;
+}
+
+.rqw-rig {
+  position: absolute;
+  top: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  width: 54px;
+  padding: 7px;
+  border-radius: 0 0 8px 8px;
+  background: rgb(7 10 18 / 0.9);
+  box-shadow: 0 0 0 1px rgb(238 242 250 / 0.06);
+  translate: -50% 0;
+}
+.rqw-rig-small {
+  width: 38px;
+  gap: 4px;
+  padding: 5px;
+}
+.rqw-lamp {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--color-night-700);
+  transition:
+    background-color 300ms var(--ease-out-expo),
+    box-shadow 300ms var(--ease-out-expo);
+}
+.rqw-lit .rqw-lamp {
+  background: rgb(255 244 222);
+  box-shadow:
+    0 0 6px 1px rgb(255 225 170 / 0.95),
+    0 0 22px 5px rgb(255 179 71 / 0.45);
+  animation: rqw-lampOn 1100ms steps(1, end) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes rqw-lampOn {
+  0% {
+    opacity: 0.1;
+  }
+  14% {
+    opacity: 1;
+  }
+  22% {
+    opacity: 0.15;
+  }
+  38% {
+    opacity: 1;
+  }
+  44% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.rqw-beam {
+  position: absolute;
+  top: 24px;
+  width: 44vw;
+  height: 135vh;
+  translate: -50% 0;
+  transform-origin: 50% 0;
+  opacity: 0;
+  filter: blur(16px);
+  transition: opacity 900ms var(--ease-out-expo) 500ms;
+}
+/* The cone is clipped on the child so the blur on the parent softens its edges. */
+.rqw-beam::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: screen;
+  clip-path: polygon(47% 0, 53% 0, 94% 100%, 6% 100%);
+  background: linear-gradient(
+    180deg,
+    rgb(255 236 200 / 0.58),
+    rgb(255 179 71 / 0.2) 38%,
+    rgb(255 154 31 / 0.04) 72%,
+    transparent
+  );
+}
+.rqw-beam-inner {
+  width: 30vw;
+  filter: blur(18px);
+}
+.rqw-lit .rqw-beam {
+  opacity: 0.85;
+  animation: rqw-breathe 7s ease-in-out 1.6s infinite alternate;
+}
+@keyframes rqw-breathe {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+
+.rqw-rain {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1800ms var(--ease-out-expo) 900ms;
+  -webkit-mask-image: radial-gradient(ellipse 75% 95% at 50% 0%, #000 15%, transparent 78%);
+  mask-image: radial-gradient(ellipse 75% 95% at 50% 0%, #000 15%, transparent 78%);
+}
+.rqw-lit .rqw-rain {
+  opacity: 1;
+}
+.rqw-rain-layer {
+  position: absolute;
+  left: 0;
+  top: -300px;
+  width: 100%;
+  height: calc(100% + 300px);
+  animation: rqw-fall 0.9s linear infinite;
+}
+.rqw-rain-far {
+  opacity: 0.55;
+  animation-duration: 1.5s;
+}
+@keyframes rqw-fall {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 300px, 0);
+  }
+}
+
+/* Pooled light behind the headline once the lights are up. */
+.rqw-glow {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 90vw;
+  height: 70vh;
+  translate: -50% 0;
+  opacity: 0;
+  background: radial-gradient(50% 60% at 50% 20%, rgb(255 179 71 / 0.11), transparent 70%);
+  transition: opacity 1400ms var(--ease-out-expo) 600ms;
+}
+.rqw-lit .rqw-glow {
+  opacity: 1;
+}
+
+.rqw-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 40%, transparent 55%, rgb(7 10 18 / 0.8));
+}
+
+:root[data-motion='reduce'] .rqw-lamp,
+:root[data-motion='reduce'] .rqw-beam,
+:root[data-motion='reduce'] .rqw-rain-layer {
+  animation: none !important;
+}
+:root[data-motion='reduce'] .rqw-pitch,
+:root[data-motion='reduce'] .rqw-beam,
+:root[data-motion='reduce'] .rqw-glow,
+:root[data-motion='reduce'] .rqw-rain {
+  transition-duration: 1ms;
+  transition-delay: 0ms;
+}
