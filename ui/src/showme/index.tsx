@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Button, Skeleton } from '@/design';
 import { api } from '../api';
 import { useQuest } from '../store';
 import type { MetricsSeries, MetricsTick } from '../types';
@@ -27,7 +28,9 @@ import {
   TtlTimerView,
 } from './views';
 import type { ShowMeSpec } from '../types';
-import { readRedis, useRedis } from './useRedis';
+import { readRedis, usePoll, useRedis } from './useRedis';
+import { FrameContext, useRunner } from './frame';
+import { isEngineKey, nextTtlTotal } from './commands';
 import {
   isMissingError,
   parseAclList,
@@ -78,11 +81,23 @@ export function renderKey(key: string, playerId: string): string {
 
 function Loading({ error }: { error: string | null }) {
   return error ? (
-    <p className="callout warn" role="alert">
-      {error}
+    <p
+      role="alert"
+      className="rounded-md border border-wicket/40 bg-wicket/10 px-4 py-3 text-md leading-5 text-wicket"
+    >
+      {/^WRONGTYPE/i.test(error)
+        ? 'This key holds a different kind of value than this panel shows.'
+        : error}
     </p>
   ) : (
-    <p className="muted">Reading Redis...</p>
+    <div
+      data-ds=""
+      className="space-y-3 rounded-lg border border-night-600 bg-night-800 p-4"
+      aria-busy="true"
+    >
+      <Skeleton className="h-6 w-1/3" label="Reading Redis" />
+      <Skeleton lines={3} label="Reading Redis" />
+    </div>
   );
 }
 
@@ -133,8 +148,26 @@ function Leaderboard({ k, highlight }: { k: string; highlight?: string }) {
 function TtlTimer({ k }: { k: string }) {
   const t = useRedis(['TTL', k], 4000);
   const n = asNumber(t.reply);
+  const book = useRef<{
+    total: number | null;
+    prev: { ttl: number; at: number } | null;
+    seen: number | null;
+  }>({
+    total: null,
+    prev: null,
+    seen: null,
+  });
   if (n === null || t.at === null) return <Loading error={t.error} />;
-  return <TtlTimerView name={k} ttl={n} readAt={t.at} />;
+  // Scale the ring to the life this TTL started with; recomputed once per reading, not per render.
+  if (book.current.seen !== t.at) {
+    const now = { ttl: n, at: t.at };
+    book.current = {
+      total: nextTtlTotal(book.current.total, book.current.prev, now),
+      prev: now,
+      seen: t.at,
+    };
+  }
+  return <TtlTimerView name={k} ttl={n} readAt={t.at} total={book.current.total ?? undefined} />;
 }
 export function bitfieldArgs(k: string, days: number): string[] {
   const a = ['BITFIELD', k];
@@ -232,20 +265,17 @@ const last = (a: number[]): number | null => (a.length ? (a[a.length - 1] as num
 /** GET /api/metrics every 2 s for the window aggregates; the live seconds come from the store's metrics.tick. */
 function useMetricsWindow(): MetricsSeries | null {
   const [win, setWin] = useState<MetricsSeries | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const load = () =>
-      api
-        .metrics(60)
-        .then((m) => alive && setWin(m))
-        .catch(() => undefined);
-    void load();
-    const t = setInterval(() => void load(), 2000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, []);
+  usePoll(
+    async () => {
+      try {
+        setWin(await api.metrics(60));
+      } catch {
+        // keep the last window
+      }
+    },
+    2000,
+    'metrics',
+  );
   return win;
 }
 
@@ -253,10 +283,8 @@ function useMetricsWindow(): MetricsSeries | null {
 function useKeysExist(names: string[]): Record<string, boolean | null> {
   const [found, setFound] = useState<Record<string, boolean>>({});
   const joined = JSON.stringify(names);
-  useEffect(() => {
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const tick = async () => {
+  usePoll(
+    async () => {
       const list = JSON.parse(joined) as string[];
       const next: Record<string, boolean> = {};
       await Promise.all(
@@ -268,16 +296,11 @@ function useKeysExist(names: string[]): Record<string, boolean | null> {
           }
         }),
       );
-      if (!alive) return;
       setFound(next);
-      timer = setTimeout(() => void tick(), 2000);
-    };
-    void tick();
-    return () => {
-      alive = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [joined]);
+    },
+    2000,
+    joined,
+  );
   return Object.fromEntries(names.map((n) => [n, found[n] ?? null]));
 }
 
@@ -325,10 +348,8 @@ function OtpLimiter({ k }: { k: string }) {
 function usePendingByGroup(key: string, groups: string[]): Record<string, Reply | null> {
   const [found, setFound] = useState<Record<string, Reply>>({});
   const joined = JSON.stringify([key, groups]);
-  useEffect(() => {
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const tick = async () => {
+  usePoll(
+    async () => {
       const [k, list] = JSON.parse(joined) as [string, string[]];
       const next: Record<string, Reply> = {};
       await Promise.all(
@@ -340,16 +361,11 @@ function usePendingByGroup(key: string, groups: string[]): Record<string, Reply 
           }
         }),
       );
-      if (!alive) return;
       setFound(next);
-      timer = setTimeout(() => void tick(), 2000);
-    };
-    void tick();
-    return () => {
-      alive = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [joined]);
+    },
+    2000,
+    joined,
+  );
   return Object.fromEntries(groups.map((g) => [g, found[g] ?? null]));
 }
 
@@ -426,29 +442,68 @@ function KeyPicker({ id, onPick }: { id: string; onPick: (k: string) => void }) 
   const [v, setV] = useState('');
   return (
     <form
-      className="keypicker"
+      data-ds=""
+      className="keypicker flex flex-wrap items-end gap-3 rounded-lg border border-night-600 bg-night-800 p-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (v.trim()) onPick(v.trim());
       }}
     >
-      <label>
+      <label className="flex min-w-[16rem] flex-1 flex-col gap-1.5 text-md text-chalk-dim">
         Which key should the {id} panel read?
         <input
           value={v}
           onChange={(e) => setV(e.target.value)}
           placeholder="for example otp:p-1a2b3c4d"
           spellCheck={false}
+          className="h-10 rounded-md border border-night-600 bg-night-950 px-3 font-mono text-md text-chalk placeholder:text-chalk-faint"
         />
       </label>
-      <button type="submit" className="btn">
-        Show it
-      </button>
+      <Button type="submit">Show it</Button>
     </form>
   );
 }
 
-function Panel({ id, k, playerId }: { id: ShowMeId; k: string; playerId: string }): ReactNode {
+/** The panels with direct manipulation in hands-on mode; the other thirteen only read. */
+export const HANDS_ON_IDS: readonly ShowMeId[] = [
+  'kv_card',
+  'hash_card',
+  'list_feed',
+  'set_chips',
+  'leaderboard_panel',
+  'ttl_timer',
+];
+
+/** Gives one rendered panel its hands-on state: its own "ran:" line, and the engine-key lock. */
+export function Hosted({
+  k,
+  interactive,
+  children,
+}: {
+  k: string;
+  interactive: boolean;
+  children: ReactNode;
+}) {
+  const runner = useRunner();
+  const locked = interactive && isEngineKey(k);
+  return (
+    <FrameContext.Provider
+      value={{ interactive, hands: interactive && !locked ? runner : null, locked, sample: false }}
+    >
+      {children}
+    </FrameContext.Provider>
+  );
+}
+
+export function Panel({
+  id,
+  k,
+  playerId,
+}: {
+  id: ShowMeId;
+  k: string;
+  playerId: string;
+}): ReactNode {
   switch (id) {
     case 'kv_card':
       return <KvCard k={k} />;
@@ -495,40 +550,41 @@ function Panel({ id, k, playerId }: { id: ShowMeId; k: string; playerId: string 
 export function ShowMe({
   spec,
   playerId,
+  interactive = false,
 }: {
   spec: ShowMeSpec;
   playerId: string;
-  /** Hands-on mode: the panels can be manipulated and show the command they ran. Ignored until F-23. */
+  /** Hands-on mode: six panels can be manipulated and show the command they ran; the rest only read. */
   interactive?: boolean;
 }): ReactNode {
   const [picked, setPicked] = useState<string | null>(null);
   const id = spec.component;
-  if (!isShowMeId(id)) return <p className="muted">Unknown show-me component: {id}</p>;
+  if (!isShowMeId(id)) return <p className="text-chalk-dim">Unknown show-me component: {id}</p>;
   const keys = (picked ? [picked] : spec.keys.map((k) => renderKey(k, playerId))).filter(Boolean);
-  const title = spec.title ? <h3 data-testid="showme-title">{spec.title}</h3> : null;
-  if (id === 'cache_stats') {
+  const title = spec.title ? (
+    <h3
+      data-testid="showme-title"
+      data-ds=""
+      className="mb-2 font-display text-lg font-semibold tracking-[0.02em] text-chalk"
+    >
+      {spec.title}
+    </h3>
+  ) : null;
+  if (id === 'cache_stats' || id === 'acl_users' || id === 'stats_latency_panel') {
+    // No key to read (cache_stats, acl_users: any declared keys are ignored), or the keys are listed inside the
+    // panel (stats_latency_panel; keys: [] is fine, level 2.1).
     return (
       <>
         {title}
-        <CacheStats />
-      </>
-    );
-  }
-  if (id === 'acl_users') {
-    // The panel is one ACL LIST; any declared keys (level 5.10 declares none) are ignored.
-    return (
-      <>
-        {title}
-        <AclUsers />
-      </>
-    );
-  }
-  if (id === 'stats_latency_panel') {
-    // One panel for the route; the keys are listed inside it, so keys: [] is fine (level 2.1).
-    return (
-      <>
-        {title}
-        <StatsLatency keys={keys} />
+        <Hosted k="" interactive={interactive}>
+          {id === 'cache_stats' ? (
+            <CacheStats />
+          ) : id === 'acl_users' ? (
+            <AclUsers />
+          ) : (
+            <StatsLatency keys={keys} />
+          )}
+        </Hosted>
       </>
     );
   }
@@ -537,8 +593,10 @@ export function ShowMe({
     <>
       {title}
       {keys.map((k) => (
-        <div key={k} data-testid="showme-panel" data-key={k}>
-          <Panel id={id} k={k} playerId={playerId} />
+        <div key={k} data-testid="showme-panel" data-key={k} className="mb-3 last:mb-0">
+          <Hosted k={k} interactive={interactive}>
+            <Panel id={id} k={k} playerId={playerId} />
+          </Hosted>
         </div>
       ))}
     </>

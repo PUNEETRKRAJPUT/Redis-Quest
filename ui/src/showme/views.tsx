@@ -1,33 +1,167 @@
+'use client';
+import { clsx } from 'clsx';
+import { LayoutGroup, motion } from 'motion/react';
+import {
+  Activity,
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Braces,
+  CalendarCheck,
+  Clock,
+  Database,
+  Filter,
+  Gauge,
+  Hash,
+  Infinity as InfinityIcon,
+  List,
+  MapPin,
+  Minus,
+  Pencil,
+  Plus,
+  Search,
+  ShieldCheck,
+  Trophy,
+  Type,
+  Users,
+  X,
+  Waypoints,
+  Boxes,
+  Timer,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Sparkline } from '../panels/MetricsPanel';
+import { Button, Segmented, useReducedMotion } from '@/design';
+import { cmd, fmtSeconds, formatCommand, parseSeconds } from './commands';
+import { Empty, Facts, Num, PanelFrame, Spark, freshClass, useFrame, useFresh } from './frame';
+import styles from './showme.module.css';
 
-// Pure views: data in, markup out. The contract for each is the exported props interface.
+// Pure views: data in, markup out. The contract for each is the exported props interface. In hands-on mode (the
+// frame's context says so) the six panels with direct manipulation also render their controls.
 
-function Card({
-  title,
-  name,
-  children,
-  kind,
+const ICON = 18;
+
+// ---- hands-on controls --------------------------------------------------------------------------------------------
+function useControls() {
+  const f = useFrame();
+  const show = f.interactive && !f.locked;
+  const hands = f.hands;
+  const disabled = !hands || hands.busy;
+  const go = async (argv: string[]): Promise<boolean> => (hands ? hands.run(argv) : false);
+  return { show, disabled, go };
+}
+
+const INPUT =
+  'h-8 min-w-0 flex-1 rounded-sm border border-night-600 bg-night-950 px-2.5 font-mono text-md text-chalk shadow-[inset_0_1px_2px_rgb(0_0_0/0.4)] placeholder:text-chalk-faint disabled:cursor-not-allowed disabled:text-chalk-faint';
+
+function TextBox({
+  value,
+  onChange,
+  onEnter,
+  label,
+  placeholder,
+  disabled,
+  className,
 }: {
-  title: string;
-  name: string;
-  children: ReactNode;
-  kind: string;
+  value: string;
+  onChange: (v: string) => void;
+  onEnter?: () => void;
+  label: string;
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
 }) {
   return (
-    <figure className="showme" data-showme={kind}>
-      <figcaption>
-        <span className="showme-title">{title}</span>
-        <code className="showme-key">{name}</code>
-      </figcaption>
-      <div className="showme-body">{children}</div>
-    </figure>
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && onEnter) {
+          e.preventDefault();
+          onEnter();
+        }
+      }}
+      aria-label={label}
+      placeholder={placeholder}
+      disabled={disabled}
+      spellCheck={false}
+      autoComplete="off"
+      className={clsx(INPUT, className)}
+    />
   );
 }
 
-function Empty({ children }: { children: ReactNode }) {
-  return <p className="muted showme-empty">{children}</p>;
+/** Rows of field / value with a flash on every row that is new or changed. */
+function KeyValueTable({
+  rows,
+  testId,
+  edit,
+}: {
+  rows: [string, string][];
+  testId: string;
+  /** Hands-on: click a value to edit it. */
+  edit?: {
+    editing: { field: string; draft: string } | null;
+    disabled: boolean;
+    onStart: (field: string, value: string) => void;
+    onChange: (draft: string) => void;
+    onSubmit: () => void;
+    onCancel: () => void;
+  };
+}) {
+  const fresh = useFresh(rows.map(([f, v]) => `${f}\u0002${v}`));
+  return (
+    <table data-testid={testId} className="w-full border-separate border-spacing-0 text-md">
+      <tbody>
+        {rows.map(([f, v]) => {
+          const isEditing = edit?.editing?.field === f;
+          return (
+            <tr key={f} className={freshClass(fresh.has(`${f}\u0002${v}`))}>
+              <th
+                scope="row"
+                className="w-[38%] border-b border-night-600/50 py-1.5 pr-3 pl-2 text-left align-baseline font-mono text-sm font-medium text-chalk-dim"
+              >
+                {f}
+              </th>
+              <td className="border-b border-night-600/50 py-1 pr-2 align-baseline font-mono text-chalk">
+                {edit && isEditing ? (
+                  <input
+                    autoFocus
+                    aria-label={`New value for ${f}`}
+                    value={edit.editing?.draft ?? ''}
+                    onChange={(e) => edit.onChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') edit.onSubmit();
+                      if (e.key === 'Escape') edit.onCancel();
+                    }}
+                    onBlur={edit.onCancel}
+                    spellCheck={false}
+                    className={clsx(INPUT, 'w-full')}
+                  />
+                ) : edit ? (
+                  <button
+                    type="button"
+                    disabled={edit.disabled}
+                    onClick={() => edit.onStart(f, v)}
+                    title="Click to edit"
+                    className="group/edit -mx-1.5 inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded-xs px-1.5 py-0.5 text-left break-all transition-colors duration-fast hover:bg-night-700 disabled:cursor-not-allowed"
+                  >
+                    {v}
+                    <Pencil
+                      size={12}
+                      aria-hidden
+                      className="shrink-0 text-chalk-faint opacity-0 transition-opacity duration-fast group-hover/edit:opacity-100 group-focus-visible/edit:opacity-100"
+                    />
+                  </button>
+                ) : (
+                  <span className="break-all">{v}</span>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
 }
 
 // ---- kv_card ---------------------------------------------------------------------------------------------
@@ -40,30 +174,76 @@ export interface KvCardProps {
   /** TTL in seconds; -1 no expiry, -2 key missing. */
   ttl: number | null;
 }
+const ttlText = (ttl: number | null) =>
+  ttl === null || ttl === -1 ? 'never' : ttl === -2 ? 'gone' : `in ${ttl}s`;
+
 export function KvCardView({ name, type, value, ttl }: KvCardProps) {
   const missing = type === 'none';
+  const c = useControls();
+  const [draft, setDraft] = useState<string | null>(null);
+  const fresh = useFresh([value ?? '\u0000missing']);
+  const send = async () => {
+    if (draft === null) return;
+    if (await c.go(cmd.set(name, draft))) setDraft(null);
+  };
+  const shown = draft ?? value ?? '';
   return (
-    <Card title="String key" name={name} kind="kv_card">
+    <PanelFrame
+      kind="kv_card"
+      title="String key"
+      name={name}
+      icon={<Type size={ICON} />}
+      typeLabel={type === 'none' ? undefined : type}
+      handsOn
+      preview={draft !== null ? formatCommand(cmd.set(name, draft)) : null}
+    >
       {missing ? (
         <Empty>This key does not exist (yet).</Empty>
       ) : (
         <>
-          <div className="kv-value" data-testid="kv-value">
+          <div
+            className={clsx(
+              'rounded-md border border-night-600/70 bg-night-950/60 px-4 py-3 font-mono text-2xl leading-tight font-semibold break-all text-chalk',
+              freshClass(fresh.size > 0),
+            )}
+            data-testid="kv-value"
+          >
             {value ?? `(a ${type}, not a string)`}
           </div>
-          <dl className="facts">
-            <div>
-              <dt>type</dt>
-              <dd>{type}</dd>
-            </div>
-            <div>
-              <dt>expires</dt>
-              <dd>{ttl === null || ttl === -1 ? 'never' : ttl === -2 ? 'gone' : `in ${ttl}s`}</dd>
-            </div>
-          </dl>
+          <Facts
+            items={[
+              { label: 'type', value: type },
+              { label: 'expires', value: ttlText(ttl) },
+            ]}
+          />
         </>
       )}
-    </Card>
+      {c.show && (type === 'string' || missing) && (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send();
+          }}
+        >
+          <TextBox
+            label="Value"
+            value={shown}
+            onChange={setDraft}
+            placeholder="a new value"
+            disabled={c.disabled}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={c.disabled || draft === null}
+            leading={<Pencil size={14} />}
+          >
+            SET
+          </Button>
+        </form>
+      )}
+    </PanelFrame>
   );
 }
 
@@ -74,26 +254,95 @@ export interface HashCardProps {
   ttl?: number | null;
 }
 export function HashCardView({ name, fields, ttl }: HashCardProps) {
+  const c = useControls();
+  const [editing, setEditing] = useState<{ field: string; draft: string } | null>(null);
+  const [nf, setNf] = useState('');
+  const [nv, setNv] = useState('');
+  const submitEdit = async () => {
+    if (!editing) return;
+    const e = editing;
+    setEditing(null);
+    await c.go(cmd.hset(name, e.field, e.draft));
+  };
+  const addable = nf.trim() !== '' && nv !== '';
+  const previewArgs = editing
+    ? cmd.hset(name, editing.field, editing.draft)
+    : addable
+      ? cmd.hset(name, nf.trim(), nv)
+      : null;
   return (
-    <Card title="Hash" name={name} kind="hash_card">
+    <PanelFrame
+      kind="hash_card"
+      title="Hash"
+      name={name}
+      icon={<Hash size={ICON} />}
+      typeLabel="hash"
+      handsOn
+      preview={previewArgs ? formatCommand(previewArgs) : null}
+    >
       {fields.length === 0 ? (
         <Empty>No fields. The key is missing or not a hash.</Empty>
       ) : (
-        <table className="kv-table" data-testid="hash-table">
-          <tbody>
-            {fields.map(([f, v]) => (
-              <tr key={f}>
-                <th scope="row">{f}</th>
-                <td>{v}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <KeyValueTable
+          rows={fields}
+          testId="hash-table"
+          edit={
+            c.show
+              ? {
+                  editing,
+                  disabled: c.disabled,
+                  onStart: (field, value) => setEditing({ field, draft: value }),
+                  onChange: (draft) => setEditing((e) => (e ? { ...e, draft } : e)),
+                  onSubmit: () => void submitEdit(),
+                  onCancel: () => setEditing(null),
+                }
+              : undefined
+          }
+        />
       )}
       {ttl !== undefined && ttl !== null && ttl >= 0 ? (
-        <p className="muted">expires in {ttl}s</p>
+        <p className="text-sm text-chalk-dim">expires in {ttl}s</p>
       ) : null}
-    </Card>
+      {c.show && (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!addable) return;
+            void c.go(cmd.hset(name, nf.trim(), nv)).then((ok) => {
+              if (ok) {
+                setNf('');
+                setNv('');
+              }
+            });
+          }}
+        >
+          <TextBox
+            label="Field"
+            value={nf}
+            onChange={setNf}
+            placeholder="field"
+            disabled={c.disabled}
+            className="max-w-[9rem]"
+          />
+          <TextBox
+            label="Field value"
+            value={nv}
+            onChange={setNv}
+            placeholder="value"
+            disabled={c.disabled}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={c.disabled || !addable}
+            leading={<Plus size={14} />}
+          >
+            HSET
+          </Button>
+        </form>
+      )}
+    </PanelFrame>
   );
 }
 
@@ -106,21 +355,107 @@ export interface ListFeedProps {
   total: number;
 }
 export function ListFeedView({ name, items, total }: ListFeedProps) {
+  const c = useControls();
+  const [draft, setDraft] = useState('');
+  const seen = new Map<string, number>();
+  const ids = items.map((it) => {
+    const n = seen.get(it) ?? 0;
+    seen.set(it, n + 1);
+    return `${it}\u0002${n}`;
+  });
+  const fresh = useFresh(ids);
+  const has = draft !== '';
+  const push = async (argv: string[]) => {
+    if (await c.go(argv)) setDraft('');
+  };
   return (
-    <Card title="List feed" name={name} kind="list_feed">
+    <PanelFrame
+      kind="list_feed"
+      title="List feed"
+      name={name}
+      icon={<List size={ICON} />}
+      typeLabel="list"
+      handsOn
+      preview={has ? formatCommand(cmd.lpush(name, draft)) : null}
+    >
       {items.length === 0 ? (
         <Empty>The list is empty.</Empty>
       ) : (
-        <ol className="feed">
+        <ol className="overflow-hidden rounded-md border border-night-600/70 bg-night-950/40">
           {items.map((it, i) => (
-            <li key={`${i}-${it}`}>{it}</li>
+            <li
+              key={ids[i]}
+              className={clsx(
+                'flex items-baseline gap-3 border-b border-night-600/40 px-3 py-1.5 last:border-b-0',
+                freshClass(fresh.has(ids[i] as string)),
+              )}
+            >
+              <span className="tabular w-5 shrink-0 text-right font-mono text-xs text-chalk-faint">
+                {i}
+              </span>
+              <span className="min-w-0 flex-1 text-md break-words text-chalk">{it}</span>
+              {i === 0 && <span className="label-caps shrink-0 text-xs text-flood-400">head</span>}
+              {i === items.length - 1 && items.length > 1 && total <= items.length && (
+                <span className="label-caps shrink-0 text-xs text-sky">tail</span>
+              )}
+            </li>
           ))}
         </ol>
       )}
-      <p className="muted">
-        {total} item{total === 1 ? '' : 's'} in the list
+      <p className="text-sm text-chalk-dim">
+        <Num value={total} /> item{total === 1 ? '' : 's'} in the list
       </p>
-    </Card>
+      {c.show && (
+        <div className="space-y-2">
+          <TextBox
+            label="Item to push"
+            value={draft}
+            onChange={setDraft}
+            onEnter={() => has && void push(cmd.lpush(name, draft))}
+            placeholder="a new item"
+            disabled={c.disabled}
+            className="w-full"
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={c.disabled || !has}
+              leading={<ArrowUpToLine size={14} />}
+              onClick={() => void push(cmd.lpush(name, draft))}
+            >
+              LPUSH
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={c.disabled || !has}
+              leading={<ArrowDownToLine size={14} />}
+              onClick={() => void push(cmd.rpush(name, draft))}
+            >
+              RPUSH
+            </Button>
+            <span className="grow" />
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={c.disabled}
+              onClick={() => void c.go(cmd.lpop(name))}
+            >
+              LPOP
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={c.disabled}
+              onClick={() => void c.go(cmd.rpop(name))}
+            >
+              RPOP
+            </Button>
+          </div>
+        </div>
+      )}
+    </PanelFrame>
   );
 }
 
@@ -132,23 +467,83 @@ export interface SetChipsProps {
 }
 export function SetChipsView({ name, members, highlight }: SetChipsProps) {
   const sorted = [...members].sort();
+  const c = useControls();
+  const [draft, setDraft] = useState('');
+  const fresh = useFresh(sorted);
+  const has = draft.trim() !== '';
   return (
-    <Card title="Set" name={name} kind="set_chips">
+    <PanelFrame
+      kind="set_chips"
+      title="Set"
+      name={name}
+      icon={<Boxes size={ICON} />}
+      typeLabel="set"
+      handsOn
+      preview={has ? formatCommand(cmd.sadd(name, draft.trim())) : null}
+    >
       {sorted.length === 0 ? (
         <Empty>The set is empty.</Empty>
       ) : (
-        <ul className="chips">
+        <ul className="flex flex-wrap gap-2">
           {sorted.map((m) => (
-            <li key={m} className={m === highlight ? 'chip hl' : 'chip'}>
+            <li
+              key={m}
+              className={clsx(
+                'inline-flex items-center gap-1 rounded-full border py-1 font-mono text-sm',
+                c.show ? 'pr-1 pl-3' : 'px-3',
+                m === highlight
+                  ? 'border-flood-500/60 bg-flood-500/10 text-flood-400'
+                  : 'border-night-600 bg-night-900 text-chalk',
+                freshClass(fresh.has(m)),
+              )}
+            >
               {m}
+              {c.show && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${m} (SREM)`}
+                  title={`SREM ${m}`}
+                  disabled={c.disabled}
+                  onClick={() => void c.go(cmd.srem(name, m))}
+                  className="grid size-5 cursor-pointer place-items-center rounded-full text-chalk-dim transition-colors duration-fast hover:bg-wicket/20 hover:text-wicket disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
-      <p className="muted">
+      <p className="text-sm text-chalk-dim">
         {sorted.length} member{sorted.length === 1 ? '' : 's'}, no duplicates, no order
       </p>
-    </Card>
+      {c.show && (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!has) return;
+            void c.go(cmd.sadd(name, draft.trim())).then((ok) => ok && setDraft(''));
+          }}
+        >
+          <TextBox
+            label="Member to add"
+            value={draft}
+            onChange={setDraft}
+            placeholder="a member"
+            disabled={c.disabled}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={c.disabled || !has}
+            leading={<Plus size={14} />}
+          >
+            SADD
+          </Button>
+        </form>
+      )}
+    </PanelFrame>
   );
 }
 
@@ -161,25 +556,140 @@ export interface LeaderboardProps {
 }
 export function LeaderboardPanelView({ name, rows, highlight }: LeaderboardProps) {
   const max = Math.max(1, ...rows.map((r) => r.score));
+  const c = useControls();
+  const reduced = useReducedMotion();
+  const [step, setStep] = useState('1');
+  const [draft, setDraft] = useState('');
+  const by = Number(step);
+  const fresh = useFresh(rows.map((r) => `${r.member}\u0002${r.score}`));
+  const has = draft.trim() !== '';
   return (
-    <Card title="Leaderboard" name={name} kind="leaderboard_panel">
+    <PanelFrame
+      kind="leaderboard_panel"
+      title="Leaderboard"
+      name={name}
+      icon={<Trophy size={ICON} />}
+      typeLabel="sorted set"
+      handsOn
+      preview={has ? formatCommand(cmd.zincrby(name, by, draft.trim())) : null}
+    >
       {rows.length === 0 ? (
         <Empty>Nobody on the board yet.</Empty>
       ) : (
-        <ol className="board">
-          {rows.map((r, i) => (
-            <li key={r.member} className={r.member === highlight ? 'hl' : undefined}>
-              <span className="rank">{i + 1}</span>
-              <span className="who">{r.member}</span>
-              <span className="bar">
-                <i style={{ width: `${Math.max(3, (r.score / max) * 100)}%` }} />
-              </span>
-              <span className="score">{r.score}</span>
-            </li>
-          ))}
-        </ol>
+        <LayoutGroup>
+          <ol className="space-y-1">
+            {rows.map((r, i) => (
+              <motion.li
+                key={r.member}
+                layout={reduced ? false : 'position'}
+                transition={{ type: 'spring', stiffness: 520, damping: 40 }}
+                className={clsx(
+                  'flex items-center gap-2 rounded-sm py-1 pr-1.5 pl-2',
+                  r.member === highlight && 'bg-flood-500/10',
+                  freshClass(fresh.has(`${r.member}\u0002${r.score}`)),
+                )}
+              >
+                <span
+                  className={clsx(
+                    'font-display tabular w-5 shrink-0 text-center text-lg font-semibold',
+                    i === 0 ? 'text-flood-400' : 'text-chalk-dim',
+                  )}
+                >
+                  {i + 1}
+                </span>
+                <span
+                  className={clsx(
+                    'w-[34%] min-w-0 truncate font-mono text-sm',
+                    r.member === highlight ? 'text-flood-400' : 'text-chalk',
+                  )}
+                  title={r.member}
+                >
+                  {r.member}
+                </span>
+                <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-night-900">
+                  <i
+                    className={clsx(
+                      'block h-full rounded-full transition-[width] duration-slow ease-out-expo',
+                      i === 0 ? 'bg-flood-500' : 'bg-sky/70',
+                    )}
+                    style={{ width: `${Math.max(3, (r.score / max) * 100)}%` }}
+                  />
+                </span>
+                <span className="tabular w-12 shrink-0 text-right font-mono text-md text-chalk">
+                  <Num value={r.score} />
+                </span>
+                {c.show && (
+                  <span className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Minus ${by} for ${r.member}`}
+                      title={`ZINCRBY ${name} -${by} ${r.member}`}
+                      disabled={c.disabled}
+                      onClick={() => void c.go(cmd.zincrby(name, -by, r.member))}
+                      className="grid size-7 cursor-pointer place-items-center rounded-sm border border-night-600 bg-night-900 text-chalk-dim transition-colors duration-fast hover:border-wicket/60 hover:text-wicket active:bg-night-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Plus ${by} for ${r.member}`}
+                      title={`ZINCRBY ${name} ${by} ${r.member}`}
+                      disabled={c.disabled}
+                      onClick={() => void c.go(cmd.zincrby(name, by, r.member))}
+                      className="grid size-7 cursor-pointer place-items-center rounded-sm border border-night-600 bg-night-900 text-chalk-dim transition-colors duration-fast hover:border-turf/60 hover:text-turf active:bg-night-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </span>
+                )}
+              </motion.li>
+            ))}
+          </ol>
+        </LayoutGroup>
       )}
-    </Card>
+      {c.show && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="label-caps text-xs text-chalk-dim">step</span>
+            <Segmented
+              label="Points per click"
+              size="sm"
+              value={step}
+              onValueChange={setStep}
+              options={[
+                { value: '1', label: '1' },
+                { value: '5', label: '5' },
+                { value: '10', label: '10' },
+              ]}
+            />
+          </div>
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!has) return;
+              void c.go(cmd.zincrby(name, by, draft.trim())).then((ok) => ok && setDraft(''));
+            }}
+          >
+            <TextBox
+              label="Member to score"
+              value={draft}
+              onChange={setDraft}
+              placeholder="a new or existing member"
+              disabled={c.disabled}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={c.disabled || !has}
+              leading={<Plus size={14} />}
+            >
+              ZINCRBY
+            </Button>
+          </form>
+        </div>
+      )}
+    </PanelFrame>
   );
 }
 
@@ -201,6 +711,8 @@ export function fmtDuration(s: number): string {
     ? `${h}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`
     : `${m}m ${String(sec).padStart(2, '0')}s`;
 }
+const PRESETS = [10, 60, 600, 3600, 86400];
+
 export function TtlTimerView({ name, ttl, readAt, total }: TtlTimerProps) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -208,40 +720,142 @@ export function TtlTimerView({ name, ttl, readAt, total }: TtlTimerProps) {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [ttl]);
+  const c = useControls();
+  const [secs, setSecs] = useState(30);
+  const [touched, setTouched] = useState(false);
   const left = ttl < 0 ? ttl : Math.max(0, ttl - Math.floor((now - readAt) / 1000));
   const span = total && total > 0 ? total : Math.max(ttl, 1);
   const frac = left < 0 ? 0 : Math.min(1, left / span);
-  const r = 34;
-  const c = 2 * Math.PI * r;
+  const r = 40;
+  const circ = 2 * Math.PI * r;
+  const tone = frac > 0.5 ? 'stroke-turf' : frac > 0.2 ? 'stroke-flood-500' : 'stroke-wicket';
+  const expire = (n: number) => {
+    setTouched(false);
+    void c.go(cmd.expire(name, n));
+  };
   return (
-    <Card title="Time to live" name={name} kind="ttl_timer">
+    <PanelFrame
+      kind="ttl_timer"
+      title="Time to live"
+      name={name}
+      icon={<Timer size={ICON} />}
+      handsOn
+      preview={c.show && touched && ttl !== -2 ? formatCommand(cmd.expire(name, secs)) : null}
+    >
       {ttl === -2 ? (
         <Empty>The key is gone (TTL -2): it expired or never existed.</Empty>
       ) : ttl === -1 ? (
-        <Empty>The key exists and never expires (TTL -1).</Empty>
+        <Empty>
+          <InfinityIcon size={18} className="mr-2 inline text-chalk-faint" aria-hidden />
+          The key exists and never expires (TTL -1).
+        </Empty>
       ) : (
-        <div className="ttl">
-          <svg viewBox="0 0 80 80" width="96" height="96" aria-hidden="true">
-            <circle cx="40" cy="40" r={r} className="ring-bg" />
+        <div className="flex items-center gap-5">
+          <svg
+            viewBox="0 0 100 100"
+            width="112"
+            height="112"
+            aria-hidden="true"
+            className="shrink-0"
+          >
             <circle
-              cx="40"
-              cy="40"
+              cx="50"
+              cy="50"
               r={r}
-              className="ring-fg"
-              strokeDasharray={c}
-              strokeDashoffset={c * (1 - frac)}
-              transform="rotate(-90 40 40)"
+              fill="none"
+              strokeWidth="7"
+              className="stroke-night-600"
+            />
+            <circle
+              cx="50"
+              cy="50"
+              r={r}
+              fill="none"
+              strokeWidth="7"
+              strokeLinecap="round"
+              className={clsx('transition-[stroke-dashoffset] duration-slow ease-linear', tone)}
+              strokeDasharray={circ}
+              strokeDashoffset={circ * (1 - frac)}
+              transform="rotate(-90 50 50)"
             />
           </svg>
-          <div>
-            <div className="ttl-num" data-testid="ttl-left">
+          <div className="min-w-0">
+            <div
+              className="font-display tabular text-3xl leading-none font-semibold text-chalk"
+              data-testid="ttl-left"
+            >
               {left}s
             </div>
-            <div className="muted">{fmtDuration(left)} until Redis deletes it</div>
+            <div className="mt-1.5 text-sm leading-5 text-chalk-dim">
+              {fmtDuration(left)} until Redis deletes it
+            </div>
           </div>
         </div>
       )}
-    </Card>
+      {c.show && ttl === -2 && (
+        <Button
+          size="sm"
+          disabled={c.disabled}
+          onClick={() => void c.go(cmd.setEx(name, 60))}
+          leading={<Timer size={14} />}
+        >
+          Bring it back for 60 s
+        </Button>
+      )}
+      {c.show && ttl !== -2 && (
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Set the countdown">
+            {PRESETS.map((p) => (
+              <Button
+                key={p}
+                size="sm"
+                variant="ghost"
+                disabled={c.disabled}
+                onClick={() => expire(p)}
+              >
+                {fmtSeconds(p)}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min={1}
+              max={300}
+              step={1}
+              value={secs}
+              disabled={c.disabled}
+              onChange={(e) => {
+                setSecs(Number(e.target.value));
+                setTouched(true);
+              }}
+              aria-label="Seconds until the key expires"
+              className="h-8 min-w-0 flex-1 cursor-pointer accent-flood-500 disabled:cursor-not-allowed"
+            />
+            <span className="tabular w-12 shrink-0 text-right font-mono text-md text-chalk">
+              {secs}s
+            </span>
+            <Button
+              size="sm"
+              disabled={c.disabled || parseSeconds(String(secs)) === null}
+              onClick={() => expire(secs)}
+              leading={<Clock size={14} />}
+            >
+              EXPIRE
+            </Button>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={c.disabled || ttl === -1}
+            onClick={() => void c.go(cmd.persist(name))}
+            leading={<InfinityIcon size={14} />}
+          >
+            PERSIST
+          </Button>
+        </div>
+      )}
+    </PanelFrame>
   );
 }
 
@@ -258,22 +872,41 @@ export function currentStreak(bits: number[]): number {
 }
 export function BitmapStreakView({ name, bits }: BitmapStreakProps) {
   const total = bits.reduce((a, b) => a + b, 0);
+  const fresh = useFresh(bits.map((b, i) => (b ? `d${i}` : '')).filter(Boolean));
   return (
-    <Card title="Login streak" name={name} kind="bitmap_streak">
-      <div className="streak" role="img" aria-label={`${total} days set out of ${bits.length}`}>
+    <PanelFrame
+      kind="bitmap_streak"
+      title="Login streak"
+      name={name}
+      icon={<CalendarCheck size={ICON} />}
+      typeLabel="bitmap"
+    >
+      <div
+        className="flex flex-wrap gap-1.5"
+        role="img"
+        aria-label={`${total} days set out of ${bits.length}`}
+      >
         {bits.map((b, i) => (
           <i
             key={i}
-            className={b ? 'on' : 'off'}
+            className={clsx(
+              'block size-5 rounded-xs',
+              b
+                ? 'bg-turf shadow-[0_0_10px_rgb(46_226_129/0.45)]'
+                : 'bg-night-900 ring-1 ring-night-600',
+              fresh.has(`d${i}`) && styles.fresh,
+            )}
             title={`day ${i + 1}: ${b ? 'logged in' : 'missed'}`}
           />
         ))}
       </div>
-      <p>
-        <strong>{currentStreak(bits)}</strong> day streak, <strong>{total}</strong> of {bits.length}{' '}
-        days set
+      <p className="text-md text-chalk-dim">
+        <strong className="font-display text-xl font-semibold text-chalk">
+          <Num value={currentStreak(bits)} />
+        </strong>{' '}
+        day streak, <strong className="text-chalk">{total}</strong> of {bits.length} days set
       </p>
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -285,14 +918,23 @@ export interface HllCounterProps {
 }
 export function HllCounterView({ name, count }: HllCounterProps) {
   return (
-    <Card title="Unique visitors (estimate)" name={name} kind="hll_counter">
-      <div className="big-num" data-testid="hll-count">
-        {count.toLocaleString('en-IN')}
+    <PanelFrame
+      kind="hll_counter"
+      title="Unique visitors (estimate)"
+      name={name}
+      icon={<Users size={ICON} />}
+      typeLabel="hyperloglog"
+    >
+      <div
+        className="font-display tabular text-4xl font-semibold text-flood-400"
+        data-testid="hll-count"
+      >
+        <Num value={count} format={(n) => n.toLocaleString('en-IN')} />
       </div>
-      <p className="muted">
+      <p className="text-sm leading-5 text-chalk-dim">
         A HyperLogLog keeps this in about 12 KB however many visitors there are.
       </p>
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -302,9 +944,9 @@ export interface GeoMapProps {
   points: { member: string; lon: number; lat: number }[];
 }
 export function GeoMapView({ name, points }: GeoMapProps) {
-  const W = 320;
-  const H = 200;
-  const pad = 22;
+  const W = 360;
+  const H = 220;
+  const pad = 30;
   const lons = points.map((p) => p.lon);
   const lats = points.map((p) => p.lat);
   const minLon = Math.min(...lons);
@@ -315,29 +957,75 @@ export function GeoMapView({ name, points }: GeoMapProps) {
     maxLon === minLon ? W / 2 : pad + ((lon - minLon) / (maxLon - minLon)) * (W - 2 * pad);
   const sy = (lat: number) =>
     maxLat === minLat ? H / 2 : H - pad - ((lat - minLat) / (maxLat - minLat)) * (H - 2 * pad);
+  const fresh = useFresh(points.map((p) => p.member));
   return (
-    <Card title="Places" name={name} kind="geo_map">
+    <PanelFrame
+      kind="geo_map"
+      title="Places"
+      name={name}
+      icon={<MapPin size={ICON} />}
+      typeLabel="geo"
+    >
       {points.length === 0 ? (
         <Empty>No coordinates stored under this key.</Empty>
       ) : (
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="geo"
+          className="w-full rounded-md"
           role="img"
           aria-label={`${points.length} places plotted by longitude and latitude`}
         >
-          <rect x="0.5" y="0.5" width={W - 1} height={H - 1} rx="8" className="geo-bg" />
-          {points.map((p) => (
-            <g key={p.member}>
-              <circle cx={sx(p.lon)} cy={sy(p.lat)} r="5" className="geo-dot" />
-              <text x={sx(p.lon) + 8} y={sy(p.lat) + 4} className="geo-label">
-                {p.member}
-              </text>
+          <rect
+            x="0.5"
+            y="0.5"
+            width={W - 1}
+            height={H - 1}
+            rx="8"
+            className="fill-night-950 stroke-night-600"
+          />
+          {[1, 2, 3].map((i) => (
+            <g key={i} className="stroke-night-700" strokeWidth="1">
+              <line x1={(W / 4) * i} y1="1" x2={(W / 4) * i} y2={H - 1} />
+              <line x1="1" y1={(H / 4) * i} x2={W - 1} y2={(H / 4) * i} />
             </g>
           ))}
+          {points.map((p) => {
+            const x = sx(p.lon);
+            const y = sy(p.lat);
+            const left = x > W * 0.62;
+            return (
+              <g key={p.member}>
+                {fresh.has(p.member) && (
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r="5"
+                    className={clsx('fill-none stroke-flood-500', styles.dotPing)}
+                    strokeWidth="2"
+                  />
+                )}
+                <circle
+                  cx={x}
+                  cy={y}
+                  r="5"
+                  className="fill-flood-500 stroke-night-950"
+                  strokeWidth="2"
+                />
+                <text
+                  x={left ? x - 9 : x + 9}
+                  y={y + 4}
+                  textAnchor={left ? 'end' : 'start'}
+                  className="fill-chalk font-sans"
+                  fontSize="11"
+                >
+                  {p.member}
+                </text>
+              </g>
+            );
+          })}
         </svg>
       )}
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -348,21 +1036,36 @@ export interface StreamLogProps {
   entries: { id: string; fields: [string, string][] }[];
 }
 export function StreamLogView({ name, entries }: StreamLogProps) {
+  const fresh = useFresh(entries.map((e) => e.id));
   return (
-    <Card title="Stream" name={name} kind="stream_log">
+    <PanelFrame
+      kind="stream_log"
+      title="Stream"
+      name={name}
+      icon={<Waypoints size={ICON} />}
+      typeLabel="stream"
+    >
       {entries.length === 0 ? (
         <Empty>No entries in the stream.</Empty>
       ) : (
-        <ul className="stream">
+        <ul className="overflow-hidden rounded-md border border-night-600/70 bg-night-950/40">
           {entries.map((e) => (
-            <li key={e.id}>
-              <code className="sid">{e.id}</code>
-              <span>{e.fields.map(([k, v]) => `${k}=${v}`).join('  ')}</span>
+            <li
+              key={e.id}
+              className={clsx(
+                'flex flex-col gap-0.5 border-b border-night-600/40 px-3 py-1.5 last:border-b-0',
+                freshClass(fresh.has(e.id)),
+              )}
+            >
+              <code className="font-mono text-xs text-sky">{e.id}</code>
+              <span className="font-mono text-sm break-all text-chalk">
+                {e.fields.map(([k, v]) => `${k}=${v}`).join('  ')}
+              </span>
             </li>
           ))}
         </ul>
       )}
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -372,48 +1075,63 @@ export interface JsonTreeProps {
   /** Parsed JSON (JSON.GET key $ unwrapped by the wrapper). */
   value: unknown;
 }
-function Node({ k, v, depth }: { k: string | null; v: unknown; depth: number }) {
-  const label = k === null ? null : <span className="jk">{k}: </span>;
+function JsonNode({ k, v, depth }: { k: string | null; v: unknown; depth: number }) {
+  const label = k === null ? null : <span className="text-sky">{k}: </span>;
   if (v !== null && typeof v === 'object') {
     const entries = Array.isArray(v)
       ? v.map((x, i) => [String(i), x] as const)
       : Object.entries(v as Record<string, unknown>);
     return (
-      <details open={depth < 2}>
-        <summary>
+      <details open={depth < 2} className="group/json">
+        <summary className="cursor-pointer list-none rounded-xs py-0.5 marker:content-none hover:bg-night-700/60">
+          <span className="mr-1 inline-block text-chalk-faint transition-transform duration-fast group-open/json:rotate-90">
+            ›
+          </span>
           {label}
-          <span className="muted">
+          <span className="text-chalk-dim">
             {Array.isArray(v) ? `[${entries.length}]` : `{${entries.length}}`}
           </span>
         </summary>
-        <div className="jchildren">
+        <div className="ml-2 border-l border-night-600 pl-3">
           {entries.map(([ck, cv]) => (
-            <Node key={ck} k={ck} v={cv} depth={depth + 1} />
+            <JsonNode key={ck} k={ck} v={cv} depth={depth + 1} />
           ))}
         </div>
       </details>
     );
   }
+  const tone =
+    typeof v === 'string'
+      ? 'text-turf'
+      : typeof v === 'number'
+        ? 'text-flood-400'
+        : typeof v === 'boolean'
+          ? 'text-cap-purple'
+          : 'text-chalk-faint';
   return (
-    <div className="jleaf">
+    <div className="py-0.5 pl-4">
       {label}
-      <span className={typeof v === 'string' ? 'js' : 'jn'}>
-        {typeof v === 'string' ? `"${v}"` : String(v)}
-      </span>
+      <span className={tone}>{typeof v === 'string' ? `"${v}"` : String(v)}</span>
     </div>
   );
 }
 export function JsonTreeView({ name, value }: JsonTreeProps) {
   return (
-    <Card title="JSON document" name={name} kind="json_tree">
+    <PanelFrame
+      kind="json_tree"
+      title="JSON document"
+      name={name}
+      icon={<Braces size={ICON} />}
+      typeLabel="json"
+    >
       {value === undefined ? (
         <Empty>No JSON document under this key.</Empty>
       ) : (
-        <div className="jtree">
-          <Node k={null} v={value} depth={0} />
+        <div className="rounded-md border border-night-600/70 bg-night-950/50 p-3 font-mono text-sm leading-5 text-chalk">
+          <JsonNode k={null} v={value} depth={0} />
         </div>
       )}
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -430,41 +1148,42 @@ export interface CacheStatsProps {
 export function CacheStatsView({ hits, misses, keys, commands }: CacheStatsProps) {
   const total = hits + misses;
   const ratio = total === 0 ? null : hits / total;
+  const fresh = useFresh([`h${hits}`, `m${misses}`, `k${keys}`]);
   return (
-    <figure className="showme" data-showme="cache_stats">
-      <figcaption>
-        <span className="showme-title">Cache health</span>
-        <code className="showme-key">INFO stats</code>
-      </figcaption>
-      <div className="showme-body">
-        <div className="big-num" data-testid="hit-ratio">
-          {ratio === null ? 'no reads yet' : `${(ratio * 100).toFixed(1)}% hit`}
-        </div>
-        <div className="meter" role="img" aria-label="hit ratio">
-          <i style={{ width: `${(ratio ?? 0) * 100}%` }} />
-        </div>
-        <dl className="facts">
-          <div>
-            <dt>hits</dt>
-            <dd>{hits}</dd>
-          </div>
-          <div>
-            <dt>misses</dt>
-            <dd>{misses}</dd>
-          </div>
-          <div>
-            <dt>keys</dt>
-            <dd>{keys}</dd>
-          </div>
-          {commands !== undefined ? (
-            <div>
-              <dt>commands</dt>
-              <dd>{commands}</dd>
-            </div>
-          ) : null}
-        </dl>
+    <PanelFrame
+      kind="cache_stats"
+      title="Cache health"
+      name="INFO stats"
+      icon={<Gauge size={ICON} />}
+    >
+      <div
+        className="font-display tabular text-4xl font-semibold text-chalk"
+        data-testid="hit-ratio"
+      >
+        {ratio === null ? 'no reads yet' : `${(ratio * 100).toFixed(1)}% hit`}
       </div>
-    </figure>
+      <div
+        className="h-2.5 overflow-hidden rounded-full bg-night-900 ring-1 ring-night-600"
+        role="img"
+        aria-label="hit ratio"
+      >
+        <i
+          className="block h-full rounded-full bg-turf shadow-[0_0_12px_rgb(46_226_129/0.6)] transition-[width] duration-slow ease-out-expo"
+          style={{ width: `${(ratio ?? 0) * 100}%` }}
+        />
+      </div>
+      <Facts
+        cols={commands !== undefined ? 2 : 3}
+        items={[
+          { label: 'hits', value: <Num value={hits} />, fresh: fresh.has(`h${hits}`) },
+          { label: 'misses', value: <Num value={misses} />, fresh: fresh.has(`m${misses}`) },
+          { label: 'keys', value: <Num value={keys} />, fresh: fresh.has(`k${keys}`) },
+          ...(commands !== undefined
+            ? [{ label: 'commands', value: <Num value={commands} /> }]
+            : []),
+        ]}
+      />
+    </PanelFrame>
   );
 }
 
@@ -494,40 +1213,42 @@ export function StatsLatencyView({
 }: StatsLatencyProps) {
   const num = (n: number | null, d = 0) => (n === null ? 'no data' : n.toFixed(d));
   return (
-    <Card title="Stats route, live" name={route} kind="stats_latency_panel">
-      <Sparkline label="p99" unit="ms" values={p99Series} />
-      <dl className="facts" data-testid="stats-facts">
-        <div>
-          <dt>p50</dt>
-          <dd>{p50 === null ? 'no data' : `${num(p50)} ms`}</dd>
-        </div>
-        <div>
-          <dt>p99</dt>
-          <dd>{p99 === null ? 'no data' : `${num(p99)} ms`}</dd>
-        </div>
-        <div>
-          <dt>requests/s</dt>
-          <dd>{num(rps)}</dd>
-        </div>
-        <div>
-          <dt>postgres queries/s</dt>
-          <dd>{dbQps === null ? 'not reported' : num(dbQps)}</dd>
-        </div>
-      </dl>
-      <p className="muted">the page is slow because every request asks Postgres</p>
+    <PanelFrame
+      kind="stats_latency_panel"
+      title="Stats route, live"
+      name={route}
+      icon={<Activity size={ICON} />}
+    >
+      <Spark label="p99" unit="ms" values={p99Series} />
+      <Facts
+        testId="stats-facts"
+        items={[
+          { label: 'p50', value: p50 === null ? 'no data' : `${num(p50)} ms` },
+          { label: 'p99', value: p99 === null ? 'no data' : `${num(p99)} ms` },
+          { label: 'requests/s', value: num(rps) },
+          { label: 'postgres queries/s', value: dbQps === null ? 'not reported' : num(dbQps) },
+        ]}
+      />
+      <p className="text-sm text-chalk-dim">the page is slow because every request asks Postgres</p>
       {keys.length > 0 ? (
-        <ul className="stream" data-testid="stats-keys">
+        <ul
+          className="overflow-hidden rounded-md border border-night-600/70 bg-night-950/40"
+          data-testid="stats-keys"
+        >
           {keys.map((k) => (
-            <li key={k.name}>
-              <code>{k.name}</code>
-              <span className="muted">
+            <li
+              key={k.name}
+              className="flex items-center justify-between gap-3 border-b border-night-600/40 px-3 py-1.5 last:border-b-0"
+            >
+              <code className="font-mono text-sm break-all text-chalk">{k.name}</code>
+              <span className={clsx('shrink-0 text-sm', k.exists ? 'text-turf' : 'text-chalk-dim')}>
                 {k.exists === null ? 'checking' : k.exists ? 'cached' : 'does not exist yet'}
               </span>
             </li>
           ))}
         </ul>
       ) : null}
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -564,53 +1285,56 @@ export function OtpLimiterView({
         : type === 'zset'
           ? 'Rate limit: sorted-set log'
           : 'Rate limit';
+  const fresh = useFresh([`v${value}`, `m${members}`]);
   return (
-    <Card title={title} name={name} kind="otp_limiter_panel">
+    <PanelFrame
+      kind="otp_limiter_panel"
+      title={title}
+      name={name}
+      icon={<ShieldCheck size={ICON} />}
+      typeLabel={type === 'none' ? undefined : type === 'zset' ? 'sorted set' : type}
+    >
       {type === 'none' ? (
         <Empty>This key does not exist (yet). Nobody has been counted.</Empty>
       ) : type === 'hash' ? (
-        <table className="kv-table" data-testid="limiter-hash">
-          <tbody>
-            {fields.map(([f, v]) => (
-              <tr key={f}>
-                <th scope="row">{f}</th>
-                <td>{v}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <KeyValueTable rows={fields} testId="limiter-hash" />
       ) : type === 'string' ? (
-        <dl className="facts" data-testid="limiter-window">
-          <div>
-            <dt>count</dt>
-            <dd>{value ?? '?'}</dd>
-          </div>
-          <div>
-            <dt>window resets</dt>
-            <dd>{ttl === null || ttl < 0 ? 'no expiry set' : `in ${ttl}s`}</dd>
-          </div>
-        </dl>
+        <Facts
+          testId="limiter-window"
+          items={[
+            { label: 'count', value: value ?? '?', fresh: fresh.has(`v${value}`) },
+            {
+              label: 'window resets',
+              value: ttl === null || ttl < 0 ? 'no expiry set' : `in ${ttl}s`,
+            },
+          ]}
+        />
       ) : type === 'zset' ? (
-        <dl className="facts" data-testid="limiter-log">
-          <div>
-            <dt>requests in the log</dt>
-            <dd>{members ?? 0}</dd>
-          </div>
-        </dl>
+        <Facts
+          testId="limiter-log"
+          cols={2}
+          items={[
+            {
+              label: 'requests in the log',
+              value: members ?? 0,
+              fresh: fresh.has(`m${members}`),
+            },
+          ]}
+        />
       ) : (
         <Empty>A {type} key. A limiter keeps a hash, a string or a sorted set.</Empty>
       )}
-      <dl className="facts" data-testid="limiter-tally">
-        <div>
-          <dt>/app/limits/ping served</dt>
-          <dd>{pingRequests === null ? 'no traffic yet' : pingRequests}</dd>
-        </div>
-        <div>
-          <dt>denied (429)</dt>
-          <dd>not reported</dd>
-        </div>
-      </dl>
-    </Card>
+      <Facts
+        testId="limiter-tally"
+        items={[
+          {
+            label: '/app/limits/ping served',
+            value: pingRequests === null ? 'no traffic yet' : pingRequests,
+          },
+          { label: 'denied (429)', value: 'not reported' },
+        ]}
+      />
+    </PanelFrame>
   );
 }
 
@@ -631,60 +1355,87 @@ export interface StreamGroupsProps {
   }[];
 }
 export function StreamGroupsView({ name, length, groups }: StreamGroupsProps) {
+  const fresh = useFresh(
+    groups.map((g) => `${g.name}\u0002${g.pending}\u0002${g.lag}\u0002${g.lastDeliveredId}`),
+  );
   return (
-    <Card title="Stream consumer groups" name={name} kind="stream_groups">
+    <PanelFrame
+      kind="stream_groups"
+      title="Stream consumer groups"
+      name={name}
+      icon={<Database size={ICON} />}
+      typeLabel="stream"
+    >
       {length === null || (length === 0 && groups.length === 0) ? (
         <Empty>no stream yet</Empty>
       ) : (
         <>
-          <dl className="facts">
-            <div>
-              <dt>entries</dt>
-              <dd data-testid="stream-length">{length}</dd>
-            </div>
-            <div>
-              <dt>groups</dt>
-              <dd>{groups.length}</dd>
-            </div>
-          </dl>
+          <Facts
+            items={[
+              {
+                label: 'entries',
+                value: <span data-testid="stream-length">{length}</span>,
+              },
+              { label: 'groups', value: groups.length },
+            ]}
+          />
           {groups.length === 0 ? (
             <Empty>No consumer group yet. Nothing is reading this stream.</Empty>
           ) : (
-            <table className="kv-table cols" data-testid="stream-groups">
-              <thead>
-                <tr>
-                  <th>group</th>
-                  <th>consumers</th>
-                  <th>pending</th>
-                  <th>lag</th>
-                  <th>last delivered</th>
-                </tr>
-              </thead>
-              <tbody>
-                {groups.map((g) => (
-                  <tr key={g.name} data-group={g.name}>
-                    <td>
-                      <code>{g.name}</code>
-                      {g.perConsumer.length > 0 ? (
-                        <div className="muted">
-                          {g.perConsumer.map((c) => `${c.consumer}: ${c.pending}`).join(', ')}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td>{g.consumers}</td>
-                    <td>{g.pending}</td>
-                    <td>{g.lag === null ? 'unknown' : g.lag}</td>
-                    <td>
-                      <code>{g.lastDeliveredId}</code>
-                    </td>
+            <div className="overflow-x-auto rounded-md border border-night-600/70">
+              <table data-testid="stream-groups" className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-night-900">
+                    {['group', 'consumers', 'pending', 'lag', 'last delivered'].map((h) => (
+                      <th
+                        key={h}
+                        className="label-caps px-3 py-1.5 text-left text-xs text-chalk-dim"
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {groups.map((g) => (
+                    <tr
+                      key={g.name}
+                      data-group={g.name}
+                      className={freshClass(
+                        fresh.has(
+                          `${g.name}\u0002${g.pending}\u0002${g.lag}\u0002${g.lastDeliveredId}`,
+                        ),
+                      )}
+                    >
+                      <td className="border-t border-night-600/40 px-3 py-1.5 align-top">
+                        <code className="font-mono text-chalk">{g.name}</code>
+                        {g.perConsumer.length > 0 ? (
+                          <div className="text-xs text-chalk-dim">
+                            {g.perConsumer.map((c) => `${c.consumer}: ${c.pending}`).join(', ')}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="tabular border-t border-night-600/40 px-3 py-1.5 align-top">
+                        {g.consumers}
+                      </td>
+                      <td className="tabular border-t border-night-600/40 px-3 py-1.5 align-top">
+                        {g.pending}
+                      </td>
+                      <td className="tabular border-t border-night-600/40 px-3 py-1.5 align-top">
+                        {g.lag === null ? 'unknown' : g.lag}
+                      </td>
+                      <td className="border-t border-night-600/40 px-3 py-1.5 align-top">
+                        <code className="font-mono text-xs text-sky">{g.lastDeliveredId}</code>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -705,40 +1456,40 @@ export function fmtRetention(ms: number): string {
 }
 export function TsChartView({ name, info, values }: TsChartProps) {
   return (
-    <Card title="Time series" name={name} kind="ts_chart">
+    <PanelFrame
+      kind="ts_chart"
+      title="Time series"
+      name={name}
+      icon={<Activity size={ICON} />}
+      typeLabel="time series"
+    >
       {info === null || (info.totalSamples === 0 && values.length === 0) ? (
         <Empty>no samples yet</Empty>
       ) : (
         <>
-          <Sparkline
+          <Spark
             label="avg per minute"
             unit=""
             period="minutes"
             values={values}
             fmt={(n) => (Number.isInteger(n) ? String(n) : n.toFixed(1))}
           />
-          <dl className="facts">
-            <div>
-              <dt>samples</dt>
-              <dd>{info.totalSamples}</dd>
-            </div>
-            <div>
-              <dt>retention</dt>
-              <dd>{fmtRetention(info.retentionMs)}</dd>
-            </div>
-            <div>
-              <dt>buckets shown</dt>
-              <dd>{values.length}</dd>
-            </div>
-          </dl>
+          <Facts
+            cols={3}
+            items={[
+              { label: 'samples', value: <Num value={info.totalSamples} /> },
+              { label: 'retention', value: fmtRetention(info.retentionMs) },
+              { label: 'buckets shown', value: values.length },
+            ]}
+          />
           {info.labels.length > 0 ? (
-            <p className="muted" data-testid="ts-labels">
+            <p className="font-mono text-sm text-chalk-dim" data-testid="ts-labels">
               labels: {info.labels.map(([k, v]) => `${k}=${v}`).join('  ')}
             </p>
           ) : null}
         </>
       )}
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -758,39 +1509,39 @@ export interface BfCardProps {
 }
 export function BfCardView({ name, info, card }: BfCardProps) {
   const show = (n: number | null) => (n === null ? 'n/a' : n.toLocaleString('en-US'));
+  const fresh = useFresh([`i${info?.inserted}`, `c${card}`]);
   return (
-    <Card title="Bloom filter" name={name} kind="bf_card">
+    <PanelFrame
+      kind="bf_card"
+      title="Bloom filter"
+      name={name}
+      icon={<Filter size={ICON} />}
+      typeLabel="bloom filter"
+    >
       {info === null ? (
         <Empty>no filter yet</Empty>
       ) : (
-        <dl className="facts" data-testid="bf-facts">
-          <div>
-            <dt>items inserted</dt>
-            <dd>{show(info.inserted)}</dd>
-          </div>
-          <div>
-            <dt>cardinality</dt>
-            <dd>{show(card)}</dd>
-          </div>
-          <div>
-            <dt>capacity</dt>
-            <dd>{show(info.capacity)}</dd>
-          </div>
-          <div>
-            <dt>size</dt>
-            <dd>{info.sizeBytes === null ? 'n/a' : `${show(info.sizeBytes)} bytes`}</dd>
-          </div>
-          <div>
-            <dt>filters</dt>
-            <dd>{show(info.filters)}</dd>
-          </div>
-          <div>
-            <dt>expansion</dt>
-            <dd>{info.expansion === null ? 'none' : show(info.expansion)}</dd>
-          </div>
-        </dl>
+        <Facts
+          testId="bf-facts"
+          cols={3}
+          items={[
+            {
+              label: 'items inserted',
+              value: show(info.inserted),
+              fresh: fresh.has(`i${info.inserted}`),
+            },
+            { label: 'cardinality', value: show(card), fresh: fresh.has(`c${card}`) },
+            { label: 'capacity', value: show(info.capacity) },
+            {
+              label: 'size',
+              value: info.sizeBytes === null ? 'n/a' : `${show(info.sizeBytes)} bytes`,
+            },
+            { label: 'filters', value: show(info.filters) },
+            { label: 'expansion', value: info.expansion === null ? 'none' : show(info.expansion) },
+          ]}
+        />
       )}
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -803,39 +1554,67 @@ export interface FtCardProps {
   docIds: string[];
 }
 export function FtCardView({ name, info, docIds }: FtCardProps) {
+  const fresh = useFresh(docIds);
   return (
-    <Card title="Search index" name={name} kind="ft_card">
+    <PanelFrame
+      kind="ft_card"
+      title="Search index"
+      name={name}
+      icon={<Search size={ICON} />}
+      typeLabel="search index"
+    >
       {info === null ? (
         <Empty>no index yet</Empty>
       ) : (
         <>
-          <dl className="facts">
-            <div>
-              <dt>documents</dt>
-              <dd data-testid="ft-num-docs">{info.numDocs}</dd>
-            </div>
-            <div>
-              <dt>prefixes</dt>
-              <dd>{info.prefixes.length ? info.prefixes.join(', ') : 'none'}</dd>
-            </div>
-          </dl>
+          <Facts
+            items={[
+              {
+                label: 'documents',
+                value: (
+                  <span data-testid="ft-num-docs">
+                    <Num value={info.numDocs} />
+                  </span>
+                ),
+              },
+              {
+                label: 'prefixes',
+                value: info.prefixes.length ? info.prefixes.join(', ') : 'none',
+              },
+            ]}
+          />
           {info.fields.length > 0 ? (
-            <table className="kv-table cols" data-testid="ft-fields">
+            <table data-testid="ft-fields" className="w-full border-collapse text-md">
               <tbody>
                 {info.fields.map((f) => (
                   <tr key={f.name}>
-                    <th>{f.name}</th>
-                    <td>{f.type}</td>
+                    <th className="border-b border-night-600/50 py-1.5 pr-3 text-left font-mono text-sm font-medium text-chalk-dim">
+                      {f.name}
+                    </th>
+                    <td className="border-b border-night-600/50 py-1.5">
+                      <span className="rounded-xs bg-night-900 px-1.5 py-0.5 font-mono text-xs text-sky ring-1 ring-night-600">
+                        {f.type}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : null}
           {docIds.length > 0 ? (
-            <ul className="stream" data-testid="ft-docs">
+            <ul
+              className="overflow-hidden rounded-md border border-night-600/70 bg-night-950/40"
+              data-testid="ft-docs"
+            >
               {docIds.map((id) => (
-                <li key={id}>
-                  <code>{id}</code>
+                <li
+                  key={id}
+                  className={clsx(
+                    'border-b border-night-600/40 px-3 py-1.5 last:border-b-0',
+                    freshClass(fresh.has(id)),
+                  )}
+                >
+                  <code className="font-mono text-sm text-chalk">{id}</code>
                 </li>
               ))}
             </ul>
@@ -844,7 +1623,7 @@ export function FtCardView({ name, info, docIds }: FtCardProps) {
           )}
         </>
       )}
-    </Card>
+    </PanelFrame>
   );
 }
 
@@ -854,24 +1633,40 @@ export interface AclUsersProps {
   users: { name: string; rules: string }[];
 }
 export function AclUsersView({ users }: AclUsersProps) {
+  const fresh = useFresh(users.map((u) => `${u.name}\u0002${u.rules}`));
   return (
-    <Card title="ACL users" name="ACL LIST" kind="acl_users">
+    <PanelFrame
+      kind="acl_users"
+      title="ACL users"
+      name="ACL LIST"
+      icon={<ShieldCheck size={ICON} />}
+    >
       {users.length === 0 ? (
         <Empty>No ACL users came back.</Empty>
       ) : (
-        <table className="kv-table cols" data-testid="acl-users">
+        <table data-testid="acl-users" className="w-full border-collapse text-md">
           <tbody>
             {users.map((u) => (
-              <tr key={u.name} data-user={u.name}>
-                <th>{u.name}</th>
-                <td>
-                  <code>{u.rules}</code>
+              <tr
+                key={u.name}
+                data-user={u.name}
+                className={freshClass(fresh.has(`${u.name}\u0002${u.rules}`))}
+              >
+                <th className="w-[28%] border-b border-night-600/50 py-2 pr-3 pl-2 text-left align-top font-mono text-sm font-medium text-flood-400">
+                  {u.name}
+                </th>
+                <td className="border-b border-night-600/50 py-2 align-top">
+                  <code className="font-mono text-xs leading-5 break-all text-chalk-dim">
+                    {u.rules}
+                  </code>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-    </Card>
+    </PanelFrame>
   );
 }
+
+export type { ReactNode };
