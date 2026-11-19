@@ -1,3 +1,5 @@
+'use client';
+
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api';
 import type { WorkspaceEntry } from '../types';

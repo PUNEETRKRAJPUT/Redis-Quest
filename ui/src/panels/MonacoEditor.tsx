@@ -1,3 +1,5 @@
+'use client';
+
 import Editor, { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor/editor';
 import 'monaco-editor/languages/definitions/javascript/register';
@@ -10,11 +12,17 @@ import 'monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching';
 import 'monaco-editor/editor/contrib/comment/browser/comment';
 import 'monaco-editor/editor/contrib/indentation/browser/indentation';
 import 'monaco-editor/editor/contrib/wordOperations/browser/wordOperations';
-import EditorWorker from 'monaco-editor/editor/editor.worker.js?worker';
 
-// Bundle Monaco instead of letting the loader fetch it from a CDN: the game must work offline.
+// Bundle Monaco instead of letting the loader fetch it from a CDN: the game must work offline. The bundler turns
+// `new Worker(new URL(..., import.meta.url))` into a worker chunk of its own (Turbopack and Vite both understand
+// this form; Vite's `?worker` suffix does not exist under Next). This module only ever loads in the browser: the
+// panels import it lazily and render only after the shell has booted on the client.
 (self as unknown as { MonacoEnvironment: unknown }).MonacoEnvironment = {
-  getWorker: () => new EditorWorker(),
+  getWorker: () =>
+    new Worker(new URL('monaco-editor/editor/editor.worker.js', import.meta.url), {
+      type: 'module',
+      name: 'monaco-editor',
+    }),
 };
 loader.config({ monaco });
 

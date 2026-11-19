@@ -17,7 +17,7 @@ import {
 import { IconBulb, IconCheck, IconSpinner } from '../icons';
 import { Markdown } from '../markdown';
 import { PainPanel } from '../panels/MetricsPanel';
-import { hrefFor } from '../router';
+import { QuestLink } from '../shell/QuestLink';
 import { ShowMe } from '../showme';
 import { useQuest } from '../store';
 import { announceUi } from '../ws';
@@ -164,9 +164,9 @@ export function LevelScreen({ id }: { id: string }) {
             ? 'Pass the level before it first. The map shows where you are.'
             : error.message}
         </p>
-        <a className="btn" href="#/">
+        <QuestLink className="btn" to="/">
           Back to the map
-        </a>
+        </QuestLink>
       </main>
     );
   }
@@ -250,7 +250,8 @@ export function LevelScreen({ id }: { id: string }) {
       data-status={level.status}
     >
       <nav className="crumbs" aria-label="Breadcrumb">
-        <a href="#/">Map</a> <span aria-hidden="true">/</span> <span>{level.chapterTitle}</span>
+        <QuestLink to="/">Map</QuestLink> <span aria-hidden="true">/</span>{' '}
+        <span>{level.chapterTitle}</span>
       </nav>
       <header className="level-head">
         <div>
@@ -655,17 +656,17 @@ export function LevelScreen({ id }: { id: string }) {
             ) : null}
             {level.showMe ? <ShowMe spec={level.showMe} playerId={progress.player.id} /> : null}
             {next ? (
-              <a
+              <QuestLink
                 className="btn primary"
-                href={hrefFor({ name: 'level', id: next.id })}
+                to={{ name: 'level', id: next.id }}
                 data-testid="next-level"
               >
                 Next level: {next.title}
-              </a>
+              </QuestLink>
             ) : (
-              <a className="btn" href="#/">
+              <QuestLink className="btn" to="/">
                 Back to the map
-              </a>
+              </QuestLink>
             )}
           </div>
         ) : null}

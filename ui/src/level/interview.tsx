@@ -1,6 +1,6 @@
 // F-12: the interview-mode pieces of a level screen: the countdown, the hint-cost prompt copy, "rebuilt in".
 import { useEffect, useState } from 'react';
-import { hrefFor } from '../router';
+import { QuestLink } from '../shell/QuestLink';
 import type { InterviewInfo, LevelData } from '../types';
 
 /** m:ss, rounding a countdown up (so 0:00 appears only when the time is really gone) and an elapsed time down. */
@@ -129,9 +129,9 @@ export function RebuildLink({ interview }: { interview: InterviewInfo }) {
   return (
     <p data-testid="ideal-rebuild-link">
       This level rebuilds{' '}
-      <a href={hrefFor({ name: 'level', id: interview.rebuildOf.id })}>
+      <QuestLink to={{ name: 'level', id: interview.rebuildOf.id }}>
         {interview.rebuildOf.title ?? interview.rebuildOf.id}
-      </a>
+      </QuestLink>
       . That level&apos;s ideal-way beat holds its reference solution and the wrong ones.
     </p>
   );

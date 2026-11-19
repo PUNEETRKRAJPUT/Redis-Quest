@@ -120,7 +120,7 @@ test('Countdown shows overtime plainly and a frozen time after a pass', () => {
 
 test('the ideal-way panel links to the rebuilt level', () => {
   const html = renderToStaticMarkup(<RebuildLink interview={iv()} />);
-  expect(html).toContain('href="#/level/example-code-01-cache-aside"');
+  expect(html).toContain('href="/level/example-code-01-cache-aside"');
   expect(html).toContain('Cache-aside, version one');
 });
 

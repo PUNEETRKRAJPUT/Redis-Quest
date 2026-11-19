@@ -1,7 +1,9 @@
+'use client';
+
 import { useState } from 'react';
 import { IconCheck, IconChevron, IconHalf, IconLock, IconPlay, IconStar } from '../icons';
 import { Thread } from '../level/Thread';
-import { hrefFor } from '../router';
+import { QuestLink } from '../shell/QuestLink';
 import { useQuest } from '../store';
 import type { LevelStatus } from '../types';
 
@@ -120,13 +122,13 @@ export function ChapterMap() {
                             {body}
                           </span>
                         ) : (
-                          <a
+                          <QuestLink
                             className={`level-link ${l.status}`}
-                            href={hrefFor({ name: 'level', id: l.id })}
+                            to={{ name: 'level', id: l.id }}
                             data-testid={`level-${l.id}`}
                           >
                             {body}
-                          </a>
+                          </QuestLink>
                         )}
                       </li>
                     );

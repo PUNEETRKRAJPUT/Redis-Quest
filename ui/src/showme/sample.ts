@@ -1,4 +1,4 @@
-// Fixed sample data for the #/showme gallery (screenshots and a quick look at every component).
+// Fixed sample data for the /showme gallery (screenshots and a quick look at every component).
 export const SAMPLE = {
   kv: { name: 'otp:p-1a2b3c4d', type: 'string', value: '483921', ttl: 87 },
   hash: {

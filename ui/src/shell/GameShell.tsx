@@ -1,18 +1,27 @@
-import { useEffect, useState } from 'react';
-import { IconBall, IconCode, IconLog, IconMap, IconPulse, IconTerminal, IconTrophy } from './icons';
-import { EditorPanel } from './panels/EditorPanel';
-import { LogsPanel } from './panels/LogsPanel';
-import { MetricsPanel } from './panels/MetricsPanel';
-import { TerminalPanel } from './panels/TerminalPanel';
-import { hrefFor, useRoute } from './router';
-import type { Route } from './router';
-import { Built } from './screens/Built';
-import { ChapterMap } from './screens/ChapterMap';
-import { LevelScreen } from './screens/Level';
-import { ShowMeGallery } from './screens/ShowMeGallery';
-import { Welcome } from './screens/Welcome';
-import { useQuest } from './store';
-import { startWs } from './ws';
+'use client';
+
+// What the Vite app's `App` did, mounted once from the root layout so it survives every client navigation: it
+// starts the store and the socket, shows the boot states, and around the page the header, the mirror banner and
+// the skip link. Pages are static shells; everything that needs the engine happens here or below, in the browser.
+
+import { Suspense, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  IconBall,
+  IconCode,
+  IconLog,
+  IconMap,
+  IconPulse,
+  IconTerminal,
+  IconTrophy,
+} from '../icons';
+import { parseHash, parsePath, pathFor } from '../routes';
+import type { Route } from '../routes';
+import { Welcome } from '../screens/Welcome';
+import { useQuest } from '../store';
+import { startWs } from '../ws';
+import { QuestLink } from './QuestLink';
 
 const NAV: { route: Route; label: string; icon: typeof IconMap }[] = [
   { route: { name: 'home' }, label: 'Map', icon: IconMap },
@@ -23,33 +32,50 @@ const NAV: { route: Route; label: string; icon: typeof IconMap }[] = [
   { route: { name: 'built' }, label: 'What you built', icon: IconTrophy },
 ];
 
-function Header({ route }: { route: Route }) {
+// usePathname suspends while prerendering a route whose params are only known at request time (/level/[id]), so
+// the links live in their own Suspense boundary; the fallback is the same links with none marked active.
+function NavLinks({ current }: { current: Route | null }) {
+  const active = (r: Route) =>
+    current !== null &&
+    (r.name === current.name || (r.name === 'home' && current.name === 'level'));
+  return (
+    <nav aria-label="Main">
+      {NAV.map((n) => {
+        const Icon = n.icon;
+        const on = active(n.route);
+        return (
+          <QuestLink
+            key={n.label}
+            to={n.route}
+            className={on ? 'nav active' : 'nav'}
+            aria-current={on ? 'page' : undefined}
+          >
+            <Icon size={16} /> <span>{n.label}</span>
+          </QuestLink>
+        );
+      })}
+    </nav>
+  );
+}
+
+function ActiveNav() {
+  const pathname = usePathname();
+  return <NavLinks current={parsePath(pathname ?? '/')} />;
+}
+
+function Header() {
   const progress = useQuest((s) => s.progress);
   const ws = useQuest((s) => s.wsState);
   const redisUp = useQuest((s) => s.redisUp);
   const live = ws === 'open' && redisUp !== false;
-  const active = (r: Route) =>
-    r.name === route.name || (r.name === 'home' && route.name === 'level');
   return (
     <header className="topbar">
-      <a className="brand" href="#/" aria-label="Redis Quest, home">
+      <QuestLink className="brand" to={{ name: 'home' }} aria-label="Redis Quest, home">
         <IconBall size={22} /> <span>Redis Quest</span>
-      </a>
-      <nav aria-label="Main">
-        {NAV.map((n) => {
-          const Icon = n.icon;
-          return (
-            <a
-              key={n.label}
-              href={hrefFor(n.route)}
-              className={active(n.route) ? 'nav active' : 'nav'}
-              aria-current={active(n.route) ? 'page' : undefined}
-            >
-              <Icon size={16} /> <span>{n.label}</span>
-            </a>
-          );
-        })}
-      </nav>
+      </QuestLink>
+      <Suspense fallback={<NavLinks current={null} />}>
+        <ActiveNav />
+      </Suspense>
       <div className="status">
         <span
           className={live ? 'dot-live on' : 'dot-live'}
@@ -62,7 +88,7 @@ function Header({ route }: { route: Route }) {
                 : 'Redis is down'
           }
         />
-        <span className="muted">
+        <span className="muted" data-testid="conn-state">
           {ws !== 'open' ? 'reconnecting' : redisUp === false ? 'redis down' : 'live'}
         </span>
         {progress ? (
@@ -101,56 +127,30 @@ function MirrorBanner() {
   );
 }
 
-function Screen({ route }: { route: Route }) {
-  switch (route.name) {
-    case 'level':
-      return <LevelScreen key={route.id} id={route.id} />;
-    case 'terminal':
-      return (
-        <main className="page">
-          <h1>Terminal</h1>
-          <p className="muted">
-            The same Redis your app uses. Dangerous commands get a warning, they are not blocked.
-          </p>
-          <TerminalPanel height={520} />
-        </main>
-      );
-    case 'editor':
-      return (
-        <main className="page">
-          <h1>Editor</h1>
-          <EditorPanel height={560} />
-        </main>
-      );
-    case 'logs':
-      return (
-        <main className="page">
-          <h1>Logs</h1>
-          <LogsPanel height={520} />
-        </main>
-      );
-    case 'metrics':
-      return (
-        <main className="page">
-          <h1>Metrics</h1>
-          <MetricsPanel />
-        </main>
-      );
-    case 'built':
-      return <Built />;
-    case 'showme':
-      return <ShowMeGallery />;
-    default:
-      return <ChapterMap />;
-  }
+/**
+ * Old bookmarks (`/#/level/x`, `/#/terminal`) land on the real route without adding a history entry, on load and
+ * when only the hash changes (an old link inside level text, or a typed URL on an open tab).
+ */
+function useLegacyHashRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    const follow = () => {
+      const route = parseHash(window.location.hash);
+      if (route) router.replace(pathFor(route));
+    };
+    follow();
+    window.addEventListener('hashchange', follow);
+    return () => window.removeEventListener('hashchange', follow);
+  }, [router]);
 }
 
-export function App() {
-  const route = useRoute();
+export function GameShell({ children }: { children: ReactNode }) {
   const boot = useQuest((s) => s.boot);
   const bootError = useQuest((s) => s.bootError);
   const errors = useQuest((s) => s.invalidErrors);
   const init = useQuest((s) => s.init);
+
+  useLegacyHashRedirect();
 
   useEffect(() => {
     void init();
@@ -205,10 +205,10 @@ export function App() {
       >
         Skip to content
       </button>
-      <Header route={route} />
+      <Header />
       <MirrorBanner />
       <div id="main" tabIndex={-1}>
-        <Screen route={route} />
+        {children}
       </div>
     </>
   );

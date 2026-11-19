@@ -1,3 +1,5 @@
+'use client';
+
 import { useEffect, useMemo } from 'react';
 import { api } from '../api';
 import { useQuest } from '../store';

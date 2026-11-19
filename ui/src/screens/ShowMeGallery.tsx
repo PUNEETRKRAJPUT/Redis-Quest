@@ -1,3 +1,5 @@
+'use client';
+
 import { SAMPLE } from '../showme/sample';
 import {
   AclUsersView,

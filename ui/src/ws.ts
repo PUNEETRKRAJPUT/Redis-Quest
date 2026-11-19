@@ -48,14 +48,24 @@ function handle(msg: WsMessage): void {
   }
 }
 
+/**
+ * Same origin in production (Caddy sends /ws to the engine). `next dev` cannot proxy a WebSocket, so in development
+ * next.config.ts inlines the stack's proxy port and the socket goes straight there.
+ */
+export function wsUrl(loc: Pick<Location, 'protocol' | 'host' | 'hostname'> = location): string {
+  const proto = loc.protocol === 'https:' ? 'wss' : 'ws';
+  const devPort = process.env.NEXT_PUBLIC_QUEST_WS_PORT;
+  const host = devPort ? `${loc.hostname}:${devPort}` : loc.host;
+  return `${proto}://${host}/ws`;
+}
+
 /** One shared socket for the whole app, reconnecting with capped backoff. */
 export function startWs(): void {
   if (started) return;
   started = true;
   let attempt = 0;
   const open = () => {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const ws = new WebSocket(wsUrl());
     useQuest.getState().setWs('connecting');
     ws.onopen = () => {
       attempt = 0;

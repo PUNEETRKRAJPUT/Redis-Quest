@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { colourReply, dangerNote } from '../src/panels/terminalText';
 import { tickSeries } from '../src/panels/MetricsPanel';
-import { hrefFor, parseHash } from '../src/router';
+import { parseHash, parsePath, pathFor } from '../src/routes';
 
 describe('terminal text', () => {
   test('dangerous commands are flagged, others are not', () => {
@@ -36,15 +36,22 @@ describe('metrics', () => {
   });
 });
 
-describe('router', () => {
-  test('hash routes round-trip', () => {
-    expect(parseHash('')).toEqual({ name: 'home' });
+describe('routes', () => {
+  test('paths round-trip and legacy hashes map to real routes', () => {
+    expect(parseHash('')).toBeNull();
+    expect(parseHash('#/')).toEqual({ name: 'home' });
     expect(parseHash('#/level/ch0-02-say-hello')).toEqual({
       name: 'level',
       id: 'ch0-02-say-hello',
     });
     expect(parseHash('#/terminal')).toEqual({ name: 'terminal' });
     expect(parseHash('#/zzz')).toEqual({ name: 'home' });
-    expect(hrefFor({ name: 'level', id: 'a b' })).toBe('#/level/a%20b');
+    expect(parseHash('#main')).toBeNull();
+    expect(pathFor({ name: 'level', id: 'a b' })).toBe('/level/a%20b');
+    expect(pathFor({ name: 'home' })).toBe('/');
+    expect(pathFor({ name: 'showme' })).toBe('/showme');
+    expect(parsePath('/level/a%20b')).toEqual({ name: 'level', id: 'a b' });
+    expect(parsePath('/metrics')).toEqual({ name: 'metrics' });
+    expect(parsePath('/nope/x')).toEqual({ name: 'home' });
   });
 });
