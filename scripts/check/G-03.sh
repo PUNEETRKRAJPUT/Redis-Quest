@@ -21,11 +21,13 @@ bad() { printf 'FAIL  %s\n' "$1"; FAILED=1; }
 
 # Prints "<line>:<text>" for every bare, state-changing compose call in a shell script. A call is `docker compose`
 # at a command position (start of a line, or after ; & | $( then do if while until !), so the same words inside
-# a message or inside the JavaScript that inspects level text do not count.
+# a message or inside the JavaScript that inspects level text do not count. A wrapper function that hands its
+# arguments to an unscoped `docker compose "$@"` counts as a bare call too.
 bare_calls() {
   awk '
     /^[[:space:]]*#/ { next }
     /docker compose -p / { next }
+    /docker compose/ && /\$@/ { print FNR ":" $0; next }      # a wrapper that passes its arguments on, unscoped
     /(^|[;&|]|\$\(|then |do |if |while |until |! )[[:space:]]*docker compose( --profile [a-z]+)*( -f [^ ]+)* (up|down|stop|start|restart|build|run|rm|kill|exec|pull|create|pause|unpause)([[:space:]]|$)/ {
       print FNR ":" $0
     }

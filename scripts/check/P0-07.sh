@@ -1,39 +1,41 @@
 #!/usr/bin/env bash
 # P0-07 acceptance: the app skeleton (baseline routes, slot registry, target/slot config pull, metrics push,
-# scaling). Runs in its own compose project (quest-p07, .env.p07 ports) so it never touches the default
-# project other agents use; it only ever stops what it started, with `down -v` on quest-p07. Bash 3.2.
+# scaling). Runs in its own compose project (quest-p07) with its own ports, image tag, logs and workspace, so it
+# never touches the default project or a learner's files; the project is removed on exit. Bash 3.2.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 ROOT=$(pwd)
 
-PROJECT=quest-p07
-ENVF=.env.p07
+# Own compose project, host ports, image tag and scratch directories. Never the default project: that is the
+# stack a learner plays on (see scripts/check/lib/isolate.sh). The learner file, the logs and the workspace this
+# check uses all live in its scratch tree, so nothing appears in a real workspace/ or on a player's Logs screen.
+. scripts/check/lib/isolate.sh
+quest_isolate p07 4360 6560 5660 5760
+PROJECT=$QUEST_CHECK_PROJECT
 FAILED=0
 ok()  { printf 'PASS  %s\n' "$1"; }
 bad() { printf 'FAIL  %s\n' "$1"; FAILED=1; }
 info() { printf '      %s\n' "$1"; }
 section() { printf '\n== %s\n' "$1"; }
 
-if [ ! -f "$ENVF" ]; then
-  printf '# P0-07 check only (gitignored): isolated compose project quest-p07 on its own host ports.\nPROXY_PORT=3100\nREDIS_PORT=6391\nPG_PORT=5433\nINSIGHT_PORT=5541\n' > "$ENVF"
-fi
-PROXY_PORT=$(sed -n 's/^PROXY_PORT=//p' "$ENVF")
-BASE="http://127.0.0.1:${PROXY_PORT:-3100}"
-DC() { docker compose -p "$PROJECT" --env-file "$ENVF" "$@"; }
+PROXY_PORT=$QUEST_CHECK_PROXY_PORT
+BASE="http://127.0.0.1:$PROXY_PORT"
+DC() { docker compose "$@"; }
 
 # Scratch levels and progress for this project's engine: the real .progress/ belongs to the default
 # project, and levels/ may be mid-edit by another agent (a broken level makes every /api route 503).
-SCRATCH="$ROOT/logs/.p0-07-check"
+SCRATCH="$QUEST_CHECK_SCRATCH/p07"
 rm -rf "$SCRATCH"
-mkdir -p "$SCRATCH/levels" "$SCRATCH/progress" logs workspace postgres/init
+mkdir -p "$SCRATCH/levels" "$SCRATCH/progress" postgres/init
 cp -R levels/_examples/example-cli "$SCRATCH/levels/example-cli"
 export QUEST_LEVELS_DIR="$SCRATCH/levels"
 export QUEST_PROGRESS_DIR="$SCRATCH/progress"
 
 # The learner file this check installs. Never overwrite a real one.
-CACHE_FILE="$ROOT/workspace/ch2/cache.js"
+WS="$QUEST_CHECK_SCRATCH/workspace"
+CACHE_FILE="$WS/ch2/cache.js"
 MADE_CH2=""
-[ -d "$ROOT/workspace/ch2" ] || MADE_CH2=1
+[ -d "$WS/ch2" ] || MADE_CH2=1
 if [ -e "$CACHE_FILE" ]; then
   echo "workspace/ch2/cache.js already exists (a learner file?); refusing to overwrite it. Move it away and re-run."
   exit 1
@@ -43,10 +45,8 @@ TMPD=$(mktemp -d "${TMPDIR:-/tmp}/p07.XXXXXX")
 
 finish() {
   section "cleanup"
-  DC down -v --remove-orphans >/dev/null 2>&1 && echo "docker compose -p $PROJECT down -v: done"
-  if [ -n "$INSTALLED" ]; then rm -f "$CACHE_FILE" && echo "removed workspace/ch2/cache.js"; fi
-  if [ -n "$MADE_CH2" ]; then rmdir "$ROOT/workspace/ch2" 2>/dev/null && echo "removed empty workspace/ch2"; fi
-  rm -rf "$SCRATCH" "$TMPD"
+  quest_isolate_down
+  rm -rf "$TMPD"
   if [ "$FAILED" -eq 0 ]; then printf '\nP0-07 OK\n'; exit 0; fi
   printf '\nP0-07 FAILED\n'; exit 1
 }
@@ -98,7 +98,7 @@ done
 [ -n "$built" ] && ok "pnpm -r build" || die "pnpm -r build"
 pnpm --filter @quest/app lint >"$TMPD/lint.log" 2>&1 && ok "app lint" || { tail -20 "$TMPD/lint.log"; bad "app lint"; }
 
-section "docker compose -p $PROJECT --env-file $ENVF up -d --build redis postgres engine app proxy"
+section "docker compose -p $PROJECT up -d --build redis postgres engine app proxy"
 up_ok=""
 for attempt in 1 2 3; do
   if DC up -d --build redis postgres engine app proxy >"$TMPD/up.log" 2>&1; then up_ok=1; break; fi
@@ -165,7 +165,7 @@ req GET /app/players/p-001/stats; printf '      %s  HTTP %s  %s ms (cold control
 if awk -v m="$MIN" 'BEGIN { exit !(m > 100) }'; then ok "hot player stats take over 100 ms (fastest of 6: $MIN ms)"; else bad "hot player stats too fast ($MIN ms)"; fi
 
 section "activate cache.getPlayerStats via the engine with a cache-aside learner file"
-mkdir -p "$ROOT/workspace/ch2"
+mkdir -p "$WS/ch2"
 cp app/test/fixtures/cache-aside.js "$CACHE_FILE" && INSTALLED=1 && ok "copied app/test/fixtures/cache-aside.js to workspace/ch2/cache.js"
 req GET '/api/metrics?seconds=300'; ENGINE_BEFORE=$BODY
 req GET /app/metrics; APP_RC_BEFORE=$(js "$BODY" '(j.totals["GET /app/players/:id/stats"]||{redisCommands:0}).redisCommands')
@@ -209,9 +209,9 @@ SLOT_ERR=$(hdr x-quest-slot-error)
 expect_js "500 body names the slot" 'j.error==="slot_error"&&j.slot==="cache.getPlayerStats"'
 req GET /app/health; expect_status "app still healthy" 200
 req GET /app/players/p-001; expect_status "other routes still served" 200
-grep -q 'learner code in slot cache.getPlayerStats failed: Error: cache exploded for p-028' logs/app/app.log && ok "error logged to logs/app/app.log" || bad "error not in logs/app/app.log"
+grep -q 'learner code in slot cache.getPlayerStats failed: Error: cache exploded for p-028' "$QUEST_CHECK_SCRATCH/logs/app/app.log" && ok "error logged to logs/app/app.log" || bad "error not in logs/app/app.log"
 
-section "docker compose -p $PROJECT --env-file $ENVF up -d --scale app=2 app"
+section "docker compose -p $PROJECT up -d --scale app=2 app"
 DC up -d --scale app=2 app >"$TMPD/scale.log" 2>&1 && ok "scaled app to 2" || { cat "$TMPD/scale.log"; bad "scale"; }
 tail -4 "$TMPD/scale.log"
 two_running() { [ "$(DC ps --status running -q app | wc -l | tr -d ' ')" = "2" ]; }
