@@ -1,0 +1,92 @@
+/*
+ * Keyframes for the season map. Every animated element also carries `ds-still`, which the design system uses to
+ * stop animations under reduced motion (the OS setting or the in-game one).
+ */
+
+/* The current ball and the current fixture node: a ring that breathes outwards. */
+.ping {
+  animation: ping 1.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes ping {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.9;
+  }
+  80%,
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+/* A soft glow that rises and falls (floodlight heads, the current node). */
+.breathe {
+  animation: breathe 3.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Stars twinkle at their own pace; the delay comes inline. */
+.twinkle {
+  animation: twinkle 4.5s ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+/* The unlit road ahead drifts forward, so the path reads as a direction. */
+.march {
+  animation: march 1.6s linear infinite;
+}
+@keyframes march {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+/* A cap catches the light when hovered or focused. */
+.shine {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 9999px;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.55) 48%,
+    transparent 62%
+  );
+  mix-blend-mode: overlay;
+  opacity: 0;
+  transform: translateX(-60%);
+}
+.capHost:hover .shine,
+.capHost:focus-visible .shine {
+  animation: shine 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes shine {
+  0% {
+    opacity: 0;
+    transform: translateX(-60%);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(60%);
+  }
+}
