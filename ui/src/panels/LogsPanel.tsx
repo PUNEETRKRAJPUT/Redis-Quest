@@ -5,8 +5,9 @@ import { api } from '../api';
 import { useQuest } from '../store';
 import type { LogService } from '../types';
 import { LOG_SERVICES } from '../types';
+import { cssHeight, type PanelHeight } from './height';
 
-export function LogsPanel({ height = 360 }: { height?: number }) {
+export function LogsPanel({ height = 360 }: { height?: PanelHeight }) {
   const [tab, setTab] = useState<LogService>('app');
   const lines = useQuest((s) => s.logs[tab]);
   const seed = useQuest((s) => s.seedLog);
@@ -46,7 +47,7 @@ export function LogsPanel({ height = 360 }: { height?: number }) {
       <pre
         ref={box}
         className="logbox"
-        style={{ height }}
+        style={{ height: cssHeight(height) }}
         tabIndex={0}
         aria-label={`${tab} log, live`}
         onScroll={(e) => {

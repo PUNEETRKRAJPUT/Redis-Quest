@@ -3,6 +3,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api';
 import type { WorkspaceEntry } from '../types';
+import { cssHeight, type PanelHeight } from './height';
 
 const MonacoEditor = lazy(() => import('./MonacoEditor'));
 
@@ -16,7 +17,7 @@ function langOf(path: string): string {
   return 'plaintext';
 }
 
-export function EditorPanel({ chapter, height = 420 }: { chapter?: string; height?: number }) {
+export function EditorPanel({ chapter, height = 420 }: { chapter?: string; height?: PanelHeight }) {
   const [entries, setEntries] = useState<WorkspaceEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [path, setPath] = useState<string | null>(null);
@@ -72,7 +73,7 @@ export function EditorPanel({ chapter, height = 420 }: { chapter?: string; heigh
   if (!entries) return <p className="muted pad">Loading the workspace...</p>;
   const dirty = text !== saved;
   return (
-    <div className="editor-panel" style={{ height }}>
+    <div className="editor-panel" style={{ height: cssHeight(height) }}>
       <nav className="filelist" aria-label="Workspace files">
         {files.length === 0 ? <p className="muted pad">workspace/ is empty.</p> : null}
         {files.map((f) => (

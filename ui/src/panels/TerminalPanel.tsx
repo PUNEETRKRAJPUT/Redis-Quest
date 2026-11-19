@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import { api } from '../api';
 import { promptFor, TargetSwitch, useTarget } from './TargetSwitch';
 import { C, colourReply, dangerNote, ESC } from './terminalText';
+import { cssHeight, type PanelHeight } from './height';
 
 // The transcript and history outlive the panel so that moving between screens does not wipe the session.
 let transcript = '';
@@ -16,7 +17,7 @@ function cssVar(name: string, fallback: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
 
-export function TerminalPanel({ height = 360 }: { height?: number }) {
+export function TerminalPanel({ height = 360 }: { height?: PanelHeight }) {
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -262,7 +263,7 @@ export function TerminalPanel({ height = 360 }: { height?: number }) {
   return (
     <div className="terminal-panel">
       <TargetSwitch />
-      <div className="terminal-wrap" style={{ height }}>
+      <div className="terminal-wrap" style={{ height: cssHeight(height) }}>
         <div
           ref={host}
           className="terminal"
