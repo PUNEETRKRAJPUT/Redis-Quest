@@ -23,6 +23,21 @@ PG_PORT="$(envval PG_PORT 5432)"
 
 docker compose up -d --build || { echo "docker compose up failed"; exit 1; }
 
+# The proxy reads docker/Caddyfile once, when its container starts, and compose does not recreate a container
+# because a bind-mounted file changed. After an update that changes the routes (the UI moving to its own service,
+# for one), a proxy that simply kept running would still use the old ones and the game would not open. Restart it
+# when the file is newer than the running proxy. If either time cannot be read, restart: that is always safe.
+proxy_cid="$(docker compose ps -q proxy 2>/dev/null)"
+if [ -n "$proxy_cid" ]; then
+  proxy_started="$(docker inspect --format '{{.State.StartedAt}}' "$proxy_cid" 2>/dev/null)"
+  started_epoch="$(date -j -u -f '%Y-%m-%dT%H:%M:%S' "${proxy_started%%.*}" +%s 2>/dev/null || echo 0)"
+  caddy_epoch="$(stat -f %m docker/Caddyfile 2>/dev/null || echo 0)"
+  if [ "$started_epoch" -eq 0 ] || [ "$caddy_epoch" -eq 0 ] || [ "$caddy_epoch" -ge "$started_epoch" ]; then
+    echo "The proxy's routes changed since it started: restarting the proxy."
+    docker compose restart proxy >/dev/null 2>&1 || echo "could not restart the proxy (docker compose restart proxy)"
+  fi
+fi
+
 wait_healthy() { # service
   local i=0 cid st
   while [ "$i" -lt 60 ]; do
