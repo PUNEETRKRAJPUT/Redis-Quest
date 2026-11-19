@@ -1,0 +1,34 @@
+# Used only through scripts/check/lib/isolate.sh (it is the second file in COMPOSE_FILE). It keeps a check's
+# compose project away from everything the default project owns: the Node services run an image tag of their
+# own, so the check never builds, tags or reuses redis-quest-node:latest, and the logs, workspace and progress
+# bind mounts point at the check's scratch tree instead of ./logs, ./workspace and ./.progress. The engine's own
+# workspace, progress and levels mounts are redirected by QUEST_WORKSPACE_DIR, QUEST_PROGRESS_DIR and
+# QUEST_LEVELS_DIR, which the base file already reads.
+x-check-node: &check-node
+  image: ${QUEST_CHECK_IMAGE:?set by scripts/check/lib/isolate.sh}
+
+services:
+  ui:
+    <<: *check-node
+  proxy:
+    volumes:
+      - ${QUEST_CHECK_LOGS:?set by scripts/check/lib/isolate.sh}:/logs
+  postgres:
+    volumes:
+      - ${QUEST_CHECK_LOGS}:/logs
+  engine:
+    <<: *check-node
+    volumes:
+      - ${QUEST_CHECK_LOGS}:/logs
+  app:
+    <<: *check-node
+    volumes:
+      - ${QUEST_CHECK_LOGS}:/logs
+      - ${QUEST_WORKSPACE_DIR}:/workspace
+      - ${QUEST_PROGRESS_DIR}:/progress
+  runner:
+    <<: *check-node
+    volumes:
+      - ${QUEST_CHECK_LOGS}:/logs
+      - ${QUEST_WORKSPACE_DIR}:/workspace
+      - ${QUEST_PROGRESS_DIR}:/progress

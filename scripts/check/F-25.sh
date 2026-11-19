@@ -93,8 +93,9 @@ run_check() { # run_check ID : runs scripts/check/ID.sh, keeps its tail
 }
 
 # Checks without Docker (some also GET a route from the shared dev server on 3100 when it is up).
-# NOT P0-01: it runs a bare `docker compose up/stop redis postgres`, whose default project is the owner's game
-# (redis-quest). Running it stops the owner's Redis and Postgres. It must not run until it gets its own project.
+# P0-01 is not run here: it is a platform check, not a UI check, and belongs to the full local run. (When this
+# script was written P0-01 still acted on the default compose project and stopped a player's Redis and Postgres;
+# since G-03 it runs in its own project.)
 for id in F-13 F-14 F-16 F-17 F-18 F-19 F-20 F-21 F-22 F-23 F-24; do run_check "$id"; done
 
 # Checks with their own isolated stack (quest-p10 or quest-f15), strictly one at a time; each tears down.

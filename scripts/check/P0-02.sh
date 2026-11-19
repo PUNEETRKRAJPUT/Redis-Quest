@@ -1,26 +1,31 @@
 #!/usr/bin/env bash
 # P0-02 acceptance: compose config, image build, arm64 images, stack health, Redis 8 modules.
-# Bash 3.2 compatible. Leaves the stack down on exit.
+# Bash 3.2 compatible. Runs in its own compose project (quest-p02) and removes it on exit.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
+
+# Own compose project, host ports, image tag and scratch directories. Never the default project: that is the
+# stack a learner plays on (see scripts/check/lib/isolate.sh).
+. scripts/check/lib/isolate.sh
+quest_isolate p02 4320 6520 5620 5720
+LOGS="$QUEST_CHECK_SCRATCH/logs"
 
 FAILED=0
 ok()  { printf 'PASS  %s\n' "$1"; }
 bad() { printf 'FAIL  %s\n' "$1"; FAILED=1; }
 section() { printf '\n== %s\n' "$1"; }
 finish() {
-  section "docker compose down"
-  docker compose down >/dev/null 2>&1 && echo "stack down"
+  section "cleanup"
+  quest_isolate_down
   if [ "$FAILED" -eq 0 ]; then printf '\nP0-02 OK\n'; exit 0; fi
   printf '\nP0-02 FAILED\n'; exit 1
 }
 
-[ -f .env ] || cp .env.example .env
-mkdir -p logs .progress workspace postgres/init
+mkdir -p postgres/init
 envval() {
   local v
   eval "v=\${$1:-}"
-  [ -z "$v" ] && v="$(grep -E "^$1=" .env | tail -n 1 | sed 's/^[^=]*=//')"
+  [ -z "$v" ] && v="$(grep -E "^$1=" "$QUEST_CHECK_ENV_FILE" | tail -n 1 | sed 's/^[^=]*=//')"
   printf '%s' "${v:-$2}"
 }
 PROXY_PORT="$(envval PROXY_PORT 3000)"
@@ -57,7 +62,7 @@ for img in $(docker compose --profile crash --profile replica --profile sentinel
 done
 
 section "node image contents"
-NODE_IMG=redis-quest-node:latest
+NODE_IMG="$QUEST_CHECK_IMAGE"
 OUT="$(docker run --rm --platform linux/arm64 "$NODE_IMG" node runner/dist/main.js 2>&1)"
 if [ "$OUT" = "@quest/runner" ]; then ok "node runner/dist/main.js prints $OUT"; else bad "engine main printed: $OUT"; fi
 for pkg in app runner; do
@@ -113,7 +118,7 @@ if [ "$CODE" = "502" ] || [ "$CODE" = "503" ] || [ "$CODE" = "200" ]; then ok "h
 CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PROXY_PORT}/app/ping")"
 if [ "$CODE" = "502" ] || [ "$CODE" = "503" ] || [ "$CODE" = "200" ] || [ "$CODE" = "404" ]; then ok "http://localhost:${PROXY_PORT}/app/ping returned $CODE"; else bad "proxy /app returned '$CODE'"; fi
 sleep 1
-if [ -s logs/proxy/access.log ] && head -n 1 logs/proxy/access.log | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{JSON.parse(s)})'; then ok "logs/proxy/access.log has JSON lines"; else bad "logs/proxy/access.log missing or not JSON"; fi
-if [ -d logs/postgres ] && [ -n "$(ls logs/postgres 2>/dev/null)" ]; then ok "postgres writes logs to logs/postgres ($(ls logs/postgres | head -n 1))"; else bad "logs/postgres is empty"; fi
+if [ -s $LOGS/proxy/access.log ] && head -n 1 $LOGS/proxy/access.log | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{JSON.parse(s)})'; then ok "$LOGS/proxy/access.log has JSON lines"; else bad "$LOGS/proxy/access.log missing or not JSON"; fi
+if [ -d $LOGS/postgres ] && [ -n "$(ls $LOGS/postgres 2>/dev/null)" ]; then ok "postgres writes logs to $LOGS/postgres ($(ls $LOGS/postgres | head -n 1))"; else bad "$LOGS/postgres is empty"; fi
 
 finish

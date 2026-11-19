@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
 # P0-08 acceptance: the runner executes learner modules with injected deps, metrics and crash isolation.
-# Bash 3.2 compatible. Starts compose redis + postgres, runs the runner on the host, then stops
-# the runner and `docker compose stop redis postgres`.
+# Bash 3.2 compatible. Starts redis + postgres in its own compose project (quest-p08), runs the runner on the
+# host against a scratch copy of workspace/, then stops the runner and removes the project.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 ROOT="$(pwd)"
+
+# Own compose project, host ports, image tag and scratch directories. Never the default project: that is the
+# stack a learner plays on (see scripts/check/lib/isolate.sh).
+. scripts/check/lib/isolate.sh
+quest_isolate p08 4340 6540 5640 5740
+WS="$QUEST_CHECK_SCRATCH/workspace"
 
 FAILED=0
 ok()  { printf 'PASS  %s\n' "$1"; }
 bad() { printf 'FAIL  %s\n' "$1"; FAILED=1; }
 section() { printf '\n== %s\n' "$1"; }
 
-[ -f .env ] || cp .env.example .env
 envval() {
   local v
   eval "v=\${$1:-}"
-  [ -z "$v" ] && v="$(grep -E "^$1=" .env | tail -n 1 | sed 's/^[^=]*=//')"
+  [ -z "$v" ] && v="$(grep -E "^$1=" "$QUEST_CHECK_ENV_FILE" | tail -n 1 | sed 's/^[^=]*=//')"
   printf '%s' "${v:-$2}"
 }
 REDIS_PORT="$(envval REDIS_PORT 6379)"
@@ -29,8 +34,8 @@ RUNNER_PID=""
 finish() {
   section "cleanup"
   if [ -n "$RUNNER_PID" ]; then kill "$RUNNER_PID" 2>/dev/null; wait "$RUNNER_PID" 2>/dev/null; echo "runner stopped"; fi
-  rm -rf "$ROOT/workspace/$TMPMOD" "$LOGTMP"
-  docker compose stop redis postgres >/dev/null 2>&1 && echo "redis and postgres stopped"
+  rm -rf "$WS/$TMPMOD" "$LOGTMP"
+  quest_isolate_down
   if [ "$FAILED" -eq 0 ]; then printf '\nP0-08 OK\n'; exit 0; fi
   printf '\nP0-08 FAILED\n'; exit 1
 }
@@ -71,6 +76,13 @@ while [ $i -lt 40 ]; do
   sleep 2; i=$((i+1))
 done
 if [ "$r" = "healthy" ] && [ "$p" = "healthy" ]; then ok "redis and postgres healthy"; else bad "services not healthy (redis=$r postgres=$p)"; exit 1; fi
+# This check's own project starts from an empty Postgres volume. "healthy" can come while the image is still
+# loading the seed through its temporary, socket-only server; the tests need the real one. Wait for it on TCP.
+i=0
+until docker compose exec -T postgres pg_isready -h 127.0.0.1 -U quest -d quest >/dev/null 2>&1; do
+  i=$((i+1)); [ $i -gt 90 ] && { bad "postgres did not accept TCP connections in 3 minutes"; exit 1; }; sleep 2
+done
+ok "postgres accepts connections (seed loaded)"
 
 export REDIS_URL="redis://localhost:$REDIS_PORT"
 export DATABASE_URL="postgres://quest:quest@localhost:$PG_PORT/quest"
@@ -80,7 +92,7 @@ if pnpm --filter @quest/runner test >"$LOGTMP/test.log" 2>&1; then ok "pnpm --fi
 
 section "start the runner on the host"
 if lsof -nP -iTCP:"$RUNNER_PORT" -sTCP:LISTEN >/dev/null 2>&1; then bad "port $RUNNER_PORT is already in use"; exit 1; fi
-PORT="$RUNNER_PORT" WORKSPACE_DIR="$ROOT/workspace" LOG_DIR="$LOGTMP/logs" \
+PORT="$RUNNER_PORT" WORKSPACE_DIR="$WS" LOG_DIR="$LOGTMP/logs" \
   node runner/dist/main.js >"$LOGTMP/runner.out" 2>&1 &
 RUNNER_PID=$!
 i=0; while ! curl -s -m 1 "$BASE/health" >/dev/null 2>&1 && [ $i -lt 30 ]; do sleep 0.5; i=$((i+1)); done
@@ -142,11 +154,11 @@ expect_eq "counter in redis" "$(docker compose exec -T redis redis-cli GET runne
 docker compose exec -T redis redis-cli DEL runner:example:counter >/dev/null
 
 section "no stale cache: edit a copy of ok.js between two runs"
-mkdir -p "$ROOT/workspace/$TMPMOD"
-cp "$ROOT/workspace/_examples/ok.js" "$ROOT/workspace/$TMPMOD/edit.js"
+mkdir -p "$WS/$TMPMOD"
+cp "$WS/_examples/ok.js" "$WS/$TMPMOD/edit.js"
 R1="$(post /run "{\"module\":\"$TMPMOD/edit.js\"}")"
 sleep 0.2
-sed -i '' 's/hello /greetings, /' "$ROOT/workspace/$TMPMOD/edit.js"
+sed -i '' 's/hello /greetings, /' "$WS/$TMPMOD/edit.js"
 R2="$(post /run "{\"module\":\"$TMPMOD/edit.js\"}")"
 expect_eq "before edit" "$(echo "$R1" | jx 'd.results[0].value.greeting')" "hello world"
 expect_eq "after edit" "$(echo "$R2" | jx 'd.results[0].value.greeting')" "greetings, world"

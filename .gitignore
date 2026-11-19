@@ -16,3 +16,4 @@ ui/e2e/test-results/
 .next/
 next-env.d.ts
 *.tsbuildinfo
+scripts/check/.scratch/

@@ -3,6 +3,12 @@
 set -eu
 cd "$(dirname "$0")/../.."
 
+# Own compose project, host ports, image tag and scratch directories. Never the default project: that is the
+# stack a learner plays on (see scripts/check/lib/isolate.sh).
+. scripts/check/lib/isolate.sh
+quest_isolate p01 4310 6510 5610 5710
+trap 'quest_isolate_down' EXIT
+
 step() { printf '\n== %s\n' "$1"; }
 assert() { # assert <description> <test-args...>
   desc="$1"; shift
@@ -15,10 +21,11 @@ step "pnpm -r build"
 pnpm -r build
 step "pnpm -r lint"
 pnpm -r lint
-# The runner and app unit tests talk to a live Redis and Postgres (the compose services, host ports from
-# .env). Start them for the test step and stop them afterwards.
-RP=$(grep -E '^REDIS_PORT=' .env 2>/dev/null | cut -d= -f2); RP=${RP:-6379}
-PP=$(grep -E '^PG_PORT=' .env 2>/dev/null | cut -d= -f2); PP=${PP:-5432}
+# The runner and app unit tests talk to a live Redis and Postgres: this check's own compose services on its own
+# host ports. They write and delete keys and rows, which is exactly why they may never run against a learner's
+# stack. The services and their volumes are removed when the script exits.
+RP=$QUEST_CHECK_REDIS_PORT
+PP=$QUEST_CHECK_PG_PORT
 step "docker compose up -d redis postgres (for the workspace tests)"
 docker compose up -d redis postgres >/dev/null
 i=0; until docker compose exec -T postgres pg_isready -U quest -d quest -h 127.0.0.1 >/dev/null 2>&1 && docker compose exec -T redis redis-cli PING >/dev/null 2>&1; do
@@ -27,7 +34,6 @@ done
 echo "PASS  redis on 127.0.0.1:$RP and postgres on 127.0.0.1:$PP are up"
 step "pnpm -r test"
 REDIS_URL="redis://127.0.0.1:$RP" DATABASE_URL="postgres://quest:quest@127.0.0.1:$PP/quest" pnpm -r test
-docker compose stop redis postgres >/dev/null 2>&1 || true
 
 step "assertions"
 for d in packages/shared engine app runner ui; do

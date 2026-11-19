@@ -4,34 +4,31 @@
 # publishes no host port) and WebSocket. Bash 3.2 compatible.
 #
 # Set P0_06_USE_EXAMPLES=1 to force the temporary example chapter even when levels/ch0-boot exists.
-# Scratch directories (levels, progress, workspace) live under logs/.p0-06-check so the check never touches
-# the real .progress/ or workspace/. Containers this script did not start are never stopped.
+# It runs in its own compose project (quest-p06) with its own ports, image tag and scratch directories, so it
+# never touches the default project, the real .progress/ or the real workspace/. The project is removed on exit.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 ROOT=$(pwd)
+
+# Own compose project, host ports, image tag and scratch directories. Never the default project: that is the
+# stack a learner plays on (see scripts/check/lib/isolate.sh).
+. scripts/check/lib/isolate.sh
+quest_isolate p06 4330 6530 5630 5730
 
 FAILED=0
 ok()  { printf 'PASS  %s\n' "$1"; }
 bad() { printf 'FAIL  %s\n' "$1"; FAILED=1; }
 section() { printf '\n== %s\n' "$1"; }
 
-[ -f .env ] || cp .env.example .env
-mkdir -p logs .progress workspace postgres/init
-SCRATCH="$ROOT/logs/.p0-06-check"
+mkdir -p postgres/init
+SCRATCH="$QUEST_CHECK_SCRATCH/engine"
 rm -rf "$SCRATCH"
 mkdir -p "$SCRATCH/levels" "$SCRATCH/progress" "$SCRATCH/workspace"
 
-STARTED_BY_ME=""
-for s in redis postgres; do
-  if [ -z "$(docker compose ps --status running -q "$s" 2>/dev/null)" ]; then STARTED_BY_ME="$STARTED_BY_ME $s"; fi
-done
 
 finish() {
   section "cleanup"
-  docker compose stop engine >/dev/null 2>&1 && echo "engine stopped"
-  for s in $STARTED_BY_ME; do docker compose stop "$s" >/dev/null 2>&1 && echo "$s stopped (this check started it)"; done
-  [ -z "$STARTED_BY_ME" ] && echo "redis and postgres were already running before this check; left running"
-  rm -rf "$SCRATCH"
+  quest_isolate_down
   if [ "$FAILED" -eq 0 ]; then printf '\nP0-06 OK\n'; exit 0; fi
   printf '\nP0-06 FAILED\n'; exit 1
 }
@@ -89,11 +86,19 @@ while [ $i -lt 60 ]; do
   i=$((i + 1)); sleep 1
 done
 expect_status "GET /health" 200
+# This check's own project starts from an empty Postgres volume. The image runs the seed through a temporary
+# server first, and compose already calls the container healthy then (pg_isready over the socket answers), so
+# the engine can be up while Postgres is still loading. Wait for the engine to see it, up to two minutes.
+i=0
+while [ $i -lt 120 ]; do
+  [ "$(js "$BODY" 'j.postgres')" = "up" ] && break
+  i=$((i + 1)); sleep 1; call GET /health
+done
 echo "$BODY"
 expect_js "health: ok, service engine, redis up, postgres up" 'j.ok===true&&j.service==="engine"&&j.redis==="up"&&j.postgres==="up"'
 expect_js "health: boots counted (game:engine:boots)" 'typeof j.boots==="number"&&j.boots>=1'
 BOOTS1=$(js "$BODY" 'j.boots')
-[ -f "$ROOT/logs/engine/engine.log" ] && ok "logs/engine/engine.log exists" || bad "logs/engine/engine.log missing"
+[ -f "$QUEST_CHECK_SCRATCH/logs/engine/engine.log" ] && ok "logs/engine/engine.log exists" || bad "logs/engine/engine.log missing"
 
 section "first run: player, chapters"
 # The default Redis persists between runs (decision 2026-11-01) and the welcome gift is created only when absent,
