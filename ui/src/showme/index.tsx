@@ -492,7 +492,15 @@ function Panel({ id, k, playerId }: { id: ShowMeId; k: string; playerId: string 
 }
 
 /** Renders the level's show-me: its component once per declared key. */
-export function ShowMe({ spec, playerId }: { spec: ShowMeSpec; playerId: string }): ReactNode {
+export function ShowMe({
+  spec,
+  playerId,
+}: {
+  spec: ShowMeSpec;
+  playerId: string;
+  /** Hands-on mode: the panels can be manipulated and show the command they ran. Ignored until F-23. */
+  interactive?: boolean;
+}): ReactNode {
   const [picked, setPicked] = useState<string | null>(null);
   const id = spec.component;
   if (!isShowMeId(id)) return <p className="muted">Unknown show-me component: {id}</p>;
