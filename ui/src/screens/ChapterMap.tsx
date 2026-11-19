@@ -161,7 +161,9 @@ export function ChapterMap() {
     >
       <Rise i={0} className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div className="min-w-0">
-          <div className="label-caps text-xs text-flood-400">Season fixtures · Hostel league</div>
+          <div className="label-caps text-xs text-flood-400">
+            Season 7 fixtures · Nukkad Cricket League
+          </div>
           <h1 className="mt-1 font-display text-3xl font-bold uppercase tracking-[0.02em] text-chalk">
             Hello, {progress.player.name}
           </h1>

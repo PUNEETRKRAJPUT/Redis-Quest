@@ -6,16 +6,9 @@ import { motion } from 'motion/react';
 import type { ThreadMessage } from '../types';
 import { avatarTone, initials } from './logic';
 
-/*
- * The e2e suite finds messages with `.thread .msg`, so the list keeps `thread` and the row keeps `msg`. The legacy
- * stylesheet is unlayered and has rules for both that beat any layered utility, so the resets are important
- * utilities. (CSS modules are not an option here: next.config.ts routes every *.css through the Tailwind loader,
- * which turns a .module.css into global CSS.) They become harmless when the legacy stylesheet is deleted.
- */
-export const LIST_RESET =
-  'm-0! p-0! list-none! flex! flex-col! gap-0! max-w-none! rounded-none! bg-transparent!';
-const ROW_RESET =
-  'flex! gap-2! self-stretch! border-0! bg-transparent! p-0! max-w-none! rounded-none!';
+/** The message list and a message row: a column of rows, each an avatar slot beside its bubble. */
+export const LIST_RESET = 'flex flex-col';
+const ROW_RESET = 'flex gap-2 self-stretch';
 
 export function Avatar({ slug, name }: { slug: string; name: string }) {
   const tone = avatarTone(slug);
@@ -57,12 +50,7 @@ export function MessageRow({ message, name, mine, first, enter, reduced }: RowPr
     <motion.li
       data-testid="thread-msg"
       data-from={message.from}
-      className={clsx(
-        ROW_RESET,
-        'msg',
-        mine && 'me justify-end',
-        first ? 'mt-3 first:mt-0' : 'mt-0.5',
-      )}
+      className={clsx(ROW_RESET, mine && 'justify-end', first ? 'mt-3 first:mt-0' : 'mt-0.5')}
       initial={enter ? { opacity: 0, y: reduced ? 0 : 10, scale: reduced ? 1 : 0.97 } : false}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: reduced ? 0.12 : 0.28, ease: [0.16, 1, 0.3, 1] }}

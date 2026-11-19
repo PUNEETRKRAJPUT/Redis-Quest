@@ -1,10 +1,10 @@
 /*
  * "Night match" design tokens (docs/design/EXPERIENCE.md is the brief).
  *
- * Cascade note: src/styles.css (legacy, unlayered) loads before this file. Tailwind puts its own rules in cascade
- * layers, and an unlayered rule beats every layered rule regardless of specificity. So everything here that must
- * win over the legacy file is unlayered on purpose, and `[data-ds]` regions revert the legacy element rules (h1,
- * p, a, code...) back to the layered cascade so Tailwind utilities work inside them.
+ * Cascade note: Tailwind puts its own rules in cascade layers, and an unlayered rule beats every layered rule
+ * regardless of specificity. The few base rules below (focus ring, link colour, body) are unlayered on purpose, and
+ * `[data-ds]` regions roll the element rules back to the layered cascade so Tailwind utilities win inside them.
+ * (Until F-25 a legacy unlayered stylesheet, src/styles.css, loaded first; it is gone.)
  */
 
 /* ---------------------------------------------------------------- theme (generates the utilities) */
@@ -193,12 +193,12 @@
   }
 }
 
-/* ---------------------------------------------------------------- legacy variables (unlayered: they must win) */
+/* ---------------------------------------------------------------- legacy variable names */
 
 /*
- * Every variable src/styles.css declares, re-declared with the night palette. The legacy file sets them on :root
- * and again inside a dark-scheme media query; these come later with the same specificity and no media condition,
- * so they win under both colour schemes. The design is dark regardless of the OS setting.
+ * The variable names the pre-redesign stylesheet used (--bg, --ink, --accent...), mapped onto the night palette.
+ * Nothing in ui/src reads them any more; they stay as a stable alias for markup outside the design system
+ * (scripts/check/F-16.sh asserts all 22).
  */
 :root {
   --bg: #070a12;
@@ -231,7 +231,7 @@
   }
 }
 
-/* ---------------------------------------------------------------- base (unlayered: overrides legacy rules) */
+/* ---------------------------------------------------------------- base (unlayered) */
 
 html {
   background: var(--color-night-950);
@@ -270,7 +270,7 @@ body::before {
   color: var(--color-chalk);
 }
 
-/* The brief: a 2px sky ring on every control. Replaces the legacy 3px accent outline. */
+/* The brief: a 2px sky ring on every control. */
 :focus-visible {
   outline: 2px solid var(--color-sky);
   outline-offset: 2px;
@@ -302,20 +302,12 @@ a {
 }
 
 /*
- * Inside a design-system region (any element with `data-ds`, which every primitive root carries), the legacy
- * element rules from styles.css are rolled back to the layered cascade: Tailwind's preflight and utilities apply.
+ * Inside a design-system region (any element with `data-ds`, which every primitive root carries), the unlayered
+ * element rules above (the link colour) are rolled back to the layered cascade: Tailwind's preflight and utilities
+ * apply, so a link styled with utilities is not repainted sky.
  */
-:where([data-ds], [data-ds] *):is(h1, h2, h3, h4, p, a, code, pre) {
-  font-size: revert-layer;
-  line-height: revert-layer;
-  margin: revert-layer;
+:where([data-ds], [data-ds] *):is(a) {
   color: revert-layer;
-  background: revert-layer;
-  padding: revert-layer;
-  border-radius: revert-layer;
-  font-family: revert-layer;
-  text-transform: revert-layer;
-  letter-spacing: revert-layer;
 }
 
 /* ---------------------------------------------------------------- reduced motion */

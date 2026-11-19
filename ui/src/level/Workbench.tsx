@@ -5,13 +5,14 @@
 import { clsx } from 'clsx';
 import { Activity, Code, ListChecks, ScrollText, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 import { paneStorage } from '../match/layout';
 import { EditorPanel } from '../panels/EditorPanel';
 import { LogsPanel } from '../panels/LogsPanel';
 import { MetricsPanel } from '../panels/MetricsPanel';
 import { TerminalPanel } from '../panels/TerminalPanel';
+import { onTerminalWanted } from '../terminal/bus';
 
 type Tool = 'terminal' | 'editor' | 'logs' | 'metrics';
 type Tab = Tool | 'answers';
@@ -83,6 +84,15 @@ export function Workbench({
   const tabs = answers
     ? [{ id: 'answers' as const, label: 'Your answers', icon: ListChecks }, ...TOOLS]
     : TOOLS;
+  // A lesson's "send to terminal" with no terminal on screen: open the one this pane holds (a code level docks it
+  // under the editor). The bus hands the text over when the terminal mounts. Hidden routes run no effects, so
+  // only the level on screen answers.
+  useEffect(() => {
+    const off = onTerminalWanted(() => setTab(dock ? 'editor' : 'terminal'));
+    return () => {
+      off();
+    };
+  }, [dock]);
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-night-600/60 bg-night-900/70"

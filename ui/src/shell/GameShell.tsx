@@ -101,7 +101,7 @@ function ReadyShell({ children }: { children: ReactNode }) {
       <button
         type="button"
         data-ds=""
-        // Parked above the window until it takes focus (not `sr-only`: the legacy stylesheet's unlayered .sr-only wins).
+        // Parked above the window until it takes focus, then it slides down into view.
         className="fixed left-4 top-3 z-[80] -translate-y-[200%] rounded-md bg-flood-500 px-4 py-2 text-md font-semibold text-on-flood shadow-pop focus:translate-y-0"
         onClick={() => document.getElementById('main')?.focus()}
       >

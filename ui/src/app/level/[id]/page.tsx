@@ -11,9 +11,9 @@ export default function LevelPage({ params }: { params: Promise<{ id: string }> 
   return (
     <Suspense
       fallback={
-        <main className="page narrow" aria-busy="true">
-          <p className="muted">Loading the level...</p>
-        </main>
+        <div className="mx-auto max-w-[640px] px-4 py-6" aria-busy="true">
+          <p className="text-md text-chalk-dim">Loading the level...</p>
+        </div>
       }
     >
       <LevelRoute params={params} />

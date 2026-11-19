@@ -20,6 +20,7 @@ export function humanize(name: string): string {
 
 // Plumbing the game itself sends: not news for the player.
 const QUIET = new Set(['ui_connected', 'cli_ping', 'level_started']);
+const VERIFY_PREFIX = 'verify_';
 
 const asObj = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
@@ -53,6 +54,9 @@ export function describeEvent(e: Pick<LevelEventMsg, 'kind' | 'name' | 'data'>):
   }
   const name = e.name ?? '';
   if (!name || QUIET.has(name)) return null;
+  // The engine reports its own check as custom `verify_*` events (engine/src/verify/events.ts). The level screen
+  // already shows that progress as the third-umpire review, so a toast per step would only pile up on top of it.
+  if (name.startsWith(VERIFY_PREFIX)) return null;
   switch (name) {
     case 'progress_restored':
       return { key: name, title: 'Save file restored', tone: 'success' };

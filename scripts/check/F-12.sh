@@ -106,7 +106,7 @@ if T=$(pnpm --filter @quest/ui test 2>&1); then
 else printf '%s\n' "$T" | tail -30; bad "ui vitest"; fi
 
 section "format (CI runs pnpm format:check; here only the files this task touches, other agents' files are theirs)"
-FILES="packages/shared/src/levels/schema.ts packages/shared/src/levels/loader.ts packages/shared/src/levels/cli.ts packages/shared/src/levels/__tests__/interview.test.ts engine/src/interview.ts engine/src/progress.ts engine/src/levels.ts engine/src/server.ts engine/test/interview.test.ts ui/src/types.ts ui/src/api.ts ui/src/styles.css ui/src/level/interview.tsx ui/src/level/IdealWay.tsx ui/src/screens/Level.tsx ui/src/screens/Built.tsx ui/test/interview.test.tsx ui/e2e/interview.e2e.ts"
+FILES="packages/shared/src/levels/schema.ts packages/shared/src/levels/loader.ts packages/shared/src/levels/cli.ts packages/shared/src/levels/__tests__/interview.test.ts engine/src/interview.ts engine/src/progress.ts engine/src/levels.ts engine/src/server.ts engine/test/interview.test.ts ui/src/types.ts ui/src/api.ts ui/src/level/interview.tsx ui/src/level/IdealWay.tsx ui/src/screens/Level.tsx ui/src/screens/Built.tsx ui/test/interview.test.tsx ui/e2e/interview.e2e.ts"
 # shellcheck disable=SC2086
 if npx --no-install prettier --check $FILES >/dev/null 2>&1; then ok "prettier --check on the files this task touches"; else npx --no-install prettier --check $FILES 2>&1 | tail -15; bad "prettier --check"; fi
 

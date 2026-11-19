@@ -60,9 +60,8 @@ function Light({ state }: { state: 'up' | 'down' | 'unknown' }) {
   );
 }
 
-// Lesson text: a comfortable measure, and a flow gap between the markdown's blocks (the legacy `.md p` margins are
-// switched off inside data-ds).
-const LESSON = 'max-w-[68ch] text-base leading-[1.65] text-chalk [&_.md>*+*]:mt-[0.85em]';
+// Lesson text: a comfortable measure and size. The markdown component spaces its own blocks.
+const LESSON = 'max-w-[68ch] text-base leading-[1.65] text-chalk';
 
 export function LevelScreen({ id }: { id: string }) {
   const progress = useQuest((s) => s.progress);
@@ -559,7 +558,8 @@ export function LevelScreen({ id }: { id: string }) {
   const workspace = (
     <Workbench
       initial={benchStart}
-      chapter={level.chapter}
+      // A finale mock interview rebuilds a level from another chapter: open that chapter's file, not the finale's.
+      chapter={level.interview?.drawn?.chapter ?? level.chapter}
       dock={level.mode === 'code'}
       answers={decisionMode && hasSheet ? sheet : undefined}
       idle={level.mode === 'ops' ? <OpsWatch onOpenTask={() => goStage(5)} /> : <IdleTools />}

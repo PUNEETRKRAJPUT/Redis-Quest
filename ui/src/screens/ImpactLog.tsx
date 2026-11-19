@@ -91,7 +91,7 @@ export function ImpactLog({ impact }: { impact: Impact }) {
                     {date ? (
                       <time
                         dateTime={e.at}
-                        className="tabular ml-auto font-mono text-xs text-chalk-faint"
+                        className="tabular ml-auto font-mono text-xs text-chalk-dim"
                       >
                         {date}
                       </time>

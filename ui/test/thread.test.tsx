@@ -27,9 +27,9 @@ describe('Thread markup (server render shows everything, readable without JS)', 
     expect(html).toContain('aria-live="polite"');
     expect(html.match(/data-testid="thread-msg"/g)).toHaveLength(4);
   });
-  it('keeps the legacy hooks the e2e suite uses', () => {
-    expect(html).toMatch(/<ol[^>]*class="[^"]*\bthread\b/);
-    expect(html).toMatch(/<li[^>]*class="[^"]*\bmsg\b/);
+  it('marks every message with the test id the e2e suite uses (the old .thread .msg classes are gone)', () => {
+    expect(html.match(/<li[^>]*data-testid="thread-msg"/g)?.length).toBeGreaterThan(0);
+    expect(html).not.toMatch(/class="[^"]*\b(thread|msg)\b/);
   });
   it('gives screen readers sender and time for every message', () => {
     expect(html).toContain('Teja at 19:24:');
@@ -40,7 +40,7 @@ describe('Thread markup (server render shows everything, readable without JS)', 
     expect(html.match(/data-testid="thread-avatar"/g)).toHaveLength(3 + 2); // 3 in the header stack, 2 beside runs (none for the player)
   });
   it('marks the player side and escapes message text', () => {
-    expect(html).toMatch(/<li[^>]*data-from="you"[^>]*class="[^"]*\bme\b/);
+    expect(html).toMatch(/<li[^>]*data-from="you"[^>]*class="[^"]*\bjustify-end\b/);
     expect(html).not.toContain('<b>x</b>');
     expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
   });

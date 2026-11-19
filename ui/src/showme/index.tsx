@@ -443,7 +443,7 @@ function KeyPicker({ id, onPick }: { id: string; onPick: (k: string) => void }) 
   return (
     <form
       data-ds=""
-      className="keypicker flex flex-wrap items-end gap-3 rounded-lg border border-night-600 bg-night-800 p-4"
+      className="flex flex-wrap items-end gap-3 rounded-lg border border-night-600 bg-night-800 p-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (v.trim()) onPick(v.trim());

@@ -61,6 +61,15 @@ describe('event toasts', () => {
   it('stays quiet about plumbing and about what the rain-delay strip already says', () => {
     for (const name of ['ui_connected', 'cli_ping', 'level_started'])
       expect(describeEvent({ kind: 'custom', name })).toBeNull();
+    // Verification progress belongs to the level screen's review, not to toasts.
+    for (const name of [
+      'verify_started',
+      'verify_check_started',
+      'verify_check_finished',
+      'verify_traffic_phase',
+      'verify_finished',
+    ])
+      expect(describeEvent({ kind: 'custom', name })).toBeNull();
     expect(describeEvent({ kind: 'redis_disconnect' })).toBeNull();
     expect(describeEvent({ kind: 'redis_reconnect' })).toBeNull();
     expect(describeEvent({ kind: 'custom' })).toBeNull();

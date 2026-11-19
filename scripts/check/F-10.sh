@@ -101,7 +101,7 @@ section "playwright: gallery renders both components, no unknown-component fallb
 ( cd ui && npx --no-install playwright install chromium >/dev/null 2>&1 ) || echo "      (playwright install chromium reported a problem; trying the run anyway)"
 ( cd ui && P10_BASE_URL="$BASE" npx --no-install playwright test e2e/chapter0.e2e.ts 2>&1 ) | tee "$OUT"
 if [ "${PIPESTATUS[0]}" -eq 0 ]; then ok "playwright run passed"; else bad "playwright run failed"; fi
-grep -q 'toHaveCount(14)' ui/e2e/chapter0.e2e.ts && grep -q 'Unknown show-me component' ui/e2e/chapter0.e2e.ts && ok "e2e asserts 14 gallery views and no unknown fallback" || bad "e2e gallery assertions missing"
+grep -q 'toHaveCount(19)' ui/e2e/chapter0.e2e.ts && grep -q 'Unknown show-me component' ui/e2e/chapter0.e2e.ts && ok "e2e asserts all 19 gallery views (14 at F-10, 19 since F-13) and no unknown fallback" || bad "e2e gallery assertions missing"
 for id in stats_latency_panel otp_limiter_panel; do
   [ -s "ui/e2e/screenshots/showme-$id.png" ] && ok "screenshot ui/e2e/screenshots/showme-$id.png" || bad "missing screenshot showme-$id.png"
 done

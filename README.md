@@ -7,7 +7,7 @@ wrong in the best way, one chapter at a time. Everything runs on your own Mac: e
 something real against a real Redis, a real Postgres and real traffic, and tells you honestly what broke and
 what you fixed.
 
-![The map: eight chapters, every level an incident](docs/img/map.jpg)
+![The season map: each chapter a match night with its incident, each level a ball in an over](docs/img/map.jpg)
 
 ## What is inside
 
@@ -94,7 +94,9 @@ you which `docker compose --profile ... up -d` command to run and when; nothing 
 
 ## How a level works
 
-Every level has the same seven stages, and you only touch the Redis part.
+A level opens as one screen in three resizable panes: the brief on the left (the stages below), the workspace in
+the middle (terminal, editor, logs, metrics) and the scoreboard on the right (the check button, your answers,
+the verdict and the checks). Every level has the same seven stages, and you only touch the Redis part.
 
 1. **Scenario**: the chat thread, what just happened and who is shouting.
 2. **What already exists**: what is built and running, so you do not rebuild it.
@@ -103,7 +105,8 @@ Every level has the same seven stages, and you only touch the Redis part.
 4. **Teach**: the concept, the commands and a link to the official docs.
 5. **Build**: run commands in the terminal, fill in one file, run a command on your Mac, or make a decision.
    Hints open one at a time.
-6. **Verify**: the game checks your work and gives one of three verdicts:
+6. **The decision**: press **Check my work**. The check plays like a third-umpire review ("Decision pending")
+   and then shows one of three verdicts:
    - **Right**: it works, and the "show me" panel shows it running on your own keys.
    - **Works, but wrong**: it passes today, and the game shows you how it fails under load.
    - **Wrong**: a check failed, and the message says which one and the most likely cause.
@@ -146,8 +149,11 @@ solutions with no mismatch. The same harness is how a new level earns its place.
 
 ## The tools
 
-- **Terminal**: in the page, talks to the Redis on your machine.
-- **Editor**: for the levels where you write code; you can also use your own editor on the same files.
+- **Terminal**: in the page, talks to the Redis on your machine. As you type, it suggests commands and shows
+  their arguments, read from the running Redis's own command docs; Tab accepts a suggestion, Enter always sends
+  exactly what you typed. Redis commands in the lessons have a small button that puts them on the terminal's line.
+- **Editor**: for the levels where you write code; you can also use your own editor on the same files. Inside a
+  level the file list is folded away so the code gets the width; the button at the left of the file path opens it.
 - **Run my code in the app**: a switch in the Build stage of code levels. Off, the app runs its own slow
   baseline; on, the app runs your file.
 - **Run traffic**: a button on levels that have a load scenario; it sends real traffic at the app for a few
@@ -156,8 +162,11 @@ solutions with no mismatch. The same harness is how a new level earns its place.
   the replica, Sentinel or the cluster, or at a Redis URL of your own. The app and the runner follow within
   about two seconds. Chapter 5 uses it.
 - **Redis Insight**: http://localhost:5540, already connected to the game's Redis.
-- **Logs and Metrics**: two pages in the sidebar. Logs shows what your code and the services print; Metrics
-  shows latency and request numbers from the app.
+- **Logs and Metrics**: two pages in the top bar (and tabs in every level's workspace). Logs shows what your
+  code and the services print; Metrics shows latency and request numbers from the app.
+- **Getting around**: Cmd+K opens a search over every screen and level; `g` then a letter jumps to a screen
+  (`g m` the map, `g t` the terminal), and `?` lists every shortcut. When the stack is down, a "rain delay"
+  strip under the top bar shows the command that brings it back.
 - **What you built**: a page with every level you passed, each with its show-me running on your keys, and an
   impact log with the numbers the checks measured (p99 before and after, calls per request, rebuild times).
 - **Write my story**: a button on that page that writes `workspace/PORTFOLIO.md`, a one-page account of what

@@ -37,8 +37,9 @@ for p in 'title\?' 'animate\?' 'maxRevealMs\?' 'maxHeight\?' 'onRevealed\?' 'rem
 done
 has "$T" 'aria-live="polite"' "message list is a polite live region"
 has "$T" 'aria-label=\{label\}' "list is labelled by the label prop"
-has "$T" "'thread'" "legacy hook class 'thread' kept for ui/e2e"
-has ui/src/thread/parts.tsx "'msg'" "legacy hook class 'msg' kept for ui/e2e"
+# F-25 deleted the legacy stylesheet and moved the e2e to the test id, so the .thread/.msg hooks are gone.
+has ui/src/thread/parts.tsx 'data-testid="thread-msg"' "messages carry data-testid=thread-msg (the e2e selector)"
+grep -q "thread-msg" ui/e2e/chapter0.e2e.ts && ok "ui/e2e finds messages by data-testid=thread-msg" || bad "ui/e2e does not use thread-msg"
 has "$T" 'data-ds=""' "data-ds on the root"
 has "$T" 'Show all' "Show all action"
 has "$T" 'Replay' "Replay action"

@@ -46,8 +46,9 @@ if grep -q '^FAIL' /tmp/f16-palette.$$; then bad "palette tokens missing"; fi
 if [ "$COUNT" -ge 15 ]; then ok "$COUNT palette tokens declared"; else bad "expected at least 15 palette tokens, found $COUNT"; fi
 rm -f /tmp/f16-palette.$$
 
-section "every legacy variable in ui/src/styles.css is re-declared in tokens.css"
-for v in $(grep -oE -- '--[a-zA-Z0-9-]+:' ui/src/styles.css | sort -u | tr -d ':'); do
+section "every legacy variable name (from the old ui/src/styles.css, deleted in F-25) is declared in tokens.css"
+LEGACY_VARS="--bg --surface --surface-2 --ink --muted --line --accent --accent-ink --accent-soft --ok --ok-soft --warn --warn-soft --bad --bad-soft --info-soft --term-bg --term-fg --radius --gutter --mono --sans"
+for v in $LEGACY_VARS; do
   if grep -qE -- "^ *$v:" "$TOKENS"; then ok "$v"; else bad "$v is not re-declared in $TOKENS"; fi
 done
 if grep -q 'color-scheme: dark' "$TOKENS"; then ok "color-scheme: dark"; else bad "color-scheme: dark missing"; fi

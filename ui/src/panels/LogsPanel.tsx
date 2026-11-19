@@ -65,7 +65,7 @@ const LogRow = memo(function LogRow({
       style={{ top, height: ROW }}
     >
       <span aria-hidden className={clsx('h-full w-[3px] shrink-0', s.rail)} />
-      <span className="tabular w-[92px] shrink-0 text-chalk-faint">{entry.time ?? ''}</span>
+      <span className="tabular w-[92px] shrink-0 text-chalk-dim">{entry.time ?? ''}</span>
       <span className={clsx('label-caps w-9 shrink-0 text-[11px] tracking-[0.08em]', s.text)}>
         {s.tag}
       </span>
@@ -78,7 +78,7 @@ const LogRow = memo(function LogRow({
         {entry.text}
         {entry.extras.map(([k, v]) => (
           <span key={k} className="ml-3 text-chalk-dim">
-            <span className="text-chalk-faint">{k}=</span>
+            <span className="text-chalk-dim">{k}=</span>
             {v}
           </span>
         ))}

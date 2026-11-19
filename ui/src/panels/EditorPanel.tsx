@@ -10,6 +10,8 @@ import {
   FileText,
   Folder,
   Lock,
+  PanelLeftClose,
+  PanelLeftOpen,
   SquareTerminal,
   X,
 } from 'lucide-react';
@@ -19,12 +21,13 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useId,
   useState,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
 import { api, ApiError } from '../api';
-import { Button, Dialog, Kbd, Skeleton, toast, Tooltip } from '../design';
+import { Button, Dialog, IconButton, Kbd, Skeleton, toast, Tooltip } from '../design';
 import type { WorkspaceEntry } from '../types';
 import { cssHeight, type PanelHeight } from './height';
 
@@ -90,9 +93,13 @@ export function EditorPanel({ chapter, height = 420 }: { chapter?: string; heigh
   const [pulse, setPulse] = useState(0);
   const [cursor, setCursor] = useState<{ line: number; col: number } | null>(null);
   const [closing, setClosing] = useState<string | null>(null);
+  // null = automatic: inside a level (a chapter is given) the file list folds away once the level's own file is
+  // open, so the code gets the width; on the /editor page it stays open. A click makes it the player's choice.
+  const [filesShown, setFilesShown] = useState<boolean | null>(null);
 
   const files = useMemo(() => (entries ?? []).filter((e) => e.type === 'file'), [entries]);
   const groups = useMemo(() => groupFiles(files), [files]);
+  const filesId = useId();
 
   useEffect(() => {
     api
@@ -208,6 +215,10 @@ export function EditorPanel({ chapter, height = 420 }: { chapter?: string; heigh
       </div>
     );
 
+  // Inside a level it starts folded (no shift while the level's file loads) and opens only if what got opened
+  // is not the level's own file.
+  const showFiles =
+    filesShown ?? (chapter ? path !== null && !path.startsWith(`${chapter}/`) : true);
   const editable = path ? (files.find((f) => f.path === path)?.editable ?? true) : true;
   const lang = path ? langOf(path) : 'plaintext';
   const status = dirty ? (
@@ -246,9 +257,14 @@ export function EditorPanel({ chapter, height = 420 }: { chapter?: string; heigh
       style={{ height: cssHeight(height) }}
     >
       <nav
+        id={filesId}
         aria-label="Workspace files"
         data-testid="editor-files"
-        className="hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-night-600/70 bg-night-950/60 py-3 md:flex"
+        hidden={!showFiles}
+        className={clsx(
+          'w-60 shrink-0 flex-col overflow-y-auto border-r border-night-600/70 bg-night-950/60 py-3',
+          showFiles ? 'hidden md:flex' : 'hidden',
+        )}
       >
         {files.length === 0 ? (
           <p className="px-4 text-sm text-chalk-dim">workspace/ is empty.</p>
@@ -369,8 +385,23 @@ export function EditorPanel({ chapter, height = 420 }: { chapter?: string; heigh
 
         <div
           data-testid="editor-bar"
-          className="flex min-h-12 shrink-0 items-center gap-3 border-b border-night-600/70 px-4 py-2"
+          className="flex min-h-12 shrink-0 items-center gap-3 border-b border-night-600/70 py-2 pl-2 pr-4"
         >
+          <IconButton
+            size="sm"
+            label={showFiles ? 'Hide the file list' : 'Show the file list'}
+            icon={
+              showFiles ? (
+                <PanelLeftClose size={15} aria-hidden />
+              ) : (
+                <PanelLeftOpen size={15} aria-hidden />
+              )
+            }
+            aria-expanded={showFiles}
+            aria-controls={filesId}
+            data-testid="editor-files-toggle"
+            onClick={() => setFilesShown(!showFiles)}
+          />
           <code className="min-w-0 truncate font-mono text-sm text-chalk">
             {path ? `workspace/${path}` : 'no file open'}
           </code>

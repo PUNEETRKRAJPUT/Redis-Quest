@@ -55,7 +55,8 @@ if grep -q 'hidden()' $S/useRedis.ts && grep -q 'visibilitychange' $S/useRedis.t
 
 section "no external URL, no emoji icons, no legacy stylesheet rules added"
 if grep -nE "https?://" $S/*.ts* ui/src/screens/ShowMeGallery.tsx | grep -v "nextjs.org" | grep -q .; then bad "external URL in F-23 files"; else ok "no external URL"; fi
-if git diff --quiet -- ui/src/styles.css; then ok "ui/src/styles.css untouched"; else bad "styles.css changed"; fi
+# F-25 deleted the legacy stylesheet; the show-me panels must not bring it back.
+if [ ! -e ui/src/styles.css ]; then ok "no legacy ui/src/styles.css"; else bad "ui/src/styles.css exists again"; fi
 
 section "dev server (optional)"
 if curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:3100/health 2>/dev/null || curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:3100/showme 2>/dev/null; then

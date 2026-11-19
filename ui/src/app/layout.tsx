@@ -4,8 +4,6 @@ import type { ReactNode } from 'react';
 import { DesignRuntime } from '@/design/components/feedback';
 import { fontClassNames } from '@/design/fonts';
 import { GameShell } from '@/shell/GameShell';
-// Legacy rules first, then Tailwind and the design tokens, so the tokens win where both set a variable.
-import '../styles.css';
 import './globals.css';
 import '../shell/shell.css';
 

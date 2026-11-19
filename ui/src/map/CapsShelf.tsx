@@ -119,9 +119,9 @@ export function CapsShelf({ badges }: { badges: string[] }) {
   const preview = newest.length > SHELF_PREVIEW ? newest.slice(0, SHELF_PREVIEW - 1) : newest;
   const more = newest.length - preview.length;
   return (
-    // `badges`: the end-to-end tests find the shelf by this legacy class and read the names in its text. The
-    // legacy rule makes it a flex row, which the single card child fills.
-    <div className="badges h-full">
+    // `badges`: the end-to-end tests find the shelf by this class and read the names in its text. A flex row, so
+    // the single card child fills it.
+    <div className="badges flex h-full">
       <Card
         padding="none"
         data-testid="caps-shelf"

@@ -125,7 +125,7 @@ export const IconBall = (p: P) => (
 );
 export const IconSpinner = (p: P) => (
   <svg
-    className="spin"
+    className="ds-still inline-block animate-spin align-[-3px]"
     width={p.size ?? 16}
     height={p.size ?? 16}
     viewBox="0 0 20 20"

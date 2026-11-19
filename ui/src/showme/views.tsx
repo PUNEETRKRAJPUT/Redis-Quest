@@ -390,7 +390,7 @@ export function ListFeedView({ name, items, total }: ListFeedProps) {
                 freshClass(fresh.has(ids[i] as string)),
               )}
             >
-              <span className="tabular w-5 shrink-0 text-right font-mono text-xs text-chalk-faint">
+              <span className="tabular w-5 shrink-0 text-right font-mono text-xs text-chalk-dim">
                 {i}
               </span>
               <span className="min-w-0 flex-1 text-md break-words text-chalk">{it}</span>
@@ -1084,7 +1084,7 @@ function JsonNode({ k, v, depth }: { k: string | null; v: unknown; depth: number
     return (
       <details open={depth < 2} className="group/json">
         <summary className="cursor-pointer list-none rounded-xs py-0.5 marker:content-none hover:bg-night-700/60">
-          <span className="mr-1 inline-block text-chalk-faint transition-transform duration-fast group-open/json:rotate-90">
+          <span className="mr-1 inline-block text-chalk-dim transition-transform duration-fast group-open/json:rotate-90">
             ›
           </span>
           {label}

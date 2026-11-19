@@ -139,7 +139,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
     <div className="codeblock" data-night="">
       <div className={clsx('codeblock-bar', styles.bar)}>
         <span>{h.lang}</span>
-        <button type="button" className="icon-btn" onClick={copy} aria-label="Copy code">
+        <button type="button" className={styles.copy} onClick={copy} aria-label="Copy code">
           {copied ? <IconCheck size={15} /> : <IconCopy size={15} />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
@@ -190,7 +190,7 @@ const components: Components = {
   },
   table({ children }) {
     return (
-      <div className="table-wrap">
+      <div className={styles.tableWrap}>
         <table>{children}</table>
       </div>
     );
@@ -199,7 +199,7 @@ const components: Components = {
 
 export function Markdown({ source, className }: { source: string; className?: string }) {
   return (
-    <div className={`md ${className ?? ''}`}>
+    <div className={clsx('md', styles.prose, className)}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} skipHtml>
         {source}
       </ReactMarkdown>

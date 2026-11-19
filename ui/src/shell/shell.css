@@ -96,3 +96,8 @@
     opacity: 0.14;
   }
 }
+
+/* #main takes focus from the skip link and after a route change; the region itself never shows a ring. */
+#main:focus {
+  outline: none;
+}

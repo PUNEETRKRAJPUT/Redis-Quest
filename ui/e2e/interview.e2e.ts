@@ -47,6 +47,10 @@ test('interview level: countdown, no teaching, a hint that costs XP, rebuilt in 
   page.on('pageerror', (e) => pageErrors.push(e.message));
 
   await page.goto('/');
+  // F-18: skip the opening scene; the name field takes focus.
+  await expect(page.getByTestId('welcome')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('player-name')).toBeFocused();
   await page.getByTestId('player-name').fill('Rhea Interview');
   await page.getByTestId('player-submit').click();
   await expect(page.getByTestId('chapter-map')).toBeVisible();
@@ -61,6 +65,7 @@ test('interview level: countdown, no teaching, a hint that costs XP, rebuilt in 
 
   // ---- open the interview level: the clock starts, the teaching is gone ---------------------------------------
   await page.goto(`/#/level/${IV}`);
+  await expect(page).toHaveURL(new RegExp(`/level/${IV}$`));
   await expect(page.getByTestId('level-screen')).toHaveAttribute('data-level', IV);
   await expect(page.getByTestId('level-status')).toHaveText(/in progress/);
   const countdown = page.getByTestId('countdown');
@@ -120,9 +125,11 @@ test('interview level: countdown, no teaching, a hint that costs XP, rebuilt in 
   await page.getByTestId('hint-confirm-yes').click();
   await expect(page.getByTestId('hint-0')).toBeVisible();
   await expect.poll(() => xpNow(page)).toBe(xpStart - 10);
-  await expect(
-    page.locator('strong', { hasText: new RegExp(`^${xpStart - 10} XP$`) }),
-  ).toBeVisible();
+  // F-17: the header's XP is the score plate now (flip digits), not a <strong>; its accessible name carries the total.
+  await expect(page.getByTestId('score-plate')).toHaveAttribute(
+    'aria-label',
+    new RegExp(`, ${xpStart - 10} XP\\.`),
+  );
   await expect(page.getByTestId('hints-bought')).toHaveText('Hints bought: 1');
   const afterHint = (await (await request.get('/api/progress')).json()) as {
     levels: Record<string, { hintsBought?: number; interviewStartedAt?: string }>;
@@ -151,11 +158,12 @@ test('interview level: countdown, no teaching, a hint that costs XP, rebuilt in 
   await expect(page.getByTestId('ideal-rebuild-link').first()).toBeVisible();
   await expect(page.getByTestId('ideal-rebuild-link').first().getByRole('link')).toHaveAttribute(
     'href',
-    `#/level/${GUIDED[0]}`,
+    `/level/${GUIDED[0]}`,
   );
 
   // "What you built" repeats the time.
   await page.goto('/#/built');
+  await expect(page).toHaveURL(/\/built$/);
   await expect(page.getByTestId(`built-rebuilt-${IV}`)).toHaveText(/^Rebuilt in \d+:\d\d\.$/);
 
   const done = (await (await request.get(`/api/levels/${IV}`)).json()) as {

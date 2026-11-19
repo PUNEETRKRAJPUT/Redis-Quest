@@ -123,7 +123,7 @@ export function Thread({
       data-testid="thread"
       data-state={r.playing ? 'playing' : 'revealed'}
       className={clsx(
-        'my-3 flex w-full max-w-[34rem] flex-col overflow-hidden rounded-xl border border-night-600 shadow-raise',
+        '@container my-3 flex w-full max-w-[34rem] flex-col overflow-hidden rounded-xl border border-night-600 shadow-raise',
         WALLPAPER,
         fill && 'h-full min-h-0',
         className,
@@ -131,8 +131,15 @@ export function Thread({
     >
       <header className="flex items-center gap-3 border-b border-night-600 bg-night-800/90 px-3 py-2.5">
         <div className="flex shrink-0 -space-x-2" aria-hidden="true">
-          {members.slice(0, 4).map((slug) => (
-            <span key={slug} className="rounded-full bg-night-800 ring-2 ring-night-800">
+          {members.slice(0, 4).map((slug, i) => (
+            // In a narrow pane (the level brief) two faces are enough; the title keeps the room.
+            <span
+              key={slug}
+              className={clsx(
+                'rounded-full bg-night-800 ring-2 ring-night-800',
+                i >= 2 && '@max-[26rem]:hidden',
+              )}
+            >
               <Avatar slug={slug} name={nameOf(slug)} />
             </span>
           ))}
@@ -175,12 +182,7 @@ export function Thread({
         className={clsx(SCROLL_AREA, 'relative px-3 py-3', fill && 'min-h-0 flex-1')}
         style={areaStyle}
       >
-        <ol
-          aria-label={label}
-          aria-live="polite"
-          aria-relevant="additions"
-          className={clsx(LIST_RESET, 'thread')}
-        >
+        <ol aria-label={label} aria-live="polite" aria-relevant="additions" className={LIST_RESET}>
           {visibleMessages.map((m, i) => (
             <MessageRow
               key={`${i}-${m.time}`}
