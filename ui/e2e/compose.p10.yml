@@ -5,7 +5,15 @@
 # QUEST_WORKSPACE_DIR, QUEST_PROGRESS_DIR and QUEST_LEVELS_DIR in .env.p10 (the base file reads those).
 # The scratch levels directory holds only levels/ch0-boot, so a half-written Chapter 1 cannot make the
 # engine answer levels_invalid.
+#
+# F-15: every Node service, ui included, runs the image tagged quest-p10-node, so this stack never builds, tags
+# or reuses the default redis-quest-node:latest (the owner's game).
+x-p10-node: &p10-node
+  image: quest-p10-node:latest
+
 services:
+  ui:
+    <<: *p10-node
   proxy:
     volumes:
       - ${P10_LOGS_DIR}:/logs
@@ -13,14 +21,17 @@ services:
     volumes:
       - ${P10_LOGS_DIR}:/logs
   engine:
+    <<: *p10-node
     volumes:
       - ${P10_LOGS_DIR}:/logs
   app:
+    <<: *p10-node
     volumes:
       - ${P10_LOGS_DIR}:/logs
       - ${QUEST_WORKSPACE_DIR}:/workspace
       - ${QUEST_PROGRESS_DIR}:/progress
   runner:
+    <<: *p10-node
     volumes:
       - ${P10_LOGS_DIR}:/logs
       - ${QUEST_WORKSPACE_DIR}:/workspace

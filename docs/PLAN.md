@@ -64,7 +64,7 @@ learner's laptop (macOS, Apple Silicon, 16 GB)
 
 **How the learner's code gets into the app.** Each code level names a *slot* (`cache.getPlayerStats`, `ratelimit.allow`, `queue.claim`). The app has a baseline implementation for every slot (the slow or naive path the incident is about). When `workspace/chNN/<slot>.js` exists and loads cleanly, the app uses it; the engine tells the app which slots are active for the current level. Files are watched with polling (bind mounts on macOS do not deliver reliable change events). The runner imports the same files for direct `behavior` tests. Learner files are plain JavaScript ES modules exporting one function that receives its dependencies (`{ redis, db, log }`) so they never write connection code, except in level 1.16 where that is the lesson.
 
-**Memory budget (Docker Desktop at 8 GB).** engine 512 MB · app 512 MB per instance · runner 512 MB · redis 512 MB `maxmemory` + overhead · postgres 1 GB (`shared_buffers` 256 MB) · insight 512 MB · caddy 64 MB. Chapter 5 profiles add: replica 256 MB, sentinels 3 × 64 MB, cluster 6 × 192 MB. Everything carries a `mem_limit`. Load generation runs 50 to 200 concurrent connections for 10 to 20 seconds; "40,000 users" is a data size, never a concurrency number. Preflight refuses to start if Docker has under 6 GB.
+**Memory budget (Docker Desktop at 8 GB).** engine 512 MB · app 512 MB per instance · runner 512 MB · ui 384 MB (the Next.js standalone server, `mem_limit` 384m) · redis 512 MB `maxmemory` + overhead · postgres 1 GB (`shared_buffers` 256 MB) · insight 512 MB · caddy 64 MB. Chapter 5 profiles add: replica 256 MB, sentinels 3 × 64 MB, cluster 6 × 192 MB. Everything carries a `mem_limit`. Load generation runs 50 to 200 concurrent connections for 10 to 20 seconds; "40,000 users" is a data size, never a concurrency number. Preflight refuses to start if Docker has under 6 GB.
 
 **Ports used (all bound to 127.0.0.1).** 3000 proxy · 5540 insight · 6379 redis · 5432 postgres · 6380 replica · 26379–26381 sentinels · 7100–7105 cluster. Avoided on purpose: 5000 and 7000 (AirPlay Receiver on macOS), 8080 (too common), 8001 (old Stack habit). Preflight checks every one with `lsof -nP -iTCP:<port> -sTCP:LISTEN` and names the process holding it, since a Homebrew `redis` or `postgresql` service is the usual culprit.
 
@@ -93,7 +93,7 @@ learner's laptop (macOS, Apple Silicon, 16 GB)
 - **Every pass has a "show me."** When a verifier passes, the feature they built appears live in the game world, backed by their keys. Build the leaderboard and the leaderboard panel lights up reading from their sorted set. A link opens the same key in RedisInsight.
 - **Port conflicts are expected.** Chapter 0 detects a 6379 already in use and lets them pick another port via `.env`.
 
-**Stack (proposed):** TypeScript everywhere except the learner's files, which are plain JavaScript ES modules. Node 22 on `node:22-bookworm-slim` (arm64). Fastify for the engine and the app, the official `redis` Node client (node-redis v5), `pg` for Postgres, autocannon for load, Caddy as the proxy, WebSocket for live events, React + Vite for the UI, xterm.js for the in-browser Redis CLI, Monaco for the code editor. Level content is data (YAML + Markdown), not code, so adding a chapter does not touch the engine.
+**Stack (proposed):** TypeScript everywhere except the learner's files, which are plain JavaScript ES modules. Node 22 on `node:22-bookworm-slim` (arm64). Fastify for the engine and the app, the official `redis` Node client (node-redis v5), `pg` for Postgres, autocannon for load, Caddy as the proxy, WebSocket for live events, Next.js 16 (React, App Router, standalone output served by its own `ui` compose service) for the UI, xterm.js for the in-browser Redis CLI, Monaco for the code editor. Level content is data (YAML + Markdown), not code, so adding a chapter does not touch the engine.
 
 ---
 
@@ -210,7 +210,7 @@ redis-quest/
 ├── logs/                      shared log volume tailed by the engine (gitignored)
 ├── engine/                    Fastify: levels API, verifier engine, CLI proxy, load generator, log tail, snapshots
 ├── app/                       Fastify: the pre-built fantasy-cricket backend (routes, db layer, slots, baselines)
-├── ui/                        React + Vite: world view, chapter map, terminal, editor, logs, "what you built"
+├── ui/                        Next.js (React): world view, chapter map, terminal, editor, logs, "what you built"
 ├── runner/                    executes workspace code against redis, returns results/metrics
 ├── postgres/                  Dockerfile, schema.sql, seed generator, outbox triggers
 ├── scenarios/                 load scenarios (YAML) used by traffic verifiers and chaos spikes

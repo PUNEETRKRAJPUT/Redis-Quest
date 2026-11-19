@@ -12,12 +12,14 @@ learner's Mac, nothing hosted. Fictional cricket league. No AI, vector or LLM co
 - **macOS on Apple Silicon only, 16 GB RAM minimum.** Every image `platform: linux/arm64`. Never
   `linux/amd64`. Scripts run under macOS: `#!/usr/bin/env bash` compatible with bash 3.2, or POSIX sh;
   BSD `sed -i ''`, no GNU-only flags, no associative arrays.
+- **UI:** `ui/` is a Next.js app served by the `ui` compose service (container port 3100, no host port);
+  Caddy routes `/api/*`, `/health`, `/ws`, `/internal/*` to the engine, `/app/*` to the app, the rest to `ui`.
 - **Ports (host side, all bound to 127.0.0.1):** 3000 proxy, 5540 insight, 6379 redis, 5432 postgres,
   6380 replica, 26379-26381 sentinels, 7100-7105 cluster. Never 5000, 7000 (AirPlay), 8080, 8001.
 - **Memory:** every compose service has `mem_limit`. Budget in PLAN.md section 2.
 - **No Docker socket** in any container. The engine never controls Docker; it instructs and detects.
 - **Stack:** Node 22 (`node:22-bookworm-slim`), TypeScript, pnpm workspace, Fastify, node-redis v5
-  (`redis` package), `pg`, autocannon, Caddy, React + Vite, xterm.js, Monaco. Learner files in
+  (`redis` package), `pg`, autocannon, Caddy, Next.js 16.4 (React, standalone server in its own `ui` service), xterm.js, Monaco. Learner files in
   `workspace/` are plain JavaScript ES modules exporting one function that receives `{ redis, db, log }`.
 - **Reserved Redis key prefix:** `game:*` belongs to the engine. Levels use their own prefixes.
 - **Images:** `redis:8`, `redis/redisinsight:latest`, `postgres:16`, `caddy:2-alpine`.

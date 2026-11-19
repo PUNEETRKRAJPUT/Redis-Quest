@@ -1,6 +1,11 @@
 # Host node_modules hold macOS symlinks into the pnpm store; the image installs its own.
 **/node_modules
 **/dist
+**/.next
+**/*.tsbuildinfo
+ui/e2e/.scratch
+ui/e2e/test-results
+ui/e2e/screenshots
 **/.tsbuildinfo
 .git
 .env

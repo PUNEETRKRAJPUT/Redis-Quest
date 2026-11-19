@@ -27,9 +27,20 @@
 		}
 	}
 
-	# Everything else, WebSocket upgrades included, goes to the single engine instance.
-	handle {
+	# The engine owns exactly these paths (engine/src/server.ts): /api/*, /health, /ws (WebSocket upgrade) and
+	# /internal/* (app-config and metrics; the app reaches them over the network, scripts/grade through here).
+	# One instance, so no balancing; flush_interval -1 keeps the WebSocket and long responses unbuffered.
+	@engine path /api /api/* /health /health/* /ws /ws/* /internal/*
+	handle @engine {
 		reverse_proxy engine:4200 {
+			flush_interval -1
+		}
+	}
+
+	# Everything else is a page, a `/_next/` asset or a Next.js data request: the ui service (container port 3100).
+	# While ui is still starting, or stopped, Caddy answers 502.
+	handle {
+		reverse_proxy ui:3100 {
 			flush_interval -1
 		}
 	}

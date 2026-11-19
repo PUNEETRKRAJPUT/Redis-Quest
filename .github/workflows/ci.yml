@@ -12,6 +12,10 @@ concurrency:
 permissions:
   contents: read
 
+# `pnpm -r build` runs `next build` for ui/: no telemetry from CI.
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
 jobs:
   # Proves build, lint, unit tests and level validation. Hosted runners are Linux amd64 and this project
   # pins linux/arm64 images, so nothing Docker-backed runs here (see .github/workflows/README.md).

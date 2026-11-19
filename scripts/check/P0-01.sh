@@ -36,7 +36,7 @@ done
 for d in levels scenarios workspace; do
   assert "README exists: $d/README.md" -f "$d/README.md"
 done
-assert "ui/dist/index.html produced" -f ui/dist/index.html
+assert "ui standalone server produced" -f ui/.next/standalone/ui/server.js
 assert "shared dist produced" -f packages/shared/dist/index.js
 # app and runner print their name and exit when PORT is unset; the engine always serves, so it only
 # gets a syntax check here (its behaviour is covered by scripts/check/P0-06.sh).

@@ -178,15 +178,16 @@ the ACL users.
 
 Everything is Docker Compose on your Mac; nothing is hosted and nothing phones home.
 
-| Service    | What it is                                                                                                                                 |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `proxy`    | Caddy on port 3000. `/app/*` is balanced per request across however many app instances exist; everything else goes to the engine.          |
-| `engine`   | The game: levels, your save file, the terminal, the verifier, the load generator (autocannon), the show-me reads, the portfolio. One copy. |
-| `app`      | The fantasy-cricket backend (Fastify, node-redis v5, pg). Your files are loaded into named slots while it serves. Scales to two or more.   |
-| `runner`   | Runs your function in a fresh Node child per job, with a time limit and a kill, so a loop that never ends cannot take the app down.        |
-| `redis`    | `redis:8` with persistence on; JSON, Search, TimeSeries and the probabilistic types are built in. Chapter 5 adds the profiles.             |
-| `postgres` | `postgres:16`, seeded with the league: users, teams, matches, balls, fantasy teams, contests, entries, wallets, and an outbox for changes. |
-| `insight`  | Redis Insight, provisioned to the game's Redis.                                                                                            |
+| Service    | What it is                                                                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `proxy`    | Caddy on port 3000. `/app/*` is balanced per request across however many app instances exist; the game's API and WebSocket go to the engine; the pages go to `ui`. |
+| `ui`       | The game's screens: a Next.js app, served from the same Node image. No host port; you reach it through port 3000.                                                  |
+| `engine`   | The game: levels, your save file, the terminal, the verifier, the load generator (autocannon), the show-me reads, the portfolio. One copy.                         |
+| `app`      | The fantasy-cricket backend (Fastify, node-redis v5, pg). Your files are loaded into named slots while it serves. Scales to two or more.                           |
+| `runner`   | Runs your function in a fresh Node child per job, with a time limit and a kill, so a loop that never ends cannot take the app down.                                |
+| `redis`    | `redis:8` with persistence on; JSON, Search, TimeSeries and the probabilistic types are built in. Chapter 5 adds the profiles.                                     |
+| `postgres` | `postgres:16`, seeded with the league: users, teams, matches, balls, fantasy teams, contests, entries, wallets, and an outbox for changes.                         |
+| `insight`  | Redis Insight, provisioned to the game's Redis.                                                                                                                    |
 
 Your code gets `{ redis, db, log }`: a counted, fail-fast node-redis client (two seconds, then an error you
 can catch), a Postgres query function, and a logger that lands in the Logs page. The same contract holds on

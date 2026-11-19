@@ -96,7 +96,7 @@ while [ $i -lt 90 ]; do
   i=$((i + 1)); sleep 2
 done
 if [ -n "$READY" ]; then ok "GET $BASE/health: $H"; else compose logs --tail 40 engine 2>&1 | tail -40; die "engine did not become healthy at $BASE/health (last: ${H:-nothing})"; fi
-case "$(curl -fsS --max-time 5 "$BASE/" 2>/dev/null)" in *'<div id="root">'*) ok "GET / serves the built UI";; *) die "GET / did not serve ui/dist/index.html";; esac
+case "$(curl -fsS --max-time 5 "$BASE/" 2>/dev/null)" in *'/_next/'*) ok "GET / serves the Next.js UI (ui service, HTML with /_next/ assets)";; *) die "GET / did not serve the Next.js UI from the ui service";; esac
 case "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "$BASE/api/progress")" in 404) ok "no player yet (fresh progress): GET /api/progress -> 404";; *) die "expected a fresh game (GET /api/progress -> 404)";; esac
 
 section "engine restart (stands in for the learner's docker compose down / ./scripts/start in level 5)"

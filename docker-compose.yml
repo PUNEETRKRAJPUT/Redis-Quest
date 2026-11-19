@@ -29,7 +29,7 @@ x-redis-cluster-node: &redis-cluster-node
   mem_limit: 192m
 
 services:
-  # No depends_on engine/app: until they exist the proxy answers 502, which is the expected state.
+  # No depends_on engine/app/ui: until they exist the proxy answers 502, which is the expected state.
   proxy:
     image: caddy:2-alpine
     platform: linux/arm64
@@ -76,6 +76,30 @@ services:
     command: ["node", "runner/dist/main.js"]
     environment: { <<: *node-env, PORT: "4100" }
     mem_limit: 512m
+
+  # The Next.js UI (F-15): the standalone server from the same image. No Redis or Postgres dependency on purpose,
+  # so the page stays up when the learner stops them. It has no `build:` of its own: `up --build` builds the image
+  # through engine, app and runner, and a check that overrides their image tag never rebuilds the default tag
+  # through this service. Every pages request reaches it through the proxy; the browser never gets a host port.
+  ui:
+    image: redis-quest-node:latest
+    platform: linux/arm64
+    pull_policy: never
+    command: ["node", "ui-standalone/ui/server.js"]
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3100"
+      NEXT_TELEMETRY_DISABLED: "1"
+      # Keeps the V8 heap well under mem_limit so a leak shows up as a Node error, not an OOM kill.
+      NODE_OPTIONS: --max-old-space-size=256
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    mem_limit: 384m
 
   redis:
     image: redis:8

@@ -79,7 +79,7 @@ say "docker, build @quest/shared, @quest/engine, @quest/ui (only the packages th
 if docker info >/dev/null 2>&1; then pass "docker is running"; else fail "docker is not running"; exit 1; fi
 if pnpm --filter @quest/shared build >/dev/null 2>&1; then pass "@quest/shared built"; else fail "@quest/shared build"; exit 1; fi
 if pnpm --filter @quest/engine build >/dev/null 2>&1; then pass "@quest/engine built"; else fail "@quest/engine build"; pnpm --filter @quest/engine build 2>&1 | tail -20; exit 1; fi
-if pnpm --filter @quest/ui build >/dev/null 2>&1; then pass "@quest/ui built (tsc --noEmit and vite build)"; else fail "@quest/ui build"; pnpm --filter @quest/ui build 2>&1 | tail -20; exit 1; fi
+if pnpm --filter @quest/ui build >/dev/null 2>&1; then pass "@quest/ui built (next build)"; else fail "@quest/ui build"; pnpm --filter @quest/ui build 2>&1 | tail -20; exit 1; fi
 if bash -n scripts/check/E-01.sh && node --check scripts/grade/grade.mjs; then pass "E-01.sh and grade.mjs parse"; else fail "syntax"; exit 1; fi
 
 say "engine vitest (scale emitter on a fake clock, slots route, 409 while verifying)"

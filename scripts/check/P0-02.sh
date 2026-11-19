@@ -69,7 +69,7 @@ if [ "$UID_OUT" != "0" ]; then ok "runs as non-root (uid $UID_OUT)"; else bad "i
 WD="$(docker run --rm "$NODE_IMG" pwd)"
 if [ "$WD" = "/srv" ]; then ok "WORKDIR /srv"; else bad "WORKDIR is $WD"; fi
 if docker run --rm "$NODE_IMG" sh -c 'test ! -e node_modules/typescript && test ! -e node_modules/vitest'; then ok "no dev dependencies (typescript, vitest) in runtime image"; else bad "dev dependencies leaked into runtime image"; fi
-if docker run --rm "$NODE_IMG" sh -c 'test -f ui/dist/index.html'; then ok "ui/dist/index.html present"; else bad "ui/dist missing"; fi
+if docker run --rm "$NODE_IMG" sh -c 'test -f ui-standalone/ui/server.js && test -d ui-standalone/ui/.next/static'; then ok "ui-standalone/ui/server.js and .next/static present"; else bad "ui-standalone missing"; fi
 
 section "docker compose up -d redis postgres insight proxy"
 if docker compose up -d redis postgres insight proxy 2>&1 | tail -n 12; then ok "services started"; else bad "up failed"; fi

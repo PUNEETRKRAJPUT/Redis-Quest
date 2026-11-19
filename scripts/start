@@ -37,20 +37,25 @@ wait_healthy() { # service
 wait_healthy redis || exit 1
 wait_healthy postgres || exit 1
 
-echo "Waiting up to 60 s for the game on http://localhost:${PROXY_PORT}/health ..."
-UP=0
+# Ready = the engine reports in through the proxy AND the Next.js UI answers 200 on / (ui is its own service).
+echo "Waiting up to 90 s for the engine (/health) and the UI (/) on http://localhost:${PROXY_PORT} ..."
+API_UP=0
+UI_UP=0
 i=0
-while [ "$i" -lt 30 ]; do
-  if curl -fs -o /dev/null "http://localhost:${PROXY_PORT}/health"; then UP=1; break; fi
+while [ "$i" -lt 45 ]; do
+  [ "$API_UP" -eq 1 ] || { curl -fs -o /dev/null "http://localhost:${PROXY_PORT}/health" && API_UP=1; }
+  [ "$UI_UP" -eq 1 ] || { [ "$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${PROXY_PORT}/")" = "200" ] && UI_UP=1; }
+  [ "$API_UP" -eq 1 ] && [ "$UI_UP" -eq 1 ] && break
   sleep 2; i=$((i + 1))
 done
 
 echo
-if [ "$UP" -eq 1 ]; then
+if [ "$API_UP" -eq 1 ] && [ "$UI_UP" -eq 1 ]; then
   echo "Game:           http://localhost:${PROXY_PORT}"
 else
-  echo "Game:           not up yet. The engine service is not built in this version of the repo,"
-  echo "                so http://localhost:${PROXY_PORT} answers 502 until it is. This is expected."
+  [ "$API_UP" -eq 1 ] || echo "Engine:         not answering on http://localhost:${PROXY_PORT}/health yet (docker compose logs engine)"
+  [ "$UI_UP" -eq 1 ] || echo "UI:             not answering on http://localhost:${PROXY_PORT}/ yet (docker compose logs ui)"
+  echo "Game:           http://localhost:${PROXY_PORT} may answer 502 for a little longer while the services start."
 fi
 echo "Redis Insight:  http://localhost:${INSIGHT_PORT}"
 echo "Redis:          127.0.0.1:${REDIS_PORT}    Postgres: 127.0.0.1:${PG_PORT} (user/password/db: quest)"
