@@ -79,7 +79,30 @@ start early if everything it depends on is `done`.
 | C-POL | The learner's README, tester docs on the current tag, follow-up questions on the nine chapter interviews (spec: specs/C-POL, handoff: handoffs/C-POL) | done (check 157 PASS; README with the eight-chapter table; tester docs on v1.0.0-rc2) |
 | T1 | Five-tester playtest, findings, fixes (guide: docs/TESTING.md, message: docs/TESTER-MESSAGE.md, now on tag v1.0.0-rc2, the whole game) | invite ready; send when you choose |
 
+## UI rebuild on Next.js (branch `ui-next`, started 2026-11-19)
+Puneet asked for the UI on Next.js with a far more interactive, game-like experience, and parked the 10-day
+open-source plan. Brief: `docs/design/EXPERIENCE.md` ("Night match"). Shared rules for the screen tasks:
+`specs/_wave2-common.md`. Work happens on `ui-next` against an isolated stack (`quest-dev`, proxy 3400) and a
+shared `next dev` on 3100; Puneet's own game (project `redis-quest`) is never touched. Merge to `main` only after
+the full local run is green.
+
+| ID | What | Status |
+|---|---|---|
+| F-14 | The UI runs on Next.js 16.4 App Router with full parity: eight real routes, GameShell, QuestLink, legacy hash redirect, Monaco through a Turbopack worker; the Vite app is removed (spec: specs/F-14, handoff: handoffs/F-14) | done (check: build lists the eight routes, lint, 106 tests) |
+| F-15 | The stack serves the Next.js UI from its own `ui` service (standalone server, 3100, 384m); Caddy routes pages to it; the engine is API-only (spec: specs/F-15, handoff: handoffs/F-15) | done in an isolated project (check green there; rerun by the orchestrator against the ported UI pending) |
+| F-16 | The "Night match" design system: tokens, self-hosted fonts, primitives, motion, synthesised sound, settings, the `/design` gallery (spec: specs/F-16, handoff: handoffs/F-16) | done (check 93 PASS) |
+| F-17 | Scoreboard shell: HUD, command palette, shortcuts, rain delay, event toasts, route transitions (spec: specs/F-17) | in progress |
+| F-18 | The first five minutes: opening scene, name form, kick-off (spec: specs/F-18) | in progress |
+| F-19 | Season map and caps shelf (spec: specs/F-19) | in progress |
+| F-20 | Live chat thread (spec: specs/F-20) | in progress |
+| F-21 | The level as a match view: resizable panes, decision pending, celebration (spec: specs/F-21) | in progress |
+| F-22 | A terminal that helps: completion and argument hints from the server's own command docs, send-to-terminal in lessons (spec: specs/F-22) | in progress |
+| F-23 | Show-me panels restyled and hands-on after a pass; the nets (spec: specs/F-23) | in progress |
+| F-24 | Tools pages and the career page (spec: specs/F-24) | in progress |
+| F-25 | Integration: e2e tests, UI checks, the legacy stylesheet removed, README images (spec: specs/F-25) | todo (after F-17 to F-24) |
+
 ## Decisions log (newest first)
+- 2026-11-19 The UI moves to Next.js 16.4 (App Router) as its own compose service; all game data stays client-side (static shells, Cache Components, Partial Prefetching, the experimental offline mode), so the build needs no stack and the page survives a stack that is down. Agents read the version-matched docs bundled in `ui/node_modules/next/dist/docs/` (ui/AGENTS.md). The root `.gitignore` rule `logs/` had to become `/logs/` (it hid the new `/logs` route folder). The game stays Apple Silicon Mac-only; the 10-day open-source plan is parked, not cancelled.
 - 2026-11-01 Tag v1.0.0-rc2: the polish backlog landed (five show-me panels and the impact log, follow-up questions on every interview level, the grader's ops mode, the learner README, tester docs on the tag). First time every level is machine-graded: G-01 in ops mode over eight chapters 315 PASS, 0 MISMATCH (the six skipped rows need a real outage or the cluster join and were played by hand). Full local run GREEN on 7dc6db5; CI green. Lessons: a topology reset after an ops level must keep the replica the next level starts from; a Sentinel left running demotes the returning master; count things by id, not by total, on a shared server; checks must follow the panels they assert.
 - 2026-11-01 Tag v1.0.0-rc1: the Finale complete; every planned chapter is built (8 chapters, 96 levels). G-01 green over all of them (300 PASS, 0 MISMATCH); full local run GREEN on 894c311; CI green. The mock interview draws per player with a blank start and backups; the portfolio page quotes only stored numbers. Lessons: CI must validate the chapters together (pools reference earlier chapters); a test that counts a shared server's connections must track its own ids; learner-facing text never names a build task. Next: a tester round on the full game, then the polish backlog.
 - 2026-11-01 Tag v0.5.0: Chapter 5 complete (14 levels; 89 levels in seven chapters). The game follows replica, sentinel and cluster targets end to end (engine, app, runner, terminal, verifier, UI switcher). G-01 green over seven chapters (263 PASS); full local run GREEN on 3e956f0. Lessons: the main redis must announce its hostname to Sentinel; node-redis follows a Sentinel failover only with a reconnect strategy that gives up; failback needs a 10 s settle after the rejoin; neither the sentinel nor the cluster client has WATCH; learner-facing text must never name a build task.
