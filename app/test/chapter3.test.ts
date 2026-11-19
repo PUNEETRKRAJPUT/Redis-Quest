@@ -563,12 +563,26 @@ describe('learner path with the reference fixtures', () => {
 
   test('a wrong return is a slot contract error (500, x-quest-slot-error)', async () => {
     mkdirSync(path.join(ws, 'ch3'), { recursive: true });
+    // An earlier test may have left contest.join loaded from its own file. The app swaps a changed file in on its
+    // next poll, so a request sent straight after the write can still run the old version (it answered 402 once,
+    // in a full local run under load). Wait until the slot reports a load newer than the one seen before the write.
+    const loadedAt = async (): Promise<string | undefined> => {
+      const s = await call('/app/slots');
+      return (s.body.slots as Array<{ name: string; loadedAt?: string }>).find(
+        (x) => x.name === 'contest.join',
+      )?.loadedAt;
+    };
+    const before = await loadedAt();
     // contest.join must say true or false
     const dest = path.join(ws, 'ch3', 'contest-join.js');
     writeFileSync(dest, 'export default async function join() { return 1; }\n');
     const t = new Date(Date.now() + 2000);
     utimesSync(dest, t, t);
     await setConfig(['contest.join']);
+    await waitFor('contest.join reloaded from the new file', async () => {
+      const now = await loadedAt();
+      return now !== undefined && now !== before;
+    });
     const r = await post('/app/contests/9001/join', { userId: 'u-a02-test' });
     expect(r.status).toBe(500);
     expect(r.body).toMatchObject({ error: 'slot_error', slot: 'contest.join' });
