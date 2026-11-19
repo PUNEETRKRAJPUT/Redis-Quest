@@ -27,7 +27,15 @@ const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_QUEST_WS_PORT: dev ? proxyPort : '' },
   turbopack: {
     root: repoRoot,
-    rules: { '*.css': { loaders: ['@tailwindcss/turbopack'], as: '*.css' } },
+    rules: {
+      // Tailwind runs on global stylesheets only. Without the condition this rule also catches `*.module.css`
+      // and re-types it as plain CSS, which silently turns CSS modules into global CSS (`styles.x` is undefined).
+      '*.css': {
+        condition: { not: { path: '*.module.css' } },
+        loaders: ['@tailwindcss/turbopack'],
+        as: '*.css',
+      },
+    },
   },
   async rewrites() {
     if (!dev) return [];
