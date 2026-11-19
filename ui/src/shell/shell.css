@@ -1,0 +1,98 @@
+/*
+ * Shell-only CSS: things Tailwind utilities cannot say. View-transition pseudo-elements and keyframes cannot be
+ * scoped by a CSS module, so they live in this plain file, imported once from the root layout.
+ * Every animation here carries `ds-still` in the markup (or is switched off below) under reduced motion.
+ */
+
+/* The sticky HUD, strip and banner. GameShell keeps this equal to their real height. */
+:root {
+  --hud-h: 56px;
+}
+
+/* ---- route cross-fade (React <ViewTransition> in GameShell; classes arrive via update={{ 'rq-nav': 'rq-fade' }}) ---- */
+::view-transition {
+  /* Clicks during the fade reach the live page (next/docs: view-transitions, "Keeping the page interactive"). */
+  pointer-events: none;
+}
+/* The HUD is identical before and after: the root snapshot must not cross-fade the whole window. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(.rq-fade) {
+  animation: none;
+}
+::view-transition-old(.rq-fade) {
+  animation: 140ms cubic-bezier(0.16, 1, 0.3, 1) both rq-vt-out;
+}
+::view-transition-new(.rq-fade) {
+  animation: 180ms cubic-bezier(0.16, 1, 0.3, 1) both rq-vt-in;
+}
+@keyframes rq-vt-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes rq-vt-out {
+  to {
+    opacity: 0;
+  }
+}
+:root[data-motion='reduce']::view-transition-old(.rq-fade),
+:root[data-motion='reduce']::view-transition-new(.rq-fade) {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion])::view-transition-old(.rq-fade),
+  :root:not([data-motion])::view-transition-new(.rq-fade) {
+    animation: none;
+  }
+}
+
+/* ---- rain: faint diagonal streaks falling behind the rain-delay strip and the offline screen ---- */
+.rq-rain {
+  position: absolute;
+  inset: -48px 0 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image: repeating-linear-gradient(
+    103deg,
+    transparent 0 26px,
+    rgb(169 180 204 / 0.1) 26px 27px,
+    transparent 27px 61px
+  );
+  mask-image: linear-gradient(180deg, transparent, #000 30%, #000 70%, transparent);
+  animation: rq-rain-fall 1.2s linear infinite;
+}
+@keyframes rq-rain-fall {
+  from {
+    transform: translate3d(0, -48px, 0);
+  }
+  to {
+    transform: translate3d(-12px, 0, 0);
+  }
+}
+
+/* ---- floodlight rig on the loading screen: lamps switch on one after another, hold, and start over ---- */
+.rq-lamp {
+  animation: rq-lamp-warm 3.6s linear infinite;
+  animation-delay: calc(var(--i) * 150ms);
+}
+@keyframes rq-lamp-warm {
+  0% {
+    opacity: 0.14;
+  }
+  7% {
+    opacity: 0.95;
+  }
+  10% {
+    opacity: 0.5;
+  }
+  16%,
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.14;
+  }
+}

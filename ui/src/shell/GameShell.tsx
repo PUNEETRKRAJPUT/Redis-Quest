@@ -1,131 +1,29 @@
 'use client';
 
-// What the Vite app's `App` did, mounted once from the root layout so it survives every client navigation: it
-// starts the store and the socket, shows the boot states, and around the page the header, the mirror banner and
-// the skip link. Pages are static shells; everything that needs the engine happens here or below, in the browser.
+// Mounted once from the root layout so it survives every client navigation. It starts the store and the socket,
+// shows the boot states, and around the page puts the scoreboard HUD, the rain-delay strip, the mirror banner,
+// the command palette, the shortcuts sheet and the event toasts. Pages are static shells; everything that needs
+// the engine happens here or below, in the browser.
 
-import { Suspense, useEffect, useState } from 'react';
+import { ViewTransition, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import {
-  IconBall,
-  IconCode,
-  IconLog,
-  IconMap,
-  IconPulse,
-  IconTerminal,
-  IconTrophy,
-} from '../icons';
-import { parseHash, parsePath, pathFor } from '../routes';
+import { AnimatePresence, motion } from 'motion/react';
+import { useRouter } from 'next/navigation';
+import { Kbd } from '@/design/components/controls';
+import { play } from '@/design/sound';
+import { parseHash, pathFor } from '../routes';
 import type { Route } from '../routes';
 import { Welcome } from '../screens/Welcome';
 import { useQuest } from '../store';
 import { startWs } from '../ws';
-import { QuestLink } from './QuestLink';
-
-const NAV: { route: Route; label: string; icon: typeof IconMap }[] = [
-  { route: { name: 'home' }, label: 'Map', icon: IconMap },
-  { route: { name: 'terminal' }, label: 'Terminal', icon: IconTerminal },
-  { route: { name: 'editor' }, label: 'Editor', icon: IconCode },
-  { route: { name: 'logs' }, label: 'Logs', icon: IconLog },
-  { route: { name: 'metrics' }, label: 'Metrics', icon: IconPulse },
-  { route: { name: 'built' }, label: 'What you built', icon: IconTrophy },
-];
-
-// usePathname suspends while prerendering a route whose params are only known at request time (/level/[id]), so
-// the links live in their own Suspense boundary; the fallback is the same links with none marked active.
-function NavLinks({ current }: { current: Route | null }) {
-  const active = (r: Route) =>
-    current !== null &&
-    (r.name === current.name || (r.name === 'home' && current.name === 'level'));
-  return (
-    <nav aria-label="Main">
-      {NAV.map((n) => {
-        const Icon = n.icon;
-        const on = active(n.route);
-        return (
-          <QuestLink
-            key={n.label}
-            to={n.route}
-            className={on ? 'nav active' : 'nav'}
-            aria-current={on ? 'page' : undefined}
-          >
-            <Icon size={16} /> <span>{n.label}</span>
-          </QuestLink>
-        );
-      })}
-    </nav>
-  );
-}
-
-function ActiveNav() {
-  const pathname = usePathname();
-  return <NavLinks current={parsePath(pathname ?? '/')} />;
-}
-
-function Header() {
-  const progress = useQuest((s) => s.progress);
-  const ws = useQuest((s) => s.wsState);
-  const redisUp = useQuest((s) => s.redisUp);
-  const live = ws === 'open' && redisUp !== false;
-  return (
-    <header className="topbar">
-      <QuestLink className="brand" to={{ name: 'home' }} aria-label="Redis Quest, home">
-        <IconBall size={22} /> <span>Redis Quest</span>
-      </QuestLink>
-      <Suspense fallback={<NavLinks current={null} />}>
-        <ActiveNav />
-      </Suspense>
-      <div className="status">
-        <span
-          className={live ? 'dot-live on' : 'dot-live'}
-          role="img"
-          aria-label={
-            live
-              ? 'Connected to the engine and Redis'
-              : ws !== 'open'
-                ? 'Reconnecting to the engine'
-                : 'Redis is down'
-          }
-        />
-        <span className="muted" data-testid="conn-state">
-          {ws !== 'open' ? 'reconnecting' : redisUp === false ? 'redis down' : 'live'}
-        </span>
-        {progress ? (
-          <span className="who-chip">
-            {progress.player.name} <strong>{progress.xp} XP</strong>
-          </span>
-        ) : null}
-      </div>
-    </header>
-  );
-}
-
-function MirrorBanner() {
-  const mirror = useQuest((s) => s.mirror);
-  const restore = useQuest((s) => s.restore);
-  const [busy, setBusy] = useState(false);
-  if (!mirror || mirror.redis !== 'up' || (mirror.present && mirror.inSync)) return null;
-  return (
-    <div className="banner warn" role="alert" data-testid="mirror-banner">
-      <span>
-        Your save file is missing from Redis (a FLUSHALL, or a fresh volume). Your progress is safe
-        in the progress file on your Mac.
-      </span>
-      <button
-        type="button"
-        className="btn small"
-        disabled={busy}
-        onClick={() => {
-          setBusy(true);
-          void restore().finally(() => setBusy(false));
-        }}
-      >
-        {busy ? 'Restoring...' : 'Restore my save file'}
-      </button>
-    </div>
-  );
-}
+import { BootInvalid, BootLoading, BootOffline } from './BootScreens';
+import { CommandPalette } from './CommandPalette';
+import { Hud, useModKey } from './Hud';
+import { MirrorBanner } from './MirrorBanner';
+import { RainDelayStrip } from './RainDelay';
+import { ShortcutsSheet } from './ShortcutsSheet';
+import { NAV } from './nav';
+import { useChromeHeight, useEventToasts, useShellKeys } from './useShellEffects';
 
 /**
  * Old bookmarks (`/#/level/x`, `/#/terminal`) land on the real route without adding a history entry, on load and
@@ -142,6 +40,100 @@ function useLegacyHashRedirect() {
     window.addEventListener('hashchange', follow);
     return () => window.removeEventListener('hashchange', follow);
   }, [router]);
+}
+
+/** After `g`: which letter goes where. Shown for a moment so the shortcut can be learned, not memorised. */
+function GoHint({ armed }: { armed: boolean }) {
+  return (
+    <AnimatePresence>
+      {armed && (
+        <motion.div
+          data-ds=""
+          aria-hidden
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="pointer-events-none fixed bottom-5 left-1/2 z-[65] flex -translate-x-1/2 items-center gap-3 rounded-full border border-night-600 bg-night-800/95 px-4 py-2 text-sm text-chalk-dim shadow-pop backdrop-blur"
+        >
+          <span className="label-caps text-md text-flood-400">Go to</span>
+          {NAV.map((n) => (
+            <span key={n.id} className="flex items-center gap-1.5">
+              <Kbd size="sm">{n.key.toUpperCase()}</Kbd>
+              {n.label}
+            </span>
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function ReadyShell({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const mod = useModKey();
+  const [palette, setPalette] = useState(false);
+  const [help, setHelp] = useState(false);
+  const chrome = useRef<HTMLDivElement>(null);
+  useChromeHeight(chrome);
+  useEventToasts();
+
+  // Link clicks and these navigations carry the same transition type, so only they cross-fade <main>.
+  const go = (route: Route) => router.push(pathFor(route), { transitionTypes: ['rq-nav'] });
+
+  const armed = useShellKeys({
+    onPalette: () => {
+      setHelp(false);
+      setPalette((o) => {
+        if (!o) play('tick');
+        return !o;
+      });
+    },
+    onHelp: () => setHelp(true),
+    onGo: (route) => {
+      play('tick');
+      go(route);
+    },
+  });
+
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <button
+        type="button"
+        data-ds=""
+        // Parked above the window until it takes focus (not `sr-only`: the legacy stylesheet's unlayered .sr-only wins).
+        className="fixed left-4 top-3 z-[80] -translate-y-[200%] rounded-md bg-flood-500 px-4 py-2 text-md font-semibold text-on-flood shadow-pop focus:translate-y-0"
+        onClick={() => document.getElementById('main')?.focus()}
+      >
+        Skip to content
+      </button>
+      <div ref={chrome} className="sticky top-0 z-40">
+        <Hud
+          mod={mod}
+          onPalette={() => {
+            play('tick');
+            setPalette(true);
+          }}
+          onShortcuts={() => setHelp(true)}
+        />
+        <RainDelayStrip />
+        <MirrorBanner />
+      </div>
+      <ViewTransition default="none" update={{ 'rq-nav': 'rq-fade', default: 'none' }}>
+        <div id="main" tabIndex={-1} className="min-h-0 flex-1 outline-none">
+          {children}
+        </div>
+      </ViewTransition>
+      <CommandPalette
+        open={palette}
+        onClose={() => setPalette(false)}
+        onShortcuts={() => setHelp(true)}
+        go={go}
+      />
+      <ShortcutsSheet open={help} onClose={() => setHelp(false)} mod={mod} />
+      <GoHint armed={armed} />
+    </div>
+  );
 }
 
 export function GameShell({ children }: { children: ReactNode }) {
@@ -164,52 +156,9 @@ export function GameShell({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [boot, init]);
 
-  if (boot === 'loading')
-    return (
-      <main className="page narrow">
-        <p className="muted">Starting...</p>
-      </main>
-    );
+  if (boot === 'loading') return <BootLoading />;
   if (boot === 'welcome') return <Welcome />;
-  if (boot === 'offline')
-    return (
-      <main className="page narrow" data-testid="offline">
-        <h1>The game engine is not answering</h1>
-        <p>{bootError}</p>
-        <p>
-          Start the stack from the repo folder with <code>./scripts/start</code>. This page keeps
-          trying and will continue on its own.
-        </p>
-      </main>
-    );
-  if (boot === 'invalid')
-    return (
-      <main className="page narrow" data-testid="levels-invalid">
-        <h1>The level files have errors</h1>
-        <p>The engine refuses to run until they are fixed:</p>
-        <ul className="errors">
-          {errors.map((e, i) => (
-            <li key={i}>
-              <code>{e}</code>
-            </li>
-          ))}
-        </ul>
-      </main>
-    );
-  return (
-    <>
-      <button
-        type="button"
-        className="skip"
-        onClick={() => document.getElementById('main')?.focus()}
-      >
-        Skip to content
-      </button>
-      <Header />
-      <MirrorBanner />
-      <div id="main" tabIndex={-1}>
-        {children}
-      </div>
-    </>
-  );
+  if (boot === 'offline') return <BootOffline error={bootError} />;
+  if (boot === 'invalid') return <BootInvalid errors={errors} />;
+  return <ReadyShell>{children}</ReadyShell>;
 }
