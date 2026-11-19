@@ -13,3 +13,5 @@ postgres/init/*.tmp
 !.env.example
 !docs/ci-local.log
 ui/e2e/test-results/
+.next/
+next-env.d.ts

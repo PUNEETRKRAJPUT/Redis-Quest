@@ -15,3 +15,5 @@ ui/e2e/screenshots/
 *.yml
 .github/
 ui/e2e/test-results/
+.next/
+next-env.d.ts
