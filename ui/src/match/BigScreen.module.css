@@ -1,0 +1,95 @@
+/* The stadium big screen: a dot-matrix face, a scan line, and the striped "decision pending" bar.
+   Only mounted under full motion (the match view skips the overlay under reduced motion). */
+
+.face {
+  background-color: var(--color-night-950);
+  background-image:
+    radial-gradient(rgb(255 255 255 / 0.055) 1px, transparent 1.4px),
+    radial-gradient(120% 80% at 50% 0%, rgb(255 154 31 / 0.12), transparent 65%);
+  background-size:
+    5px 5px,
+    100% 100%;
+}
+
+.scan {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 38%;
+  background: linear-gradient(180deg, transparent, rgb(255 179 71 / 0.09) 70%, transparent);
+  animation: scan 1.6s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes scan {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(270%);
+  }
+}
+
+.stripes {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-flood-500) 0 12px,
+    rgb(255 154 31 / 0.25) 12px 24px
+  );
+  background-size: 34px 34px;
+  animation: stripes 0.6s linear infinite;
+}
+
+@keyframes stripes {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 34px 0;
+  }
+}
+
+.flicker {
+  animation: flicker 1.1s steps(1, end) infinite;
+}
+
+@keyframes flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  46% {
+    opacity: 1;
+  }
+  48% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  84% {
+    opacity: 0.8;
+  }
+  86% {
+    opacity: 1;
+  }
+}
+
+.glowTurf {
+  text-shadow:
+    0 0 18px rgb(46 226 129 / 0.75),
+    0 0 60px rgb(46 226 129 / 0.35);
+}
+.glowFlood {
+  text-shadow:
+    0 0 18px rgb(255 154 31 / 0.75),
+    0 0 60px rgb(255 154 31 / 0.35);
+}
+.glowWicket {
+  text-shadow:
+    0 0 18px rgb(255 84 104 / 0.7),
+    0 0 60px rgb(255 84 104 / 0.3);
+}
+.glowSky {
+  text-shadow: 0 0 18px rgb(92 200 255 / 0.6);
+}

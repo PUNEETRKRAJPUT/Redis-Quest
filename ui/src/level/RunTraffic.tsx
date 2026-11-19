@@ -1,5 +1,7 @@
 // E-02: "Run traffic: <scenario> (10 s)". Puts the app under the level's scenario so a planted fault shows up in
 // INFO, SLOWLOG and CLIENT LIST. Nothing is graded; it shares the verifier's guard, so a 409 means wait.
+import { clsx } from 'clsx';
+import { Zap } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api';
 import type { LoadStartResponse, LoadStatus } from '../types';
@@ -70,24 +72,41 @@ export function RunTrafficView({
       ? TRAFFIC_BLOCKED_COPY
       : `Run traffic: ${scenario} (${TRAFFIC_SECONDS} s)`;
   return (
-    <div className="run-traffic" data-testid="run-traffic-box">
+    <div className="flex min-w-0 flex-col items-start gap-1" data-testid="run-traffic-box">
       <button
         type="button"
-        className="btn"
+        className={clsx(
+          'inline-flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-sm border px-3 text-sm font-semibold',
+          'transition-[background-color,border-color,color,box-shadow] duration-fast',
+          running
+            ? 'cursor-progress border-flood-500/60 bg-flood-500/15 text-flood-400'
+            : blocked
+              ? 'cursor-not-allowed border-night-600 text-chalk-faint'
+              : 'border-night-600 bg-night-900 text-chalk hover:border-flood-500/60 hover:bg-night-800',
+        )}
         disabled={running || blocked}
         onClick={onClick}
         data-testid="run-traffic"
         data-running={running ? 'true' : 'false'}
       >
-        {label}
+        <Zap
+          size={14}
+          aria-hidden
+          className={clsx(running ? 'ds-still animate-live text-flood-400' : 'text-flood-400')}
+        />
+        <span className="tabular">{label}</span>
       </button>
       {message ? (
-        <span className="run-traffic-msg" role="alert" data-testid="run-traffic-msg">
+        <span
+          className="text-sm font-medium text-wicket"
+          role="alert"
+          data-testid="run-traffic-msg"
+        >
           {message}
         </span>
       ) : null}
       {last ? (
-        <p className="run-traffic-last" data-testid="run-traffic-last">
+        <p className="m-0 font-mono text-xs text-chalk-dim" data-testid="run-traffic-last">
           Last run{last.scenario ? ` of ${last.scenario}` : ''}: {describeLast(last)}
         </p>
       ) : null}

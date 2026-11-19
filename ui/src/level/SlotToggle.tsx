@@ -1,5 +1,6 @@
 // E-01: "Run my code in the app". Without it a learner's code only ever runs in the verifier; with it the app's
 // own routes call it, on every app instance.
+import { clsx } from 'clsx';
 import { useState } from 'react';
 import { api, ApiError } from '../api';
 import type { LevelSlots } from '../types';
@@ -45,33 +46,61 @@ export function SlotToggleView({
   onClick?: () => void;
 }) {
   return (
-    <div className="slot-toggle" data-testid="slot-toggle-box">
-      <div className="slot-toggle-row">
+    <div className="flex min-w-0 flex-col gap-1" data-testid="slot-toggle-box">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <button
           type="button"
           role="switch"
           aria-checked={active}
           aria-describedby="slot-toggle-copy"
-          className={active ? 'switch on' : 'switch'}
+          className={clsx(
+            'group inline-flex cursor-pointer items-center gap-2.5 rounded-sm text-md font-semibold text-chalk',
+            'transition-colors duration-fast aria-busy:cursor-progress',
+            busy && 'cursor-progress opacity-60',
+          )}
           disabled={busy}
           onClick={onClick}
           data-testid="slot-toggle"
           data-active={active ? 'true' : 'false'}
         >
-          <span className="switch-knob" aria-hidden="true" />
+          <span
+            aria-hidden
+            className={clsx(
+              'relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full border p-[2px]',
+              'transition-[background-color,border-color,box-shadow] duration-base ease-out-expo',
+              active
+                ? 'border-turf/70 bg-turf/25 shadow-[0_0_12px_-2px_rgb(46_226_129/0.6)]'
+                : 'border-night-600 bg-night-800 group-hover:border-chalk-faint',
+            )}
+          >
+            <span
+              className={clsx(
+                'size-4 rounded-full shadow-raise transition-transform duration-base ease-out-expo',
+                active ? 'translate-x-4 bg-turf' : 'translate-x-0 bg-chalk-dim',
+              )}
+            />
+          </span>
           <span>{SLOT_TOGGLE_LABEL}</span>
         </button>
         {message ? (
-          <span className="slot-toggle-msg" role="alert" data-testid="slot-toggle-msg">
+          <span
+            className="text-sm font-medium text-flood-400"
+            role="alert"
+            data-testid="slot-toggle-msg"
+          >
             {message}
           </span>
         ) : null}
       </div>
-      <p id="slot-toggle-copy" className="slot-toggle-copy" data-testid="slot-toggle-copy">
+      <p
+        id="slot-toggle-copy"
+        className={clsx('m-0 text-sm leading-snug', active ? 'text-turf' : 'text-chalk-dim')}
+        data-testid="slot-toggle-copy"
+      >
         {active ? SLOT_ON_COPY : SLOT_OFF_COPY}
       </p>
-      <p className="slot-toggle-note">
-        <small>{SLOT_LOOP_NOTE}</small>
+      <p className="m-0 text-xs leading-snug text-chalk-dim">
+        <small className="text-xs">{SLOT_LOOP_NOTE}</small>
       </p>
     </div>
   );

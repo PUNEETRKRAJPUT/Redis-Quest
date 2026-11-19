@@ -1,4 +1,6 @@
 // F-12: the interview-mode pieces of a level screen: the countdown, the hint-cost prompt copy, "rebuilt in".
+import { clsx } from 'clsx';
+import { Timer } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { QuestLink } from '../shell/QuestLink';
 import type { InterviewInfo, LevelData } from '../types';
@@ -67,7 +69,32 @@ export function hintButtonLabel(cost: number, shown: number, total: number): str
   return `Show a hint (${price}) (${shown} of ${total})`;
 }
 
-/** The countdown in the level header. Ticks once a second from the server's snapshot; stops when passed. */
+/** The match clock turns amber in the last fifth of the time and red in overtime. */
+export type ClockTone = 'waiting' | 'calm' | 'late' | 'over' | 'done';
+
+export function clockTone(
+  iv: InterviewInfo,
+  remainingMs: number | null,
+  passed: boolean,
+  since: number,
+): ClockTone {
+  const v = clockView(iv, remainingMs, passed, since);
+  if (v.state === 'done') return 'done';
+  if (v.state === 'waiting' || remainingMs === null) return 'waiting';
+  if (v.state === 'overtime') return 'over';
+  const left = signedRemaining(remainingMs, iv.overtimeMs, since);
+  return left <= iv.minutes * 60_000 * 0.2 ? 'late' : 'calm';
+}
+
+const CLOCK_TONE: Record<ClockTone, string> = {
+  waiting: 'border-night-600 text-chalk-dim',
+  calm: 'border-night-600 text-chalk',
+  late: 'border-flood-500/70 text-flood-400 shadow-[0_0_18px_-4px_rgb(255_154_31/0.7)]',
+  over: 'border-wicket/70 text-wicket shadow-[0_0_18px_-4px_rgb(255_84_104/0.7)]',
+  done: 'border-turf/50 text-turf',
+};
+
+/** The countdown in the level header: a match clock. Ticks once a second from the server's snapshot; stops when passed. */
 export function Countdown({ level }: { level: LevelData }) {
   const iv = level.interview;
   // A fresh answer from the engine re-anchors the local clock (the engine's clock is the one that counts).
@@ -81,9 +108,26 @@ export function Countdown({ level }: { level: LevelData }) {
     return () => clearInterval(t);
   }, [iv, passed]);
   if (!iv) return null;
-  const v = clockView(iv, level.remainingMs, passed, performance.now() - anchor);
+  const since = performance.now() - anchor;
+  const v = clockView(iv, level.remainingMs, passed, since);
+  const tone = clockTone(iv, level.remainingMs, passed, since);
   return (
-    <p className={`countdown ${v.state}`} data-testid="countdown" data-state={v.state} role="timer">
+    <p
+      className={clsx(
+        'm-0 inline-flex h-10 items-center gap-2 rounded-md border bg-night-950/80 px-3 font-display text-xl font-bold uppercase leading-none tracking-[0.03em] tabular',
+        'transition-[color,border-color,box-shadow] duration-slow',
+        CLOCK_TONE[tone],
+      )}
+      data-testid="countdown"
+      data-state={v.state}
+      data-tone={tone}
+      role="timer"
+    >
+      <Timer
+        size={16}
+        aria-hidden
+        className={clsx('shrink-0', tone === 'over' && 'ds-still animate-live')}
+      />
       <span className="sr-only">Interview clock: </span>
       {v.text}
       {v.state === 'overtime' ? (
@@ -104,17 +148,22 @@ export function DrawnNotice({ interview }: { interview: InterviewInfo }) {
   if (!interview.pool || !drawn) return null;
   const blanked = interview.blanked ?? [];
   return (
-    <div className="callout" data-testid="drawn-notice">
-      <p>
-        The interviewer picked: <strong>{drawn.title}</strong> ({drawn.chapterTitle}).
+    <div
+      className="mb-4 rounded-md border border-cap-purple/40 bg-cap-purple/[0.07] px-4 py-3 text-md leading-relaxed text-chalk"
+      data-testid="drawn-notice"
+    >
+      <p className="m-0">
+        The interviewer picked: <strong className="text-cap-purple">{drawn.title}</strong> (
+        {drawn.chapterTitle}).
       </p>
       {blanked.length > 0 ? (
-        <p data-testid="blanked-note">
+        <p className="mb-0 mt-1.5 text-sm text-chalk-dim" data-testid="blanked-note">
           The file starts blank.{' '}
           {blanked.map((b, i) => (
             <span key={b.file}>
-              {i ? ' ' : ''}Your earlier <code>workspace/{b.file}</code> is at{' '}
-              <code>workspace/{b.backup}</code>.
+              {i ? ' ' : ''}Your earlier{' '}
+              <code className="font-mono text-chalk">workspace/{b.file}</code> is at{' '}
+              <code className="font-mono text-chalk">workspace/{b.backup}</code>.
             </span>
           ))}
         </p>
@@ -127,9 +176,12 @@ export function DrawnNotice({ interview }: { interview: InterviewInfo }) {
 export function RebuildLink({ interview }: { interview: InterviewInfo }) {
   if (!interview.rebuildOf) return null;
   return (
-    <p data-testid="ideal-rebuild-link">
+    <p className="mt-0 text-md leading-relaxed text-chalk-dim" data-testid="ideal-rebuild-link">
       This level rebuilds{' '}
-      <QuestLink to={{ name: 'level', id: interview.rebuildOf.id }}>
+      <QuestLink
+        to={{ name: 'level', id: interview.rebuildOf.id }}
+        className="font-medium text-sky underline decoration-sky/40 underline-offset-2 hover:decoration-sky"
+      >
         {interview.rebuildOf.title ?? interview.rebuildOf.id}
       </QuestLink>
       . That level&apos;s ideal-way beat holds its reference solution and the wrong ones.
