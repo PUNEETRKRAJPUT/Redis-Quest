@@ -17,3 +17,6 @@ ui/e2e/test-results/
 next-env.d.ts
 *.tsbuildinfo
 scripts/check/.scratch/
+
+# D-10: the generated docs site
+/site/
