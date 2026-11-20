@@ -1,0 +1,20 @@
+id: celebrity-walks-in
+title: "The star batter walks out to bat"
+sees: |
+  Everyone opens the same player page at once: one hundred fans, one key. Whatever your code does about a hot key,
+  now is when it is tested.
+cause:
+  summary: |
+    The engine switches this over's traffic to the `celebrity-100` scenario: every request is
+    `GET /app/players/p-028/stats`, with no warmup, so a cold key meets the whole crowd at once.
+  steps:
+    - kind: switch_scenario
+      scenario: celebrity-100
+ends: |
+  When the over ends. The next over goes back to its own scenario. Nothing in Redis is changed by this card.
+facts:
+  - text: "The scenario sends every request to one player's stats page; the game picks fewer connections than the scenario file's 100 for an over, so a small machine is not drowned."
+    source: simulation
+  - text: "A cache that is empty for one key meets the whole crowd on that key at the same time; the cache-aside page names a lock with a single winner as one answer, and probabilistic early refresh as another."
+    source: digest
+    ref: "https://redis.io/docs/latest/develop/use-cases/cache-aside"

@@ -1,0 +1,24 @@
+id: cache-wiped
+title: "The groundsman sweeps the cache"
+sees: |
+  Between overs the groundsman swept the ground and, by mistake, your cache with it. Every player page is cold at the
+  same moment, so the next ten seconds start with a crowd asking Postgres for what Redis held a minute ago.
+cause:
+  summary: |
+    Just before the over the engine deletes every key whose name starts with `cache:player:` or `cache:match:`, a
+    page at a time, then runs the over's traffic as usual. Nothing else is deleted.
+  steps:
+    - kind: delete_keys
+      prefixes: ["cache:player:", "cache:match:"]
+ends: |
+  When the over ends. The deleted keys are not put back: they are cache entries, and your own code rebuilds them as
+  the traffic asks for them. Keys under any other prefix, and everything under `game:`, are never touched.
+facts:
+  - text: "SCAN walks the keyspace a page at a time and is safe to run on a live server; KEYS blocks the server, which is why the engine uses SCAN."
+    source: digest
+    ref: "https://redis.io/docs/latest/develop/using-commands/keyspace/"
+  - text: "Cache-aside deletes the cache key on a write and lets the next read refill it from the primary database; a refill under a crowd is what a stampede is."
+    source: digest
+    ref: "https://redis.io/docs/latest/develop/use-cases/cache-aside"
+  - text: "How many keys the sweep removed is counted by the engine and shown in the war room; how slow the cold start is depends on your build and this machine."
+    source: simulation

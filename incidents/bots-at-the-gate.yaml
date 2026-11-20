@@ -1,0 +1,20 @@
+id: bots-at-the-gate
+title: "Bots at the gate"
+sees: |
+  A scraper is asking for a player page that does not exist, over and over, as fast as it can. Nobody real is
+  affected yet, but every one of those requests costs your build something.
+cause:
+  summary: |
+    The engine switches this over's traffic to the `bad-id-hammer` scenario: every request is
+    `GET /app/players/p-999/stats`, an id that is not a player.
+  steps:
+    - kind: switch_scenario
+      scenario: bad-id-hammer
+ends: |
+  When the over ends. The next over goes back to its own scenario. Nothing in Redis is changed by this card.
+facts:
+  - text: "A 404 is an answer, not an error, so a build that answers the bots quickly keeps its runs; a build that asks Postgres every time may lose its 99th percentile instead."
+    source: simulation
+  - text: "The cache-aside page advises caching a not-found result with a shorter TTL than a real entry."
+    source: digest
+    ref: "https://redis.io/docs/latest/develop/use-cases/cache-aside"

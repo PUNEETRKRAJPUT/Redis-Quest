@@ -1,0 +1,26 @@
+id: the-box-is-full
+title: "The box is full"
+sees: |
+  The scorer's laptop ran out of room: Redis has a ceiling now, and it is only just above what it holds. Reads still
+  work. Writes that add data may start to fail.
+cause:
+  summary: |
+    Just before the over the engine reads `maxmemory` and `maxmemory-policy`, then sets `maxmemory` to the memory
+    Redis uses at that moment plus a little headroom. The old value is written to a file first and set back when the
+    over ends. The card is played only when the policy is `noeviction`; with any other policy the engine skips it and
+    says so, because eviction could remove keys that are not caches.
+  steps:
+    - kind: lower_maxmemory
+      headroomKb: 256
+ends: |
+  When the over ends, or when the match ends for any reason, `maxmemory` is set back to the value it had before. If
+  the engine itself is cut off, it sets it back the next time it connects to Redis.
+facts:
+  - text: "When maxmemory is reached Redis replies with an error to write commands and keeps accepting read-only commands (policy noeviction); other policies evict keys instead."
+    source: digest
+    ref: "https://redis.io/docs/latest/develop/reference/eviction/"
+  - text: "maxmemory 0 means no limit, the default on 64-bit systems; the engine restores whatever value it read, 0 included."
+    source: digest
+    ref: "https://redis.io/docs/latest/develop/reference/eviction/"
+  - text: "Headroom of 256 KiB is a number the game chose so that writes start to fail within the over; it is not a Redis default."
+    source: simulation
