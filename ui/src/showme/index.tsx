@@ -179,7 +179,7 @@ function BitmapStreak({ k, days = 30 }: { k: string; days?: number }) {
   if (!b.reply) return <Loading error={b.error} />;
   const all = asList(b.reply).map((x) => (asNumber(x) === 1 ? 1 : 0));
   const last = all.lastIndexOf(1);
-  return <BitmapStreakView name={k} bits={last < 0 ? all : all.slice(0, last + 1)} />;
+  return <BitmapStreakView name={k} bits={last < 0 ? all : all.slice(0, last + 1)} days={days} />;
 }
 function HllCounter({ k }: { k: string }) {
   const c = useRedis(['PFCOUNT', k]);
@@ -464,7 +464,7 @@ function KeyPicker({ id, onPick }: { id: string; onPick: (k: string) => void }) 
   );
 }
 
-/** The panels with direct manipulation in hands-on mode; the other thirteen only read. */
+/** The panels with direct manipulation in hands-on mode; the other six only read and say why on the panel. */
 export const HANDS_ON_IDS: readonly ShowMeId[] = [
   'kv_card',
   'hash_card',
@@ -472,6 +472,13 @@ export const HANDS_ON_IDS: readonly ShowMeId[] = [
   'set_chips',
   'leaderboard_panel',
   'ttl_timer',
+  'stream_log',
+  'json_tree',
+  'bitmap_streak',
+  'hll_counter',
+  'geo_map',
+  'bf_card',
+  'ts_chart',
 ];
 
 /** Gives one rendered panel its hands-on state: its own "ran:" line, and the engine-key lock. */
@@ -554,7 +561,7 @@ export function ShowMe({
 }: {
   spec: ShowMeSpec;
   playerId: string;
-  /** Hands-on mode: six panels can be manipulated and show the command they ran; the rest only read. */
+  /** Hands-on mode: thirteen panels can be manipulated and show the command they ran; the rest only read. */
   interactive?: boolean;
 }): ReactNode {
   const [picked, setPicked] = useState<string | null>(null);

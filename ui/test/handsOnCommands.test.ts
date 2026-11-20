@@ -13,8 +13,10 @@ import {
   formatCommand,
   isEngineKey,
   clampLonLat,
+  isJsonText,
   mapToLonLat,
   nextTtlTotal,
+  parseDayOffset,
   parseNumber,
   parseSeconds,
   plainError,
@@ -229,7 +231,7 @@ test('the new commands round-trip through the engine parser for every awkward va
     }
   }
   // a JSON document with quotes and spaces survives as one argument
-  const doc = '{"name": "Asha \"the wall\"", "tags": ["a b"]}';
+  const doc = JSON.stringify({ name: 'Asha "the wall"', tags: ['a b'] }, null, 1);
   expect(splitArgs(formatCommand(cmd.jsonSet('practice:json', '$', doc)))).toEqual([
     'JSON.SET',
     'practice:json',
@@ -309,4 +311,20 @@ test('clampLonLat keeps a point inside what GEOADD accepts and rounds to 5 decim
   expect(clampLonLat(200, 90)).toEqual({ lon: 180, lat: 85.05113 });
   expect(clampLonLat(-200, -90)).toEqual({ lon: -180, lat: -85.05113 });
   expect(clampLonLat(73.8612345678, 18.5)).toEqual({ lon: 73.86123, lat: 18.5 });
+});
+
+test('parseDayOffset reads a whole day inside the grid, blank meaning the next day', () => {
+  expect(parseDayOffset('', 30, 11)).toBe(11);
+  expect(parseDayOffset(' 4 ', 30, 11)).toBe(4);
+  expect(parseDayOffset('', 30, 30)).toBeNull();
+  expect(parseDayOffset('30', 30, 0)).toBeNull();
+  expect(parseDayOffset('29', 30, 0)).toBe(29);
+  for (const bad of ['-1', '1.5', 'x']) expect(parseDayOffset(bad, 30, 0)).toBeNull();
+});
+
+test('isJsonText wants a complete JSON value, so a bare word is not one', () => {
+  for (const ok of ['600', '-1.5', '"Asha"', 'true', 'null', '[1, 2]', '{"a": {"b": 1}}', ' 7 '])
+    expect(isJsonText(ok)).toBe(true);
+  for (const bad of ['', '  ', 'Asha', "'x'", '{a: 1}', '[1,', '1 2'])
+    expect(isJsonText(bad)).toBe(false);
 });

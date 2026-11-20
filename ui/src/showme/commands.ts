@@ -139,6 +139,26 @@ export function parseNumber(text: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** True when the text is one complete JSON value (`600`, `"Asha"`, `{"a":1}`); a bare word like Asha is not. */
+export function isJsonText(text: string): boolean {
+  if (text.trim() === '') return false;
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A whole day offset from a text box, 0..max-1; blank text means `fallback`; null when it is not valid. */
+export function parseDayOffset(text: string, max: number, fallback: number): number | null {
+  const t = text.trim();
+  if (t === '') return fallback >= 0 && fallback < max ? fallback : null;
+  if (!/^\d+$/.test(t)) return null;
+  const n = Number(t);
+  return n < max ? n : null;
+}
+
 /** GEOADD's accepted ranges (longitude -180..180, latitude about -85.05..85.05); not in the docs digest. */
 export const GEO_LAT_LIMIT = 85.05112878;
 
