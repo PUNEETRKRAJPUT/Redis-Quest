@@ -1,0 +1,78 @@
+name: pages
+
+# Builds the docs site (scripts/site/build.mjs) on every push to main, as a check that it still builds.
+# It is published to GitHub Pages only when the repository variable PAGES_ENABLED is "true". The owner sets that
+# after turning Pages on (Settings, Pages, Source: GitHub Actions); see docs/launch/CHECKLIST.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      # pnpm version comes from "packageManager" in package.json.
+      - name: Enable corepack
+        run: corepack enable
+
+      # The site reads the levels with the shared package's own loader, so only that package is installed.
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @quest/shared
+
+      - name: Build the shared package
+        run: pnpm --filter @quest/shared build
+
+      - name: Build the site
+        run: node scripts/site/build.mjs
+
+      - name: Check the site has its pages and loads nothing from another site
+        run: |
+          set -eu
+          for f in index levels commands grading contribute; do
+            test -s "site/$f.html" || { echo "site/$f.html is missing or empty"; exit 1; }
+          done
+          test -s site/style.css
+          if grep -E 'src="https?:|<link[^>]*href="https?:|url\(https?:|@import' site/*.html site/style.css; then
+            echo "the site references another origin"
+            exit 1
+          fi
+          echo "site ok"
+
+      # Only prepare the Pages artifact when publishing is switched on.
+      - name: Upload the site
+        if: github.ref == 'refs/heads/main' && vars.PAGES_ENABLED == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && vars.PAGES_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
