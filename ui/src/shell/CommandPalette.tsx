@@ -12,6 +12,7 @@ import {
   CircleDot,
   Keyboard,
   Lock,
+  Mic,
   Search,
   Volume2,
   VolumeX,
@@ -24,6 +25,7 @@ import { useReducedMotion } from '@/design/motion';
 import { useSettings } from '@/design/settings';
 import { play } from '@/design/sound';
 import { toast } from '@/design/toast';
+import { COMMENTARY_LABEL, nextCommentary } from '../commentary/lines';
 import type { Route } from '../routes';
 import { useQuest } from '../store';
 import type { LevelStatus } from '../types';
@@ -88,6 +90,8 @@ export function CommandPalette({
   const sound = useSettings((s) => s.sound);
   const toggleSound = useSettings((s) => s.toggleSound);
   const setReducedMotion = useSettings((s) => s.setReducedMotion);
+  const commentary = useSettings((s) => s.commentary);
+  const setCommentary = useSettings((s) => s.setCommentary);
   const reduced = useReducedMotion();
 
   useEffect(() => {
@@ -223,6 +227,20 @@ export function CommandPalette({
             >
               <Row icon={Wind} hint={reduced ? 'On' : 'Off'}>
                 Toggle reduced motion
+              </Row>
+            </Command.Item>
+            <Command.Item
+              value="commentary"
+              keywords={['cricket', 'language', 'hinglish', 'english', 'flavour', 'lines']}
+              onSelect={run(() => {
+                const next = nextCommentary(useSettings.getState().commentary);
+                setCommentary(next);
+                toast({ title: `Commentary: ${COMMENTARY_LABEL[next]}`, duration: 1800 });
+              })}
+              className={ITEM}
+            >
+              <Row icon={Mic} hint={COMMENTARY_LABEL[commentary]}>
+                Change commentary (Hinglish, English, off)
               </Row>
             </Command.Item>
             <Command.Item

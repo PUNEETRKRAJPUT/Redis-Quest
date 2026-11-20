@@ -56,12 +56,31 @@ test('settings: defaults, persistence, clamping and rehydration from storage', a
   store.getState().setReducedMotion('on');
   expect(store.getState()).toMatchObject({ sound: true, volume: 1, reducedMotion: 'on' });
   const saved = JSON.parse(mem.data.get(SETTINGS_KEY) ?? '{}');
-  expect(saved.state).toEqual({ sound: true, volume: 1, reducedMotion: 'on' });
+  expect(saved.state).toEqual({
+    sound: true,
+    volume: 1,
+    reducedMotion: 'on',
+    commentary: 'hinglish',
+  });
 
   const again = createSettingsStore(() => mem);
   expect(again.getState().sound).toBe(false); // skipHydration: server and first client render agree
   await again.persist.rehydrate();
   expect(again.getState()).toMatchObject({ sound: true, volume: 1, reducedMotion: 'on' });
+});
+
+test('settings: the commentary setting persists, and a bad value falls back to the default', async () => {
+  const mem = memoryStorage();
+  const store = createSettingsStore(() => mem);
+  expect(store.getState().commentary).toBe('hinglish');
+  store.getState().setCommentary('off');
+  const again = createSettingsStore(() => mem);
+  await again.persist.rehydrate();
+  expect(again.getState().commentary).toBe('off');
+  mem.data.set(SETTINGS_KEY, JSON.stringify({ state: { commentary: 'klingon' }, version: 1 }));
+  const bad = createSettingsStore(() => mem);
+  await bad.persist.rehydrate();
+  expect(bad.getState().commentary).toBe('hinglish');
 });
 
 test('settings: garbage in storage falls back to defaults', async () => {

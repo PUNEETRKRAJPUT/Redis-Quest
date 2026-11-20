@@ -5,6 +5,8 @@
 import { clsx } from 'clsx';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
+import { momentForVerdict } from '../commentary/lines';
+import { useCommentaryLine } from '../commentary/useCommentary';
 import { EASE_OUT, SPRING } from '../design';
 import type { Verdict } from '../types';
 import styles from './BigScreen.module.css';
@@ -74,6 +76,8 @@ export function BigScreen({
   }, [phase]);
 
   const look = verdict ? BIG_SCREEN[verdict] : null;
+  // D-02: a line of commentary under the plain flavour line, only while the decision is on screen.
+  const commentary = useCommentaryLine(phase === 'verdict' ? momentForVerdict(verdict) : null);
   const dock = docked && phase === 'pending';
   return (
     <AnimatePresence>
@@ -191,6 +195,14 @@ export function BigScreen({
                       <p className="mb-0 mt-4 font-display text-xl font-semibold uppercase tracking-[0.06em] text-chalk">
                         {look.flavour}
                       </p>
+                      {commentary ? (
+                        <p
+                          className="mb-0 mt-2 text-md italic text-chalk-dim"
+                          data-testid="commentary"
+                        >
+                          {commentary}
+                        </p>
+                      ) : null}
                       {verdict === 'right' && xp ? (
                         <motion.p
                           className="mb-0 mt-3 font-display text-2xl font-bold text-flood-400 tabular"

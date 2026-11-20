@@ -1,6 +1,9 @@
 // Turns engine events into one-line toasts, and keeps a burst of the same event from becoming a storm.
+import { useSettings } from '@/design/settings';
 import type { Cue } from '@/design/sound';
 import type { ToastTone } from '@/design/toast';
+import { commentaryLine } from '../commentary/pick';
+import type { Moment } from '../commentary/lines';
 import type { LevelEventMsg } from '../types';
 
 export interface ToastSpec {
@@ -10,6 +13,11 @@ export interface ToastSpec {
   description?: string;
   tone: ToastTone;
   cue?: Cue;
+}
+
+/** A commentary line for `moment` in the player's language, or undefined when they turned commentary off. */
+function aside(moment: Moment): string | undefined {
+  return commentaryLine(useSettings.getState().commentary, moment) ?? undefined;
 }
 
 /** "cache_warmed" becomes "Cache warmed". */
@@ -30,10 +38,20 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 export function describeEvent(e: Pick<LevelEventMsg, 'kind' | 'name' | 'data'>): ToastSpec | null {
   const d = asObj(e.data);
   switch (e.kind) {
-    // The rain-delay strip already says when Redis goes and comes back.
+    // The rain-delay strip already says in plain words when Redis goes and comes back. A toast adds only the
+    // commentary line, so with commentary off nothing shows, as before.
     case 'redis_disconnect':
-    case 'redis_reconnect':
-      return null;
+    case 'redis_reconnect': {
+      const down = e.kind === 'redis_disconnect';
+      const line = aside(down ? 'stack_down' : 'stack_back');
+      if (!line) return null;
+      return {
+        key: e.kind,
+        title: down ? 'Redis went away' : 'Redis is back',
+        description: line,
+        tone: down ? 'warn' : 'success',
+      };
+    }
     case 'service_scaled': {
       const n = typeof d.instances === 'number' ? d.instances : null;
       if (n === null) return { key: 'service_scaled', title: 'The app was scaled', tone: 'info' };
@@ -99,10 +117,13 @@ const DANGER_NOTE: Record<string, string> = {
 /** The warning for a command the engine flagged as dangerous. */
 export function describeDanger(command: string): ToastSpec {
   const c = command.toUpperCase();
+  const plain = DANGER_NOTE[c] ?? 'That command can hurt a real system.';
+  const line = aside('dangerous');
   return {
     key: `danger:${c}`,
     title: `${c} just ran`,
-    description: DANGER_NOTE[c] ?? 'That command can hurt a real system.',
+    // The plain note first and whole; the commentary line is only ever added after it.
+    description: line ? `${plain} ${line}` : plain,
     tone: 'warn',
     cue: 'pager',
   };

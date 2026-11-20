@@ -1,0 +1,47 @@
+{
+  "pass": [
+    "Straight down the ground for four. What a shot.",
+    "Not out. The whole crowd is on its feet.",
+    "Middled it, clean timing from the first ball.",
+    "One ball, one shot, one smile. Well played.",
+    "Applause all round the ground. On to the next over."
+  ],
+  "fail": [
+    "The stumps are gone. Never mind, next ball.",
+    "Clean bowled. Back to the crease and read the scoreboard.",
+    "A wicket falls, but the match is far from over.",
+    "Getting out early is part of the game too.",
+    "The third umpire raises the finger. One more go."
+  ],
+  "works_but_wrong": [
+    "A run came, but it was a no-ball.",
+    "An edge, and it raced to the boundary. Fine tonight, not in the final.",
+    "The scoreboard is moving, but the umpire has doubts.",
+    "The win counts, but the coach is not happy with how it came.",
+    "Fine in street cricket, not in a league match."
+  ],
+  "chapter_done": [
+    "Innings over. Tea in the dressing room.",
+    "The whole chapter is won. Take a bow.",
+    "Stumps for this session. A new match tomorrow.",
+    "The whole team lifts the trophy together. Well done."
+  ],
+  "dangerous": [
+    "That is facing a bouncer without a helmet.",
+    "The umpire has given a warning. Careful now.",
+    "A raised finger and a warning. Not one for a real match.",
+    "That shot is landing well outside the boundary rope."
+  ],
+  "stack_down": [
+    "Rain has arrived and the covers are on.",
+    "The floodlights are out. A short wait.",
+    "Rain delay. Have some tea, play resumes soon.",
+    "Play is stopped for a while."
+  ],
+  "stack_back": [
+    "The covers are off. Play resumes.",
+    "Floodlights back on. Let us play.",
+    "The rain has stopped and the match is on again.",
+    "Back in action as if nothing happened."
+  ]
+}
