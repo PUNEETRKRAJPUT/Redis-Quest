@@ -1,0 +1,56 @@
+name: league
+
+# The Economy League (golf/README.md): score every entry against a throwaway redis:8 and fail the pull request if an
+# entry does not pass its hole's checks. Runs on `pull_request`, never `pull_request_target`: an entry is
+# contributor-written text and must not run with a token that can write.
+on:
+  pull_request:
+    paths:
+      - 'golf/**'
+      - 'scripts/league/**'
+      - 'packages/shared/src/league/**'
+      - '.github/workflows/league.yml'
+
+concurrency:
+  group: league-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Hosted runners are amd64 and this is a throwaway scoring database, like the unit-test service in ci.yml.
+    services:
+      redis:
+        image: redis:8
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli PING"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+    env:
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      # pnpm version comes from "packageManager" in package.json.
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install the shared package only
+        run: pnpm install --frozen-lockfile --filter @quest/shared...
+
+      - name: Build the shared package
+        run: pnpm --filter @quest/shared build
+
+      # The script appends its tables to the job summary and annotates failures; it exits 1 on any failed entry.
+      - name: Score every entry
+        run: node scripts/league/score.mjs
