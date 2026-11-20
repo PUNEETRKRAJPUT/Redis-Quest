@@ -37,11 +37,35 @@
 		}
 	}
 
+	# The start page reads this file to show how far `scripts/start` has got. scripts/start writes it under the logs
+	# folder (logs/start/stage.json), which this proxy already mounts at /logs. Never cached: it changes every few seconds.
+	handle /_starting/stage.json {
+		root * /logs/start
+		rewrite * /stage.json
+		header Cache-Control "no-store"
+		file_server
+	}
+
 	# Everything else is a page, a `/_next/` asset or a Next.js data request: the ui service (container port 3100).
-	# While ui is still starting, or stopped, Caddy answers 502.
+	# While ui is still starting, or stopped, Caddy answers 502 (handle_errors below keeps that code and sends a page).
 	handle {
 		reverse_proxy ui:3100 {
 			flush_interval -1
+		}
+	}
+
+	# When the ui service does not answer, a page request gets the self-contained start page from docker/starting/
+	# (mounted at /srv/starting) instead of an empty 502. The status code is the error's own, so everything that checks
+	# for 502 still sees 502. Only page requests: the engine's paths, /app/* and /_next/* assets stay bare errors.
+	handle_errors {
+		@startpage not path /api /api/* /health /health/* /ws /ws/* /internal/* /app/* /_next/* /_starting/*
+		handle @startpage {
+			root * /srv/starting
+			rewrite * /index.html
+			header Cache-Control "no-store"
+			file_server {
+				status {err.status_code}
+			}
 		}
 	}
 }
