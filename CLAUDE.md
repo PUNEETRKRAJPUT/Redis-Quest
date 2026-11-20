@@ -42,6 +42,12 @@ One commit per task on `main` (small project, trunk-based). Message: `<task id>:
 imperative, body if useful, and end with:
 `Co-Authored-By: puneets-hermes-agent <puneets-hermes-agent@users.noreply.github.com>`
 
+Before the first commit of a session, `git config user.email` must print a `users.noreply.github.com` address.
+The setting is repo-local, so a fresh clone loses it and git falls back to the Mac's global identity, which
+must not appear in this repository (it did, for 90 commits, in November 2026). Restore it from history:
+`git config user.name "$(git log -1 --format=%an v1.0.0-rc2)"` and
+`git config user.email "$(git log -1 --format=%ae v1.0.0-rc2)"`.
+
 ## Style
 TypeScript strict. No default exports except where a framework requires one. Small modules. Tests
 with `node:test` or vitest, whichever the spec names. Comments say why, not what.
