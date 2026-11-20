@@ -3,18 +3,19 @@
 // open tab closes it again (the pane then shows the mode's idle card). A code level opens the editor with the
 // terminal docked under it. A decision level's answer sheet is the first tab.
 import { clsx } from 'clsx';
-import { Activity, Code, ListChecks, ScrollText, SquareTerminal } from 'lucide-react';
+import { Activity, Code, ListChecks, ScrollText, Smartphone, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 import { paneStorage } from '../match/layout';
 import { EditorPanel } from '../panels/EditorPanel';
+import { PhoneScreen } from '../features/phone/PhoneScreen';
 import { LogsPanel } from '../panels/LogsPanel';
 import { MetricsPanel } from '../panels/MetricsPanel';
 import { TerminalPanel } from '../panels/TerminalPanel';
 import { onTerminalWanted } from '../terminal/bus';
 
-type Tool = 'terminal' | 'editor' | 'logs' | 'metrics';
+type Tool = 'terminal' | 'editor' | 'logs' | 'metrics' | 'phone';
 type Tab = Tool | 'answers';
 
 const TOOLS: { id: Tool; label: string; icon: typeof SquareTerminal }[] = [
@@ -22,6 +23,7 @@ const TOOLS: { id: Tool; label: string; icon: typeof SquareTerminal }[] = [
   { id: 'editor', label: 'Editor', icon: Code },
   { id: 'logs', label: 'Logs', icon: ScrollText },
   { id: 'metrics', label: 'Metrics', icon: Activity },
+  { id: 'phone', label: 'Phone', icon: Smartphone },
 ];
 
 function EditorWithDock({ chapter }: { chapter: string }) {
@@ -152,6 +154,11 @@ export function Workbench({
           {tab === 'metrics' ? (
             <div className="h-full overflow-y-auto p-3">
               <MetricsPanel compact />
+            </div>
+          ) : null}
+          {tab === 'phone' ? (
+            <div className="h-full overflow-y-auto">
+              <PhoneScreen compact />
             </div>
           ) : null}
           {tab === null ? (
