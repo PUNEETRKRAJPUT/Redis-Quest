@@ -1,0 +1,3988 @@
+{
+ "generatedBy": "scripts/dev/gen-client-api.mjs",
+ "source": {
+  "library": "redis",
+  "version": "5.12.1",
+  "clientLibrary": "@redis/client",
+  "clientVersion": "5.12.1",
+  "typescript": "5.9.3",
+  "walked": "RedisClientType (node-redis's default client type; LearnerRedis uses `any` generics, which hide members)"
+ },
+ "redis": [
+  {
+   "name": "aclCat",
+   "kind": "method",
+   "params": "(categoryName?: RedisArgument | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "aclDelUser",
+   "kind": "method",
+   "params": "(username: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "aclDryRun",
+   "kind": "method",
+   "params": "(username: RedisArgument, command: RedisArgument[])",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "aclGenPass",
+   "kind": "method",
+   "params": "(bits?: number | undefined)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "aclGetUser",
+   "kind": "method",
+   "params": "(username: RedisArgument)",
+   "returns": "Promise<{ flags: string[]; passwords: string[]; commands: string; k..."
+  },
+  {
+   "name": "aclList",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "aclLoad",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "aclLog",
+   "kind": "method",
+   "params": "(count?: number | undefined)",
+   "returns": "Promise<{ count: number; reason: string; context: string; object: s..."
+  },
+  {
+   "name": "aclLogReset",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "aclSave",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "aclSetUser",
+   "kind": "method",
+   "params": "(username: RedisArgument, rule: RedisVariadicArgument)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "aclUsers",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "aclWhoAmI",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "addListener",
+   "kind": "method",
+   "params": "(eventName: string | symbol, listener: (...args: any[]) => void)",
+   "returns": "Client",
+   "doc": "Alias for `emitter.on(eventName, listener)`."
+  },
+  {
+   "name": "append",
+   "kind": "method",
+   "params": "(key: RedisArgument, value: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "asap",
+   "kind": "method",
+   "params": "()",
+   "returns": "RedisClientType<{ json: { ARRAPPEND: { readonly IS_READ_ONLY: false...",
+   "doc": "Override the `asap` command option to `true`"
+  },
+  {
+   "name": "asking",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "auth",
+   "kind": "method",
+   "params": "(AuthOptions)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "bf",
+   "kind": "namespace",
+   "members": [
+    {
+     "name": "add",
+     "kind": "method",
+     "params": "(key: RedisArgument, item: RedisArgument)",
+     "returns": "Promise<boolean>"
+    },
+    {
+     "name": "card",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "exists",
+     "kind": "method",
+     "params": "(key: RedisArgument, item: RedisArgument)",
+     "returns": "Promise<boolean>"
+    },
+    {
+     "name": "info",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<{ Capacity: number; Size: number; \"Number of filters\": numb..."
+    },
+    {
+     "name": "insert",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: RedisVariadicArgument, options?: BfInsertOptions | undefined)",
+     "returns": "Promise<boolean[]>"
+    },
+    {
+     "name": "loadChunk",
+     "kind": "method",
+     "params": "(key: RedisArgument, iterator: number, chunk: RedisArgument)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "mAdd",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: RedisVariadicArgument)",
+     "returns": "Promise<boolean[]>"
+    },
+    {
+     "name": "mExists",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: RedisVariadicArgument)",
+     "returns": "Promise<boolean[]>"
+    },
+    {
+     "name": "reserve",
+     "kind": "method",
+     "params": "(key: RedisArgument, errorRate: number, capacity: number, options?: BfReserveOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "scanDump",
+     "kind": "method",
+     "params": "(key: RedisArgument, iterator: number)",
+     "returns": "Promise<{ iterator: number; chunk: string; }>"
+    }
+   ]
+  },
+  {
+   "name": "bgRewriteAof",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "bgSave",
+   "kind": "method",
+   "params": "(options?: BgSaveOptions | undefined)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "bitCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, range?: BitCountRange | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "bitField",
+   "kind": "method",
+   "params": "(key: RedisArgument, operations: BitFieldOperations)",
+   "returns": "Promise<(number | null)[]>"
+  },
+  {
+   "name": "bitFieldRo",
+   "kind": "method",
+   "params": "(key: RedisArgument, operations: BitFieldRoOperations)",
+   "returns": "Promise<number[]>"
+  },
+  {
+   "name": "bitOp",
+   "kind": "method",
+   "params": "(operation: BitOperations, destKey: RedisArgument, key: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "bitPos",
+   "kind": "method",
+   "params": "(key: RedisArgument, bit: BitValue, start?: number | undefined, end?: number | undefined, mode?: \"BYTE\" | \"BIT\" | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "blMove",
+   "kind": "method",
+   "params": "(source: RedisArgument, destination: RedisArgument, sourceSide: ListSide, destinationSide: ListSide, timeout: number)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "blmPop",
+   "kind": "method",
+   "params": "(timeout: number, keys: RedisVariadicArgument, side: ListSide, options?: LMPopOptions | undefined)",
+   "returns": "Promise<(string | string[])[] | null>"
+  },
+  {
+   "name": "blPop",
+   "kind": "method",
+   "params": "(key: RedisVariadicArgument, timeout: number)",
+   "returns": "Promise<{ key: string; element: string; } | null>"
+  },
+  {
+   "name": "brPop",
+   "kind": "method",
+   "params": "(key: RedisVariadicArgument, timeout: number)",
+   "returns": "Promise<{ key: string; element: string; } | null>"
+  },
+  {
+   "name": "brPopLPush",
+   "kind": "method",
+   "params": "(source: RedisArgument, destination: RedisArgument, timeout: number)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "bzmPop",
+   "kind": "method",
+   "params": "(timeout: number, keys: RedisVariadicArgument, side: SortedSetSide, options?: ZMPopOptions | undefined)",
+   "returns": "Promise<{ key: string; members: { value: string; score: number; }[]..."
+  },
+  {
+   "name": "bzPopMax",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument, timeout: number)",
+   "returns": "Promise<{ key: string; value: string; score: number; } | null>"
+  },
+  {
+   "name": "bzPopMin",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument, timeout: number)",
+   "returns": "Promise<{ key: string; value: string; score: number; } | null>"
+  },
+  {
+   "name": "cf",
+   "kind": "namespace",
+   "members": [
+    {
+     "name": "add",
+     "kind": "method",
+     "params": "(key: RedisArgument, item: RedisArgument)",
+     "returns": "Promise<boolean>"
+    },
+    {
+     "name": "addNX",
+     "kind": "method",
+     "params": "(key: RedisArgument, item: RedisArgument)",
+     "returns": "Promise<boolean>"
+    },
+    {
+     "name": "count",
+     "kind": "method",
+     "params": "(key: RedisArgument, item: RedisArgument)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "del",
+     "kind": "method",
+     "params": "(key: RedisArgument, item: RedisArgument)",
+     "returns": "Promise<boolean>"
+    },
+    {
+     "name": "exists",
+     "kind": "method",
+     "params": "(key: RedisArgument, item: RedisArgument)",
+     "returns": "Promise<boolean>"
+    },
+    {
+     "name": "info",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<{ Size: number; \"Number of buckets\": number; \"Number of fil..."
+    },
+    {
+     "name": "insert",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: RedisVariadicArgument, options?: CfInsertOptions | undefined)",
+     "returns": "Promise<boolean[]>"
+    },
+    {
+     "name": "insertNX",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: RedisVariadicArgument, options?: CfInsertOptions | undefined)",
+     "returns": "Promise<boolean[]>"
+    },
+    {
+     "name": "loadChunk",
+     "kind": "method",
+     "params": "(key: RedisArgument, iterator: number, chunk: RedisArgument)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "reserve",
+     "kind": "method",
+     "params": "(key: RedisArgument, capacity: number, options?: CfReserveOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "scanDump",
+     "kind": "method",
+     "params": "(key: RedisArgument, iterator: number)",
+     "returns": "Promise<{ iterator: number; chunk: string | null; }>"
+    }
+   ]
+  },
+  {
+   "name": "clientCaching",
+   "kind": "method",
+   "params": "(value: boolean)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clientGetName",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "clientGetRedir",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "clientId",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "clientInfo",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ id: number; addr: string; laddr?: string | undefined; fd:..."
+  },
+  {
+   "name": "clientKill",
+   "kind": "method",
+   "params": "(filters: ClientKillFilter | ClientKillFilter[])",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "clientList",
+   "kind": "method",
+   "params": "(filter?: ListFilter | undefined)",
+   "returns": "Promise<{ id: number; addr: string; laddr?: string | undefined; fd:..."
+  },
+  {
+   "name": "clientNoEvict",
+   "kind": "method",
+   "params": "(value: boolean)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clientNoTouch",
+   "kind": "method",
+   "params": "(value: boolean)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clientPause",
+   "kind": "method",
+   "params": "(timeout: number, mode?: \"WRITE\" | \"ALL\" | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clientSetName",
+   "kind": "method",
+   "params": "(name: RedisArgument)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clientSideCache",
+   "kind": "property",
+   "type": "ClientSideCacheProvider | undefined"
+  },
+  {
+   "name": "clientTracking",
+   "kind": "method",
+   "params": "(mode: boolean, options?: ClientTrackingOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clientTrackingInfo",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ flags: string[]; redirect: number; prefixes: string[]; }>"
+  },
+  {
+   "name": "clientUnpause",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "close",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<void>",
+   "doc": "Close the client. Wait for pending commands."
+  },
+  {
+   "name": "clusterAddSlots",
+   "kind": "method",
+   "params": "(slots: number | number[])",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterAddSlotsRange",
+   "kind": "method",
+   "params": "(ranges: SlotRange | SlotRange[])",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterBumpEpoch",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"BUMPED\" | \"STILL\">"
+  },
+  {
+   "name": "clusterCountFailureReports",
+   "kind": "method",
+   "params": "(nodeId: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "clusterCountKeysInSlot",
+   "kind": "method",
+   "params": "(slot: number)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "clusterDelSlots",
+   "kind": "method",
+   "params": "(slots: number | number[])",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterDelSlotsRange",
+   "kind": "method",
+   "params": "(ranges: SlotRange | SlotRange[])",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterFailover",
+   "kind": "method",
+   "params": "(options?: ClusterFailoverOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterFlushSlots",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterForget",
+   "kind": "method",
+   "params": "(nodeId: RedisArgument)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterGetKeysInSlot",
+   "kind": "method",
+   "params": "(slot: number, count: number)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "clusterInfo",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "clusterKeySlot",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "clusterLinks",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ direction: string; node: string; 'create-time': number; e..."
+  },
+  {
+   "name": "clusterMeet",
+   "kind": "method",
+   "params": "(host: string, port: number)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterMyId",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "clusterMyShardId",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "clusterNodes",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "clusterReplicas",
+   "kind": "method",
+   "params": "(nodeId: RedisArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "clusterReplicate",
+   "kind": "method",
+   "params": "(nodeId: RedisArgument)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "clusterReset",
+   "kind": "method",
+   "params": "(options?: ClusterResetOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterSaveConfig",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterSetConfigEpoch",
+   "kind": "method",
+   "params": "(configEpoch: number)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterSetSlot",
+   "kind": "method",
+   "params": "(slot: number, state: ClusterSlotState, nodeId?: RedisArgument | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "clusterSlots",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ from: number; to: number; master: { host: string; port: n..."
+  },
+  {
+   "name": "cms",
+   "kind": "namespace",
+   "members": [
+    {
+     "name": "incrBy",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: BfIncrByItem | BfIncrByItem[])",
+     "returns": "Promise<number[]>"
+    },
+    {
+     "name": "info",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<{ width: number; depth: number; count: number; }>"
+    },
+    {
+     "name": "initByDim",
+     "kind": "method",
+     "params": "(key: RedisArgument, width: number, depth: number)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "initByProb",
+     "kind": "method",
+     "params": "(key: RedisArgument, error: number, probability: number)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "merge",
+     "kind": "method",
+     "params": "(destination: RedisArgument, source: BfMergeSketches)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "query",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: RedisVariadicArgument)",
+     "returns": "Promise<number[]>"
+    }
+   ]
+  },
+  {
+   "name": "command",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ name: string; arity: number; flags: Set<CommandFlags>; fi..."
+  },
+  {
+   "name": "commandCount",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "commandGetKeys",
+   "kind": "method",
+   "params": "(args: RedisArgument[])",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "commandGetKeysAndFlags",
+   "kind": "method",
+   "params": "(args: RedisArgument[])",
+   "returns": "Promise<{ key: string; flags: string[]; }[]>"
+  },
+  {
+   "name": "commandInfo",
+   "kind": "method",
+   "params": "(commands: string[])",
+   "returns": "Promise<({ name: string; arity: number; flags: Set<CommandFlags>; f..."
+  },
+  {
+   "name": "commandList",
+   "kind": "method",
+   "params": "(options?: CommandListOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "configGet",
+   "kind": "method",
+   "params": "(parameters: RedisVariadicArgument)",
+   "returns": "Promise<{ [x: string]: string; }>"
+  },
+  {
+   "name": "configResetStat",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "configRewrite",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "configSet",
+   "kind": "method",
+   "params": "(parameter: RedisArgument, value: RedisArgument)",
+   "returns": "Promise<string>",
+   "forms": [
+    "(parameter: RedisArgument, value: RedisArgument)",
+    "(config: Record<string, RedisArgument>)"
+   ]
+  },
+  {
+   "name": "connect",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<RedisClientType<{ json: { ARRAPPEND: { readonly IS_READ_ONL..."
+  },
+  {
+   "name": "copy",
+   "kind": "method",
+   "params": "(source: RedisArgument, destination: RedisArgument, options?: CopyCommandOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "createPool",
+   "kind": "method",
+   "params": "(options?: Partial<RedisPoolOptions> | undefined)",
+   "returns": "RedisClientPoolType<{ json: { ARRAPPEND: { readonly IS_READ_ONLY: f...",
+   "doc": "Create {@link RedisClientPool `RedisClientPool`} using this client as a prototype"
+  },
+  {
+   "name": "dbSize",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "decr",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "decrBy",
+   "kind": "method",
+   "params": "(key: RedisArgument, decrement: number)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "del",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "delEx",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: { condition: \"IFEQ\" | \"IFNE\" | \"IFDEQ\" | \"IFDNE\"; matchValue: RedisArgument; } | undefined)",
+   "returns": "Promise<0 | 1>"
+  },
+  {
+   "name": "destroy",
+   "kind": "method",
+   "params": "()",
+   "returns": "void",
+   "doc": "Destroy the client. Rejects all commands immediately."
+  },
+  {
+   "name": "digest",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "disconnect",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "dump",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "duplicate",
+   "kind": "method",
+   "params": "(overrides?: Partial<RedisClientOptions<_M, _F, _S, _RESP, _TYPE_MAPPING, RedisSocketOptions>> | und...)",
+   "returns": "RedisClientType<_M, _F, _S, _RESP, _TYPE_MAPPING>"
+  },
+  {
+   "name": "echo",
+   "kind": "method",
+   "params": "(message: RedisArgument)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "emit",
+   "kind": "method",
+   "params": "(eventName: string | symbol, ...args: AnyRest)",
+   "returns": "boolean",
+   "doc": "Synchronously calls each of the listeners registered for the event named `eventName`, in the order they were registered, passing the supplied arguments to each. Returns `true` if the event had listeners, `false` otherwise. ```js import {..."
+  },
+  {
+   "name": "eval",
+   "kind": "method",
+   "params": "(script: RedisArgument, options?: EvalOptions | undefined)",
+   "returns": "Promise<string | number | bigint | boolean | SimpleError | BlobErro..."
+  },
+  {
+   "name": "evalRo",
+   "kind": "method",
+   "params": "(script: RedisArgument, options?: EvalOptions | undefined)",
+   "returns": "Promise<string | number | bigint | boolean | SimpleError | BlobErro..."
+  },
+  {
+   "name": "evalSha",
+   "kind": "method",
+   "params": "(script: RedisArgument, options?: EvalOptions | undefined)",
+   "returns": "Promise<string | number | bigint | boolean | SimpleError | BlobErro..."
+  },
+  {
+   "name": "evalShaRo",
+   "kind": "method",
+   "params": "(script: RedisArgument, options?: EvalOptions | undefined)",
+   "returns": "Promise<string | number | bigint | boolean | SimpleError | BlobErro..."
+  },
+  {
+   "name": "eventNames",
+   "kind": "method",
+   "params": "()",
+   "returns": "(string | symbol)[]",
+   "doc": "Returns an array listing the events for which the emitter has registered listeners. The values in the array are strings or `Symbol`s. ```js import { EventEmitter } from 'node:events'; const myEE = new EventEmitter(); myEE.on('foo', () =>..."
+  },
+  {
+   "name": "exists",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "expire",
+   "kind": "method",
+   "params": "(key: RedisArgument, seconds: number, mode?: \"NX\" | \"XX\" | \"GT\" | \"LT\" | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "expireAt",
+   "kind": "method",
+   "params": "(key: RedisArgument, timestamp: number | Date, mode?: \"NX\" | \"XX\" | \"GT\" | \"LT\" | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "expireTime",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "extendPubSubChannelListeners",
+   "kind": "method",
+   "params": "(type: PubSubType, channel: string, listeners: ChannelListeners)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "extendPubSubListeners",
+   "kind": "method",
+   "params": "(type: PubSubType, listeners: PubSubTypeListeners)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "fCall",
+   "kind": "method",
+   "params": "(script: RedisArgument, options?: EvalOptions | undefined)",
+   "returns": "Promise<string | number | bigint | boolean | SimpleError | BlobErro..."
+  },
+  {
+   "name": "fCallRo",
+   "kind": "method",
+   "params": "(script: RedisArgument, options?: EvalOptions | undefined)",
+   "returns": "Promise<string | number | bigint | boolean | SimpleError | BlobErro..."
+  },
+  {
+   "name": "flushAll",
+   "kind": "method",
+   "params": "(mode?: RedisFlushMode | undefined)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "flushDb",
+   "kind": "method",
+   "params": "(mode?: RedisFlushMode | undefined)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "ft",
+   "kind": "namespace",
+   "members": [
+    {
+     "name": "aggregate",
+     "kind": "method",
+     "params": "(index: RedisArgument, query: RedisArgument, options?: FtAggregateOptions | undefined)",
+     "returns": "Promise<{ total: number; results: { [x: string]: string; }[]; }>"
+    },
+    {
+     "name": "aggregateWithCursor",
+     "kind": "method",
+     "params": "(index: RedisArgument, query: RedisArgument, options?: FtAggregateWithCursorOptions | undefined)",
+     "returns": "Promise<{ cursor: number; total: number; results: { [x: string]: st..."
+    },
+    {
+     "name": "aliasAdd",
+     "kind": "method",
+     "params": "(alias: RedisArgument, index: RedisArgument)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "aliasDel",
+     "kind": "method",
+     "params": "(alias: RedisArgument)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "aliasUpdate",
+     "kind": "method",
+     "params": "(alias: RedisArgument, index: RedisArgument)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "alter",
+     "kind": "method",
+     "params": "(index: RedisArgument, schema: RediSearchSchema)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "configGet",
+     "kind": "method",
+     "params": "(option: string)",
+     "returns": "Promise<{ [x: string]: string | null; }>"
+    },
+    {
+     "name": "configSet",
+     "kind": "method",
+     "params": "(property: Buffer<ArrayBufferLike> | (string & {}) | \"a\" | \"b\", value: RedisArgument)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "create",
+     "kind": "method",
+     "params": "(index: RedisArgument, schema: RediSearchSchema, options?: CreateOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "cursorDel",
+     "kind": "method",
+     "params": "(index: RedisArgument, cursorId: UnwrapReply<NumberReply<number>>)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "cursorRead",
+     "kind": "method",
+     "params": "(index: RedisArgument, cursor: UnwrapReply<NumberReply<number>>, options?: FtCursorReadOptions | undefined)",
+     "returns": "Promise<{ cursor: number; total: number; results: { [x: string]: st..."
+    },
+    {
+     "name": "dictAdd",
+     "kind": "method",
+     "params": "(dictionary: RedisArgument, term: RedisVariadicArgument)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "dictDel",
+     "kind": "method",
+     "params": "(dictionary: RedisArgument, term: RedisVariadicArgument)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "dictDump",
+     "kind": "method",
+     "params": "(dictionary: RedisArgument)",
+     "returns": "Promise<string[]>"
+    },
+    {
+     "name": "dropIndex",
+     "kind": "method",
+     "params": "(index: RedisArgument, options?: FtDropIndexOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "explain",
+     "kind": "method",
+     "params": "(index: RedisArgument, query: RedisArgument, options?: FtExplainOptions | undefined)",
+     "returns": "Promise<string>"
+    },
+    {
+     "name": "explainCli",
+     "kind": "method",
+     "params": "(index: RedisArgument, query: RedisArgument, options?: FtExplainCLIOptions | undefined)",
+     "returns": "Promise<string[]>"
+    },
+    {
+     "name": "hybrid",
+     "kind": "method",
+     "params": "(index: RedisArgument, options: FtHybridOptions)",
+     "returns": "Promise<{ totalResults: number; executionTime: number; warnings: st..."
+    },
+    {
+     "name": "info",
+     "kind": "method",
+     "params": "(index: RedisArgument)",
+     "returns": "Promise<{ index_name: string; index_options: string[]; index_defini..."
+    },
+    {
+     "name": "profileAggregate",
+     "kind": "method",
+     "params": "(index: string, query: string, options?: (ProfileOptions & FtAggregateOptions) | undefined)",
+     "returns": "Promise<{ results: { total: number; results: { [x: string]: string;..."
+    },
+    {
+     "name": "profileSearch",
+     "kind": "method",
+     "params": "(index: RedisArgument, query: RedisArgument, options?: (ProfileOptions & FtSearchOptions) | undefined)",
+     "returns": "Promise<{ results: { total: number; results: { [x: string]: string;..."
+    },
+    {
+     "name": "search",
+     "kind": "method",
+     "params": "(index: RedisArgument, query: RedisArgument, options?: FtSearchOptions | undefined)",
+     "returns": "Promise<{ total: number; documents: { id: string; value: { [x: stri..."
+    },
+    {
+     "name": "searchNoContent",
+     "kind": "method",
+     "params": "(index: RedisArgument, query: RedisArgument, options?: FtSearchOptions | undefined)",
+     "returns": "Promise<{ total: number; documents: string[]; }>"
+    },
+    {
+     "name": "spellCheck",
+     "kind": "method",
+     "params": "(index: RedisArgument, query: RedisArgument, options?: FtSpellCheckOptions | undefined)",
+     "returns": "Promise<{ term: string; suggestions: { score: number; suggestion: s..."
+    },
+    {
+     "name": "sugAdd",
+     "kind": "method",
+     "params": "(key: RedisArgument, string: RedisArgument, score: number, options?: FtSugAddOptions | undefined)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "sugDel",
+     "kind": "method",
+     "params": "(key: RedisArgument, string: RedisArgument)",
+     "returns": "Promise<0 | 1>"
+    },
+    {
+     "name": "sugGet",
+     "kind": "method",
+     "params": "(key: RedisArgument, prefix: RedisArgument, options?: FtSugGetOptions | undefined)",
+     "returns": "Promise<string[] | null>"
+    },
+    {
+     "name": "sugGetWithPayloads",
+     "kind": "method",
+     "params": "(key: RedisArgument, prefix: RedisArgument, options?: FtSugGetOptions | undefined)",
+     "returns": "Promise<{ suggestion: string; payload: string; }[] | null>"
+    },
+    {
+     "name": "sugGetWithScores",
+     "kind": "method",
+     "params": "(key: RedisArgument, prefix: RedisArgument, options?: FtSugGetOptions | undefined)",
+     "returns": "Promise<{ suggestion: string; score: number; }[] | null>"
+    },
+    {
+     "name": "sugGetWithScoresWithPayloads",
+     "kind": "method",
+     "params": "(key: RedisArgument, prefix: RedisArgument, options?: FtSugGetOptions | undefined)",
+     "returns": "Promise<{ suggestion: string; score: number; payload: string; }[] |..."
+    },
+    {
+     "name": "sugLen",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "synDump",
+     "kind": "method",
+     "params": "(index: RedisArgument)",
+     "returns": "Promise<{ [x: string]: string[]; }>"
+    },
+    {
+     "name": "synUpdate",
+     "kind": "method",
+     "params": "(index: RedisArgument, groupId: RedisArgument, terms: RedisVariadicArgument, options?: FtSynUpdateOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "tagVals",
+     "kind": "method",
+     "params": "(index: RedisArgument, fieldName: RedisArgument)",
+     "returns": "Promise<string[]>"
+    }
+   ]
+  },
+  {
+   "name": "functionDelete",
+   "kind": "method",
+   "params": "(library: RedisArgument)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "functionDump",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "functionFlush",
+   "kind": "method",
+   "params": "(mode?: RedisFlushMode | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "functionKill",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "functionList",
+   "kind": "method",
+   "params": "(options?: FunctionListOptions | undefined)",
+   "returns": "Promise<{ library_name: string | null; engine: string; functions: {..."
+  },
+  {
+   "name": "functionListWithCode",
+   "kind": "method",
+   "params": "(options?: FunctionListOptions | undefined)",
+   "returns": "Promise<{ library_name: string | null; engine: string; functions: {..."
+  },
+  {
+   "name": "functionLoad",
+   "kind": "method",
+   "params": "(code: RedisArgument, options?: FunctionLoadOptions | undefined)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "functionRestore",
+   "kind": "method",
+   "params": "(dump: RedisArgument, options?: FunctionRestoreOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "functionStats",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ running_script: { name: string; command: string; duration..."
+  },
+  {
+   "name": "geoAdd",
+   "kind": "method",
+   "params": "(key: RedisArgument, toAdd: GeoMember | GeoMember[], options?: GeoAddOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "geoDist",
+   "kind": "method",
+   "params": "(key: RedisArgument, member1: RedisArgument, member2: RedisArgument, unit?: GeoUnits | undefined)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "geoHash",
+   "kind": "method",
+   "params": "(key: RedisArgument, member: RedisVariadicArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "geoPos",
+   "kind": "method",
+   "params": "(key: RedisArgument, member: RedisVariadicArgument)",
+   "returns": "Promise<({ longitude: string; latitude: string; } | null)[]>"
+  },
+  {
+   "name": "geoRadius",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: GeoCoordinates, radius: number, unit: GeoUnits, options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "geoRadiusByMember",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: RedisArgument, radius: number, unit: GeoUnits, options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "geoRadiusByMemberRo",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: RedisArgument, radius: number, unit: GeoUnits, options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "geoRadiusByMemberRoWith",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: RedisArgument, radius: number, unit: GeoUnits, replyWith: GeoReplyWith[], options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<{ member: string; distance?: string | undefined; hash?: num..."
+  },
+  {
+   "name": "geoRadiusByMemberStore",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: RedisArgument, radius: number, unit: GeoUnits, destination: RedisArgument, options?: GeoRadiusStoreOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "geoRadiusByMemberWith",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: RedisArgument, radius: number, unit: GeoUnits, replyWith: GeoReplyWith[], options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<{ member: string; distance?: string | undefined; hash?: num..."
+  },
+  {
+   "name": "geoRadiusRo",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: GeoCoordinates, radius: number, unit: GeoUnits, options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "geoRadiusRoWith",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: GeoCoordinates, radius: number, unit: GeoUnits, replyWith: GeoReplyWith[], options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<{ member: string; distance?: string | undefined; hash?: num..."
+  },
+  {
+   "name": "geoRadiusStore",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: GeoCoordinates, radius: number, unit: GeoUnits, destination: RedisArgument, options?: GeoRadiusStoreOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "geoRadiusWith",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: GeoCoordinates, radius: number, unit: GeoUnits, replyWith: GeoReplyWith[], options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<{ member: string; distance?: string | undefined; hash?: num..."
+  },
+  {
+   "name": "geoSearch",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: GeoSearchFrom, by: GeoSearchBy, options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "geoSearchStore",
+   "kind": "method",
+   "params": "(destination: RedisArgument, source: RedisArgument, from: GeoSearchFrom, by: GeoSearchBy, options?: GeoSearchStoreOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "geoSearchWith",
+   "kind": "method",
+   "params": "(key: RedisArgument, from: GeoSearchFrom, by: GeoSearchBy, replyWith: GeoReplyWith[], options?: GeoSearchOptions | undefined)",
+   "returns": "Promise<{ member: string; distance?: string | undefined; hash?: num..."
+  },
+  {
+   "name": "get",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "getBit",
+   "kind": "method",
+   "params": "(key: RedisArgument, offset: number)",
+   "returns": "Promise<BitValue>"
+  },
+  {
+   "name": "getDel",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "getEx",
+   "kind": "method",
+   "params": "(key: RedisArgument, options: GetExOptions)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "getMaxListeners",
+   "kind": "method",
+   "params": "()",
+   "returns": "number",
+   "doc": "Returns the current max listener value for the `EventEmitter` which is either set by `emitter.setMaxListeners(n)` or defaults to {@link EventEmitter.defaultMaxListeners}."
+  },
+  {
+   "name": "getPubSubListeners",
+   "kind": "method",
+   "params": "(type: PubSubType)",
+   "returns": "PubSubTypeListeners"
+  },
+  {
+   "name": "getRange",
+   "kind": "method",
+   "params": "(key: RedisArgument, start: number, end: number)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "getSet",
+   "kind": "method",
+   "params": "(key: RedisArgument, value: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "hDel",
+   "kind": "method",
+   "params": "(key: RedisArgument, field: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "hello",
+   "kind": "method",
+   "params": "(protover?: RespVersions | undefined, options?: HelloOptions | undefined)",
+   "returns": "Promise<{ server: string; version: string; proto: RespVersions; id:..."
+  },
+  {
+   "name": "hExists",
+   "kind": "method",
+   "params": "(key: RedisArgument, field: RedisArgument)",
+   "returns": "Promise<0 | 1>"
+  },
+  {
+   "name": "hExpire",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument, seconds: number, mode?: \"NX\" | \"XX\" | \"GT\" | \"LT\" | undefined)",
+   "returns": "Promise<HashExpiration[]>"
+  },
+  {
+   "name": "hExpireAt",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument, timestamp: number | Date, mode?: \"NX\" | \"XX\" | \"GT\" | \"LT\" | undefined)",
+   "returns": "Promise<number[]>"
+  },
+  {
+   "name": "hExpireTime",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument)",
+   "returns": "Promise<number[]>"
+  },
+  {
+   "name": "hGet",
+   "kind": "method",
+   "params": "(key: RedisArgument, field: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "hGetAll",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<{ [x: string]: string; }>"
+  },
+  {
+   "name": "hGetDel",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument)",
+   "returns": "Promise<(string | null)[]>"
+  },
+  {
+   "name": "hGetEx",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument, options?: HGetExOptions | undefined)",
+   "returns": "Promise<(string | null)[]>"
+  },
+  {
+   "name": "hIncrBy",
+   "kind": "method",
+   "params": "(key: RedisArgument, field: RedisArgument, increment: number)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "hIncrByFloat",
+   "kind": "method",
+   "params": "(key: RedisArgument, field: RedisArgument, increment: number)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "hKeys",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "hLen",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "hmGet",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument)",
+   "returns": "Promise<(string | null)[]>"
+  },
+  {
+   "name": "hotkeysGet",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ trackingActive: number; sampleRatio: number; selectedSlot..."
+  },
+  {
+   "name": "hotkeysReset",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "hotkeysStart",
+   "kind": "method",
+   "params": "(options: HotkeysStartOptions)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "hotkeysStop",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\" | null>"
+  },
+  {
+   "name": "hPersist",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument)",
+   "returns": "Promise<number[] | null>"
+  },
+  {
+   "name": "hpExpire",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument, ms: number, mode?: \"NX\" | \"XX\" | \"GT\" | \"LT\" | undefined)",
+   "returns": "Promise<HashExpiration[] | null>"
+  },
+  {
+   "name": "hpExpireAt",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument, timestamp: number | Date, mode?: \"NX\" | \"XX\" | \"GT\" | \"LT\" | undefined)",
+   "returns": "Promise<HashExpiration[] | null>"
+  },
+  {
+   "name": "hpExpireTime",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument)",
+   "returns": "Promise<number[] | null>"
+  },
+  {
+   "name": "hpTTL",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument)",
+   "returns": "Promise<number[] | null>"
+  },
+  {
+   "name": "hRandField",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "hRandFieldCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "hRandFieldCountWithValues",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<{ field: string; value: string; }[]>"
+  },
+  {
+   "name": "hScan",
+   "kind": "method",
+   "params": "(key: RedisArgument, cursor: RedisArgument, options?: ScanCommonOptions | undefined)",
+   "returns": "Promise<{ cursor: string; entries: { field: string; value: string; ..."
+  },
+  {
+   "name": "hScanIterator",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: (ScanCommonOptions & ScanIteratorOptions) | undefined)",
+   "returns": "AsyncGenerator<{ field: string; value: string; }[], void, unknown>"
+  },
+  {
+   "name": "hScanNoValues",
+   "kind": "method",
+   "params": "(key: RedisArgument, cursor: RedisArgument, options?: ScanCommonOptions | undefined)",
+   "returns": "Promise<{ cursor: string; fields: string[]; }>"
+  },
+  {
+   "name": "hScanNoValuesIterator",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: (ScanCommonOptions & ScanIteratorOptions) | undefined)",
+   "returns": "AsyncGenerator<string[], void, unknown>"
+  },
+  {
+   "name": "hScanValuesIterator",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: (ScanCommonOptions & ScanIteratorOptions) | undefined)",
+   "returns": "AsyncGenerator<string[], void, unknown>"
+  },
+  {
+   "name": "hSet",
+   "kind": "method",
+   "params": "(key: RedisArgument, field: HashTypes, value: HashTypes)",
+   "returns": "Promise<number>",
+   "forms": [
+    "(key: RedisArgument, field: HashTypes, value: HashTypes)",
+    "(key: RedisArgument, value: { [x: string]: HashTypes; [x: number]: HashTypes; } | Map<HashTypes, HashTypes> | [HashTypes, HashTypes][] | HashTypes[])"
+   ]
+  },
+  {
+   "name": "hSetEx",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: { [x: string]: HashTypes; [x: number]: HashTypes; } | Map<HashTypes, HashTypes> | [HashTypes, HashTypes][] | HashTypes[], options?: HSetExOptions | undefined)",
+   "returns": "Promise<0 | 1>"
+  },
+  {
+   "name": "hSetNX",
+   "kind": "method",
+   "params": "(key: RedisArgument, field: RedisArgument, value: RedisArgument)",
+   "returns": "Promise<0 | 1>"
+  },
+  {
+   "name": "hStrLen",
+   "kind": "method",
+   "params": "(key: RedisArgument, field: RedisArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "hTTL",
+   "kind": "method",
+   "params": "(key: RedisArgument, fields: RedisVariadicArgument)",
+   "returns": "Promise<number[] | null>"
+  },
+  {
+   "name": "hVals",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "incr",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "incrBy",
+   "kind": "method",
+   "params": "(key: RedisArgument, increment: number)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "incrByFloat",
+   "kind": "method",
+   "params": "(key: RedisArgument, increment: number)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "info",
+   "kind": "method",
+   "params": "(section?: RedisArgument | undefined)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "isDirtyWatch",
+   "kind": "property",
+   "type": "boolean",
+   "doc": "Indicates whether the client's WATCH command has been invalidated by a topology change. When this returns true, any transaction using WATCH will fail with a WatchError."
+  },
+  {
+   "name": "isOpen",
+   "kind": "property",
+   "type": "boolean"
+  },
+  {
+   "name": "isPubSubActive",
+   "kind": "property",
+   "type": "boolean"
+  },
+  {
+   "name": "isReady",
+   "kind": "property",
+   "type": "boolean"
+  },
+  {
+   "name": "isWatching",
+   "kind": "property",
+   "type": "boolean"
+  },
+  {
+   "name": "json",
+   "kind": "namespace",
+   "members": [
+    {
+     "name": "arrAppend",
+     "kind": "method",
+     "params": "(key: RedisArgument, path: RedisArgument, json: RedisJSON, ...jsons: RedisJSON[])",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "arrIndex",
+     "kind": "method",
+     "params": "(key: RedisArgument, path: RedisArgument, json: RedisJSON, options?: JsonArrIndexOptions | undefined)",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "arrInsert",
+     "kind": "method",
+     "params": "(key: RedisArgument, path: RedisArgument, index: number, json: RedisJSON, ...jsons: RedisJSON[])",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "arrLen",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonArrLenOptions | undefined)",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "arrPop",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: RedisArrPopOptions | undefined)",
+     "returns": "Promise<string | number | boolean | Date | (string | number | boole..."
+    },
+    {
+     "name": "arrTrim",
+     "kind": "method",
+     "params": "(key: RedisArgument, path: RedisArgument, start: number, stop: number)",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "clear",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonClearOptions | undefined)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "debugMemory",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonDebugMemoryOptions | undefined)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "del",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonDelOptions | undefined)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "forget",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonForgetOptions | undefined)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "get",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonGetOptions | undefined)",
+     "returns": "Promise<string | number | boolean | Date | (string | number | boole..."
+    },
+    {
+     "name": "merge",
+     "kind": "method",
+     "params": "(key: RedisArgument, path: RedisArgument, value: RedisJSON)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "mGet",
+     "kind": "method",
+     "params": "(keys: RedisArgument[], path: RedisArgument)",
+     "returns": "Promise<(string | number | boolean | Date | (string | number | bool..."
+    },
+    {
+     "name": "mSet",
+     "kind": "method",
+     "params": "(items: JsonMSetItem[])",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "numIncrBy",
+     "kind": "method",
+     "params": "(key: RedisArgument, path: RedisArgument, by: number)",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "numMultBy",
+     "kind": "method",
+     "params": "(key: RedisArgument, path: RedisArgument, by: number)",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "objKeys",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonObjKeysOptions | undefined)",
+     "returns": "Promise<string[] | (string[] | null)[]>"
+    },
+    {
+     "name": "objLen",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonObjLenOptions | undefined)",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "set",
+     "kind": "method",
+     "params": "(key: RedisArgument, path: RedisArgument, json: RedisJSON, options?: JsonSetOptions | undefined)",
+     "returns": "Promise<\"OK\" | null>"
+    },
+    {
+     "name": "strAppend",
+     "kind": "method",
+     "params": "(key: RedisArgument, append: string, options?: JsonStrAppendOptions | undefined)",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "strLen",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonStrLenOptions | undefined)",
+     "returns": "Promise<number | (number | null)[]>"
+    },
+    {
+     "name": "toggle",
+     "kind": "method",
+     "params": "(key: RedisArgument, path: RedisArgument)",
+     "returns": "Promise<number | (number | null)[] | null>"
+    },
+    {
+     "name": "type",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: JsonTypeOptions | undefined)",
+     "returns": "Promise<string | (string | null)[] | null>"
+    }
+   ]
+  },
+  {
+   "name": "keys",
+   "kind": "method",
+   "params": "(pattern: RedisArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "lastSave",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "latencyDoctor",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "latencyGraph",
+   "kind": "method",
+   "params": "(event: LatencyEvent)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "latencyHistogram",
+   "kind": "method",
+   "params": "(...args: string[])",
+   "returns": "Promise<{ [x: string]: { calls: number; histogram_usec: { [x: strin..."
+  },
+  {
+   "name": "latencyHistory",
+   "kind": "method",
+   "params": "(event: LatencyEventType)",
+   "returns": "Promise<number[][]>"
+  },
+  {
+   "name": "latencyLatest",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<(string | number)[][]>"
+  },
+  {
+   "name": "latencyReset",
+   "kind": "method",
+   "params": "(...args: LatencyEvent[])",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "lcs",
+   "kind": "method",
+   "params": "(key1: RedisArgument, key2: RedisArgument)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "lcsIdx",
+   "kind": "method",
+   "params": "(key1: RedisArgument, key2: RedisArgument, options?: LcsIdxOptions | undefined)",
+   "returns": "Promise<{ matches: number[][][]; len: number; }>"
+  },
+  {
+   "name": "lcsIdxWithMatchLen",
+   "kind": "method",
+   "params": "(key1: RedisArgument, key2: RedisArgument, options?: LcsIdxOptions | undefined)",
+   "returns": "Promise<{ matches: (number | number[])[][]; len: number; }>"
+  },
+  {
+   "name": "lcsLen",
+   "kind": "method",
+   "params": "(key1: RedisArgument, key2: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "legacy",
+   "kind": "method",
+   "params": "()",
+   "returns": "RedisLegacyClientType",
+   "doc": "Create the \"legacy\" (v3/callback) interface"
+  },
+  {
+   "name": "lIndex",
+   "kind": "method",
+   "params": "(key: RedisArgument, index: number)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "lInsert",
+   "kind": "method",
+   "params": "(key: RedisArgument, position: \"BEFORE\" | \"AFTER\", pivot: RedisArgument, element: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "listenerCount",
+   "kind": "method",
+   "params": "(eventName: string | symbol, listener?: Function | undefined)",
+   "returns": "number",
+   "doc": "Returns the number of listeners listening for the event named `eventName`. If `listener` is provided, it will return how many times the listener is found in the list of the listeners of the event."
+  },
+  {
+   "name": "listeners",
+   "kind": "method",
+   "params": "(eventName: string | symbol)",
+   "returns": "Function[]",
+   "doc": "Returns a copy of the array of listeners for the event named `eventName`. ```js server.on('connection', (stream) => { console.log('someone connected!'); }); console.log(util.inspect(server.listeners('connection'))); // Prints: [ [Functio..."
+  },
+  {
+   "name": "lLen",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "lMove",
+   "kind": "method",
+   "params": "(source: RedisArgument, destination: RedisArgument, sourceSide: ListSide, destinationSide: ListSide)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "lmPop",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument, side: ListSide, options?: LMPopOptions | undefined)",
+   "returns": "Promise<(string | string[])[] | null>"
+  },
+  {
+   "name": "lPop",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "lPopCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<string[] | null>"
+  },
+  {
+   "name": "lPos",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisArgument, options?: LPosOptions | undefined)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "lPosCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisArgument, count: number, options?: LPosOptions | undefined)",
+   "returns": "Promise<number[]>"
+  },
+  {
+   "name": "lPush",
+   "kind": "method",
+   "params": "(key: RedisArgument, elements: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "lPushX",
+   "kind": "method",
+   "params": "(key: RedisArgument, elements: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "lRange",
+   "kind": "method",
+   "params": "(key: RedisArgument, start: number, stop: number)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "lRem",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number, element: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "lSet",
+   "kind": "method",
+   "params": "(key: RedisArgument, index: number, element: RedisArgument)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "lTrim",
+   "kind": "method",
+   "params": "(key: RedisArgument, start: number, stop: number)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "memoryDoctor",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "memoryMallocStats",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "memoryPurge",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "memoryStats",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ \"peak.allocated\": number; \"total.allocated\": number; \"sta..."
+  },
+  {
+   "name": "memoryUsage",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: MemoryUsageOptions | undefined)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "mGet",
+   "kind": "method",
+   "params": "(keys: RedisArgument[])",
+   "returns": "Promise<(string | null)[]>"
+  },
+  {
+   "name": "migrate",
+   "kind": "method",
+   "params": "(host: RedisArgument, port: number, key: RedisArgument | RedisArgument[], destinationDb: number, timeout: number, options?: MigrateOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "moduleList",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ name: string; ver: number; }[]>"
+  },
+  {
+   "name": "moduleLoad",
+   "kind": "method",
+   "params": "(path: RedisArgument, moduleArguments?: RedisArgument[] | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "moduleUnload",
+   "kind": "method",
+   "params": "(name: RedisArgument)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "monitor",
+   "kind": "method",
+   "params": "(callback: MonitorCallback<{}>)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "move",
+   "kind": "method",
+   "params": "(key: RedisArgument, db: number)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "mSet",
+   "kind": "method",
+   "params": "(toSet: MSetArguments)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "mSetEx",
+   "kind": "method",
+   "params": "(keyValuePairs: MSetArguments, options?: { expiration?: { type: \"EX\"; value: number; } | { type: \"PX\"; value: number; } | { type: \"EXAT\"; value: number | Date; } | { type: \"PXAT\"; value: number | Date; } | { type: \"KEE...)",
+   "returns": "Promise<0 | 1>"
+  },
+  {
+   "name": "mSetNX",
+   "kind": "method",
+   "params": "(toSet: MSetArguments)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "multi",
+   "kind": "method",
+   "params": "()",
+   "returns": "the multi chain"
+  },
+  {
+   "name": "objectEncoding",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "objectFreq",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "objectIdleTime",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "objectRefCount",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "off",
+   "kind": "method",
+   "params": "(eventName: string | symbol, listener: (...args: any[]) => void)",
+   "returns": "Client",
+   "doc": "Alias for `emitter.removeListener()`."
+  },
+  {
+   "name": "on",
+   "kind": "method",
+   "params": "(eventName: string | symbol, listener: (...args: any[]) => void)",
+   "returns": "Client",
+   "doc": "Adds the `listener` function to the end of the listeners array for the event named `eventName`. No checks are made to see if the `listener` has already been added. Multiple calls passing the same combination of `eventName` and `listener`..."
+  },
+  {
+   "name": "once",
+   "kind": "method",
+   "params": "(eventName: string | symbol, listener: (...args: any[]) => void)",
+   "returns": "Client",
+   "doc": "Adds a **one-time** `listener` function for the event named `eventName`. The next time `eventName` is triggered, this listener is removed and then invoked. ```js server.once('connection', (stream) => { console.log('Ah, we have our first ..."
+  },
+  {
+   "name": "options",
+   "kind": "property",
+   "type": "RedisClientOptions<{ json: { ARRAPPEND: { readonly IS_READ_ONLY: false; readonly parseC..."
+  },
+  {
+   "name": "persist",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "pExpire",
+   "kind": "method",
+   "params": "(key: RedisArgument, ms: number, mode?: \"NX\" | \"XX\" | \"GT\" | \"LT\" | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "pExpireAt",
+   "kind": "method",
+   "params": "(key: RedisArgument, msTimestamp: number | Date, mode?: \"NX\" | \"XX\" | \"GT\" | \"LT\" | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "pExpireTime",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "pfAdd",
+   "kind": "method",
+   "params": "(key: RedisArgument, element?: RedisVariadicArgument | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "pfCount",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "pfMerge",
+   "kind": "method",
+   "params": "(destination: RedisArgument, sources?: RedisVariadicArgument | undefined)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "ping",
+   "kind": "method",
+   "params": "(message?: RedisArgument | undefined)",
+   "returns": "Promise<string>",
+   "doc": "ping jsdoc"
+  },
+  {
+   "name": "prependListener",
+   "kind": "method",
+   "params": "(eventName: string | symbol, listener: (...args: any[]) => void)",
+   "returns": "Client",
+   "doc": "Adds the `listener` function to the _beginning_ of the listeners array for the event named `eventName`. No checks are made to see if the `listener` has already been added. Multiple calls passing the same combination of `eventName` and `l..."
+  },
+  {
+   "name": "prependOnceListener",
+   "kind": "method",
+   "params": "(eventName: string | symbol, listener: (...args: any[]) => void)",
+   "returns": "Client",
+   "doc": "Adds a **one-time**`listener` function for the event named `eventName` to the _beginning_ of the listeners array. The next time `eventName` is triggered, this listener is removed, and then invoked. ```js server.prependOnceListener('conne..."
+  },
+  {
+   "name": "pSetEx",
+   "kind": "method",
+   "params": "(key: RedisArgument, ms: number, value: RedisArgument)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "pSubscribe",
+   "kind": "method",
+   "params": "(patterns: string | string[], listener: PubSubListener<T>, bufferMode?: T | undefined)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "pTTL",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "publish",
+   "kind": "method",
+   "params": "(channel: RedisArgument, message: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "pubSubChannels",
+   "kind": "method",
+   "params": "(pattern?: RedisArgument | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "pubSubNumPat",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "pubSubNumSub",
+   "kind": "method",
+   "params": "(channels?: RedisVariadicArgument | undefined)",
+   "returns": "Promise<{ [x: string]: number; }>"
+  },
+  {
+   "name": "pubSubShardChannels",
+   "kind": "method",
+   "params": "(pattern?: RedisArgument | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "pubSubShardNumSub",
+   "kind": "method",
+   "params": "(channels?: RedisVariadicArgument | undefined)",
+   "returns": "Promise<{ [x: string]: number; }>"
+  },
+  {
+   "name": "pUnsubscribe",
+   "kind": "method",
+   "params": "(patterns?: string | string[] | undefined, listener?: PubSubListener<T> | undefined, bufferMode?: T | undefined)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "quit",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "randomKey",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "rawListeners",
+   "kind": "method",
+   "params": "(eventName: string | symbol)",
+   "returns": "Function[]",
+   "doc": "Returns a copy of the array of listeners for the event named `eventName`, including any wrappers (such as those created by `.once()`). ```js import { EventEmitter } from 'node:events'; const emitter = new EventEmitter(); emitter.once('lo..."
+  },
+  {
+   "name": "readonly",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "reAuthenticate",
+   "kind": "property",
+   "type": "any"
+  },
+  {
+   "name": "ref",
+   "kind": "method",
+   "params": "()",
+   "returns": "void"
+  },
+  {
+   "name": "removeAllListeners",
+   "kind": "method",
+   "params": "(eventName?: string | symbol | undefined)",
+   "returns": "Client",
+   "doc": "Removes all listeners, or those of the specified `eventName`. It is bad practice to remove listeners added elsewhere in the code, particularly when the `EventEmitter` instance was created by some other component or module (e.g. sockets o..."
+  },
+  {
+   "name": "removeListener",
+   "kind": "method",
+   "params": "(eventName: string | symbol, listener: (...args: any[]) => void)",
+   "returns": "Client",
+   "doc": "Removes the specified `listener` from the listener array for the event named `eventName`. ```js const callback = (stream) => { console.log('someone connected!'); }; server.on('connection', callback); // ... server.removeListener('connect..."
+  },
+  {
+   "name": "rename",
+   "kind": "method",
+   "params": "(key: RedisArgument, newKey: RedisArgument)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "renameNX",
+   "kind": "method",
+   "params": "(key: RedisArgument, newKey: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "replicaOf",
+   "kind": "method",
+   "params": "(host: string, port: number)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "reset",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<void>",
+   "doc": "Reset the client to its default state (i.e. stop PubSub, stop monitoring, select default DB, etc.)"
+  },
+  {
+   "name": "resetIfDirty",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<void> | undefined",
+   "doc": "If the client has state, reset it. An internal function to be used by wrapper class such as `RedisClientPool`."
+  },
+  {
+   "name": "restore",
+   "kind": "method",
+   "params": "(key: RedisArgument, ttl: number, serializedValue: RedisArgument, options?: RestoreOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "restoreAsking",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "role",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<{ role: \"master\"; replicationOffest: number; replicas: { ho..."
+  },
+  {
+   "name": "rPop",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "rPopCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<string[] | null>"
+  },
+  {
+   "name": "rPopLPush",
+   "kind": "method",
+   "params": "(source: RedisArgument, destination: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "rPush",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "rPushX",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "sAdd",
+   "kind": "method",
+   "params": "(key: RedisArgument, members: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "scan",
+   "kind": "method",
+   "params": "(cursor: RedisArgument, options?: ScanOptions | undefined)",
+   "returns": "Promise<{ cursor: string; keys: string[]; }>"
+  },
+  {
+   "name": "scanIterator",
+   "kind": "method",
+   "params": "(options?: (ScanOptions & ScanIteratorOptions) | undefined)",
+   "returns": "AsyncGenerator<string[], void, unknown>"
+  },
+  {
+   "name": "sCard",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "scriptDebug",
+   "kind": "method",
+   "params": "(mode: \"SYNC\" | \"YES\" | \"NO\")",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "scriptExists",
+   "kind": "method",
+   "params": "(sha1: RedisVariadicArgument)",
+   "returns": "Promise<number[]>"
+  },
+  {
+   "name": "scriptFlush",
+   "kind": "method",
+   "params": "(mode?: \"ASYNC\" | \"SYNC\" | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "scriptKill",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "scriptLoad",
+   "kind": "method",
+   "params": "(script: RedisArgument)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "sDiff",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "sDiffStore",
+   "kind": "method",
+   "params": "(destination: RedisArgument, keys: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "select",
+   "kind": "method",
+   "params": "(db: number)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "sendCommand",
+   "kind": "method",
+   "params": "(args: readonly RedisArgument[], options?: CommandOptions<TypeMapping> | undefined)",
+   "returns": "Promise<T>"
+  },
+  {
+   "name": "set",
+   "kind": "method",
+   "params": "(key: RedisArgument, value: number | RedisArgument, options?: SetOptions | undefined)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "setBit",
+   "kind": "method",
+   "params": "(key: RedisArgument, offset: number, value: BitValue)",
+   "returns": "Promise<BitValue>"
+  },
+  {
+   "name": "setDirtyWatch",
+   "kind": "method",
+   "params": "(msg: string)",
+   "returns": "void",
+   "doc": "Marks the client's WATCH command as invalidated due to a topology change. This will cause any subsequent EXEC in a transaction to fail with a WatchError."
+  },
+  {
+   "name": "setEx",
+   "kind": "method",
+   "params": "(key: RedisArgument, seconds: number, value: RedisArgument)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "setMaxListeners",
+   "kind": "method",
+   "params": "(n: number)",
+   "returns": "Client",
+   "doc": "By default `EventEmitter`s will print a warning if more than `10` listeners are added for a particular event. This is a useful default that helps finding memory leaks. The `emitter.setMaxListeners()` method allows the limit to be modifie..."
+  },
+  {
+   "name": "setNX",
+   "kind": "method",
+   "params": "(key: RedisArgument, value: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "setRange",
+   "kind": "method",
+   "params": "(key: RedisArgument, offset: number, value: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "sInter",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "sInterCard",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument, options?: number | SInterCardOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "sInterStore",
+   "kind": "method",
+   "params": "(destination: RedisArgument, keys: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "sIsMember",
+   "kind": "method",
+   "params": "(key: RedisArgument, member: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "sMembers",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "smIsMember",
+   "kind": "method",
+   "params": "(key: RedisArgument, members: RedisArgument[])",
+   "returns": "Promise<number[]>"
+  },
+  {
+   "name": "sMove",
+   "kind": "method",
+   "params": "(source: RedisArgument, destination: RedisArgument, member: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "socketEpoch",
+   "kind": "property",
+   "type": "number"
+  },
+  {
+   "name": "sort",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: SortOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "sortRo",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: SortOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "sortStore",
+   "kind": "method",
+   "params": "(source: RedisArgument, destination: RedisArgument, options?: SortOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "sPop",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "sPopCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "sPublish",
+   "kind": "method",
+   "params": "(channel: RedisArgument, message: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "sRandMember",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "sRandMemberCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "sRem",
+   "kind": "method",
+   "params": "(key: RedisArgument, members: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "sScan",
+   "kind": "method",
+   "params": "(key: RedisArgument, cursor: RedisArgument, options?: ScanCommonOptions | undefined)",
+   "returns": "Promise<{ cursor: string; members: string[]; }>"
+  },
+  {
+   "name": "sScanIterator",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: (ScanCommonOptions & ScanIteratorOptions) | undefined)",
+   "returns": "AsyncGenerator<string[], void, unknown>"
+  },
+  {
+   "name": "sSubscribe",
+   "kind": "method",
+   "params": "(channels: string | string[], listener: PubSubListener<T>, bufferMode?: T | undefined)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "strLen",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "subscribe",
+   "kind": "method",
+   "params": "(channels: string | string[], listener: PubSubListener<T>, bufferMode?: T | undefined)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "sUnion",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "sUnionStore",
+   "kind": "method",
+   "params": "(destination: RedisArgument, keys: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "sUnsubscribe",
+   "kind": "method",
+   "params": "(channels?: string | string[] | undefined, listener?: PubSubListener<T> | undefined, bufferMode?: T | undefined)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "swapDb",
+   "kind": "method",
+   "params": "(index1: number, index2: number)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "tDigest",
+   "kind": "namespace",
+   "members": [
+    {
+     "name": "add",
+     "kind": "method",
+     "params": "(key: RedisArgument, values: number[])",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "byRank",
+     "kind": "method",
+     "params": "(key: RedisArgument, ranks: number[])",
+     "returns": "Promise<number[]>"
+    },
+    {
+     "name": "byRevRank",
+     "kind": "method",
+     "params": "(key: RedisArgument, ranks: number[])",
+     "returns": "Promise<number[]>"
+    },
+    {
+     "name": "cdf",
+     "kind": "method",
+     "params": "(key: RedisArgument, values: number[])",
+     "returns": "Promise<number[]>"
+    },
+    {
+     "name": "create",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: TDigestCreateOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "info",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<{ Compression: number; Capacity: number; \"Merged nodes\": nu..."
+    },
+    {
+     "name": "max",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "merge",
+     "kind": "method",
+     "params": "(destination: RedisArgument, source: RedisVariadicArgument, options?: TDigestMergeOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "min",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "quantile",
+     "kind": "method",
+     "params": "(key: RedisArgument, quantiles: number[])",
+     "returns": "Promise<number[]>"
+    },
+    {
+     "name": "rank",
+     "kind": "method",
+     "params": "(key: RedisArgument, values: number[])",
+     "returns": "Promise<number[]>"
+    },
+    {
+     "name": "reset",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "revRank",
+     "kind": "method",
+     "params": "(key: RedisArgument, values: number[])",
+     "returns": "Promise<number[]>"
+    },
+    {
+     "name": "trimmedMean",
+     "kind": "method",
+     "params": "(key: RedisArgument, lowCutPercentile: number, highCutPercentile: number)",
+     "returns": "Promise<number>"
+    }
+   ]
+  },
+  {
+   "name": "time",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<`${number}`[]>"
+  },
+  {
+   "name": "topK",
+   "kind": "namespace",
+   "members": [
+    {
+     "name": "add",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: RedisVariadicArgument)",
+     "returns": "Promise<string[]>"
+    },
+    {
+     "name": "count",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: RedisVariadicArgument)",
+     "returns": "Promise<number[]>"
+    },
+    {
+     "name": "incrBy",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: TopKIncrByItem | TopKIncrByItem[])",
+     "returns": "Promise<(string | null)[]>"
+    },
+    {
+     "name": "info",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<{ k: number; width: number; depth: number; decay: number; }>"
+    },
+    {
+     "name": "list",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<string[]>"
+    },
+    {
+     "name": "listWithCount",
+     "kind": "method",
+     "params": "(key: RedisArgument)",
+     "returns": "Promise<{ item: string; count: number; }[]>"
+    },
+    {
+     "name": "query",
+     "kind": "method",
+     "params": "(key: RedisArgument, items: RedisVariadicArgument)",
+     "returns": "Promise<boolean[]>"
+    },
+    {
+     "name": "reserve",
+     "kind": "method",
+     "params": "(key: RedisArgument, topK: number, options?: TopKReserveOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    }
+   ]
+  },
+  {
+   "name": "touch",
+   "kind": "method",
+   "params": "(key: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "ts",
+   "kind": "namespace",
+   "members": [
+    {
+     "name": "add",
+     "kind": "method",
+     "params": "(key: RedisArgument, timestamp: Timestamp, value: number, options?: TsAddOptions | undefined)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "alter",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: TsAlterOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "create",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: TsCreateOptions | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "createRule",
+     "kind": "method",
+     "params": "(sourceKey: RedisArgument, destinationKey: RedisArgument, aggregationType: TimeSeriesAggregationType, bucketDuration: number, alignTimestamp?: number | undefined)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "decrBy",
+     "kind": "method",
+     "params": "(key: RedisArgument, value: number, options?: TsIncrByOptions | undefined)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "del",
+     "kind": "method",
+     "params": "(key: RedisArgument, fromTimestamp: Timestamp, toTimestamp: Timestamp)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "deleteRule",
+     "kind": "method",
+     "params": "(sourceKey: RedisArgument, destinationKey: RedisArgument)",
+     "returns": "Promise<\"OK\">"
+    },
+    {
+     "name": "get",
+     "kind": "method",
+     "params": "(key: RedisArgument, options?: TsGetOptions | undefined)",
+     "returns": "Promise<{ timestamp: number; value: number; } | null>"
+    },
+    {
+     "name": "incrBy",
+     "kind": "method",
+     "params": "(key: RedisArgument, value: number, options?: TsIncrByOptions | undefined)",
+     "returns": "Promise<number>"
+    },
+    {
+     "name": "info",
+     "kind": "method",
+     "params": "(key: string)",
+     "returns": "Promise<{ totalSamples: number; memoryUsage: number; firstTimestamp..."
+    },
+    {
+     "name": "infoDebug",
+     "kind": "method",
+     "params": "(key: string)",
+     "returns": "Promise<{ keySelfName: string; chunks: { startTimestamp: number; en..."
+    },
+    {
+     "name": "mAdd",
+     "kind": "method",
+     "params": "(toAdd: TsMAddSample[])",
+     "returns": "Promise<(number | SimpleError)[]>"
+    },
+    {
+     "name": "mGet",
+     "kind": "method",
+     "params": "(filter: RedisVariadicArgument, options?: TsMGetOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { sample: { timestamp: number; value: number..."
+    },
+    {
+     "name": "mGetSelectedLabels",
+     "kind": "method",
+     "params": "(filter: RedisVariadicArgument, selectedLabels: RedisVariadicArgument, options?: TsMGetOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string | null; }; s..."
+    },
+    {
+     "name": "mGetWithLabels",
+     "kind": "method",
+     "params": "(filter: RedisVariadicArgument, options?: TsMGetWithLabelsOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string; }; sample: ..."
+    },
+    {
+     "name": "mRange",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, filter: RedisVariadicArgument, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { timestamp: number; value: number; }[]; }>"
+    },
+    {
+     "name": "mRangeGroupBy",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, filter: RedisVariadicArgument, groupBy: TsMRangeGroupBy, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { samples: { timestamp: number; value: numbe..."
+    },
+    {
+     "name": "mRangeSelectedLabels",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, selectedLabels: RedisVariadicArgument, filter: RedisVariadicArgument, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string | null; }; s..."
+    },
+    {
+     "name": "mRangeSelectedLabelsGroupBy",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, selectedLabels: RedisVariadicArgument, filter: RedisVariadicArgument, groupBy: TsMRangeGroupBy, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string | null; }; s..."
+    },
+    {
+     "name": "mRangeWithLabels",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, filter: RedisVariadicArgument, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string; }; samples:..."
+    },
+    {
+     "name": "mRangeWithLabelsGroupBy",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, filter: RedisVariadicArgument, groupBy: TsMRangeGroupBy, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string; }; sources:..."
+    },
+    {
+     "name": "mRevRange",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, filter: RedisVariadicArgument, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { timestamp: number; value: number; }[]; }>"
+    },
+    {
+     "name": "mRevRangeGroupBy",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, filter: RedisVariadicArgument, groupBy: TsMRangeGroupBy, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { samples: { timestamp: number; value: numbe..."
+    },
+    {
+     "name": "mRevRangeSelectedLabels",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, selectedLabels: RedisVariadicArgument, filter: RedisVariadicArgument, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string | null; }; s..."
+    },
+    {
+     "name": "mRevRangeSelectedLabelsGroupBy",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, selectedLabels: RedisVariadicArgument, filter: RedisVariadicArgument, groupBy: TsMRangeGroupBy, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string | null; }; s..."
+    },
+    {
+     "name": "mRevRangeWithLabels",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, filter: RedisVariadicArgument, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string; }; samples:..."
+    },
+    {
+     "name": "mRevRangeWithLabelsGroupBy",
+     "kind": "method",
+     "params": "(fromTimestamp: Timestamp, toTimestamp: Timestamp, filter: RedisVariadicArgument, groupBy: TsMRangeGroupBy, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ [x: string]: { labels: { [x: string]: string; }; sources:..."
+    },
+    {
+     "name": "queryIndex",
+     "kind": "method",
+     "params": "(filter: RedisVariadicArgument)",
+     "returns": "Promise<string[]>"
+    },
+    {
+     "name": "range",
+     "kind": "method",
+     "params": "(key: RedisArgument, fromTimestamp: Timestamp, toTimestamp: Timestamp, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ timestamp: number; value: number; }[]>"
+    },
+    {
+     "name": "revRange",
+     "kind": "method",
+     "params": "(key: RedisArgument, fromTimestamp: Timestamp, toTimestamp: Timestamp, options?: TsRangeOptions | undefined)",
+     "returns": "Promise<{ timestamp: number; value: number; }[]>"
+    }
+   ]
+  },
+  {
+   "name": "ttl",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "type",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "unlink",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "unref",
+   "kind": "method",
+   "params": "()",
+   "returns": "void"
+  },
+  {
+   "name": "unsubscribe",
+   "kind": "method",
+   "params": "(channels?: string | string[] | undefined, listener?: PubSubListener<T> | undefined, bufferMode?: T | undefined)",
+   "returns": "Promise<void>"
+  },
+  {
+   "name": "unwatch",
+   "kind": "method",
+   "params": "()",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "vAdd",
+   "kind": "method",
+   "params": "(key: RedisArgument, vector: number[], element: RedisArgument, options?: VAddOptions | undefined)",
+   "returns": "Promise<boolean>"
+  },
+  {
+   "name": "vCard",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "vDim",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "vEmb",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisArgument)",
+   "returns": "Promise<number[]>"
+  },
+  {
+   "name": "vEmbRaw",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisArgument)",
+   "returns": "Promise<{ quantization: string; raw: string; l2Norm: number; quanti..."
+  },
+  {
+   "name": "vGetAttr",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisArgument)",
+   "returns": "Promise<string | number | boolean | Date | (string | number | boole..."
+  },
+  {
+   "name": "vInfo",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<{ \"quant-type\": string; \"vector-dim\": number; size: number;..."
+  },
+  {
+   "name": "vLinks",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisArgument)",
+   "returns": "Promise<string[][]>"
+  },
+  {
+   "name": "vLinksWithScores",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisArgument)",
+   "returns": "Promise<{ [x: string]: number; }[]>"
+  },
+  {
+   "name": "vRandMember",
+   "kind": "method",
+   "params": "(key: RedisArgument, count?: number | undefined)",
+   "returns": "Promise<string | string[] | null>"
+  },
+  {
+   "name": "vRange",
+   "kind": "method",
+   "params": "(key: RedisArgument, start: RedisArgument, end: RedisArgument, count?: number | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "vRem",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisArgument)",
+   "returns": "Promise<boolean>"
+  },
+  {
+   "name": "vSetAttr",
+   "kind": "method",
+   "params": "(key: RedisArgument, element: RedisArgument, attributes: RedisArgument | Record<string, any>)",
+   "returns": "Promise<boolean>"
+  },
+  {
+   "name": "vSim",
+   "kind": "method",
+   "params": "(key: RedisArgument, query: RedisArgument | number[], options?: VSimOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "vSimWithScores",
+   "kind": "method",
+   "params": "(key: RedisArgument, query: RedisArgument | number[], options?: VSimOptions | undefined)",
+   "returns": "Promise<{ [x: string]: number; }>"
+  },
+  {
+   "name": "wait",
+   "kind": "method",
+   "params": "(numberOfReplicas: number, timeout: number)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "watch",
+   "kind": "method",
+   "params": "(key: RedisVariadicArgument)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "withAbortSignal",
+   "kind": "method",
+   "params": "(abortSignal: AbortSignal)",
+   "returns": "RedisClientType<{ json: { ARRAPPEND: { readonly IS_READ_ONLY: false...",
+   "doc": "Override the `abortSignal` command option"
+  },
+  {
+   "name": "withCommandOptions",
+   "kind": "method",
+   "params": "(options: OPTIONS)",
+   "returns": "RedisClientType<{ json: { ARRAPPEND: { readonly IS_READ_ONLY: false..."
+  },
+  {
+   "name": "withTypeMapping",
+   "kind": "method",
+   "params": "(typeMapping: TYPE_MAPPING)",
+   "returns": "RedisClientType<{ json: { ARRAPPEND: { readonly IS_READ_ONLY: false...",
+   "doc": "Override the `typeMapping` command option"
+  },
+  {
+   "name": "xAck",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, id: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "xAckDel",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, id: RedisVariadicArgument, policy?: StreamDeletionPolicy | undefined)",
+   "returns": "Promise<StreamDeletionReplyCode[]>"
+  },
+  {
+   "name": "xAdd",
+   "kind": "method",
+   "params": "(key: RedisArgument, id: RedisArgument, message: Record<string, RedisArgument>, options?: XAddOptions | undefined)",
+   "returns": "Promise<string>"
+  },
+  {
+   "name": "xAddNoMkStream",
+   "kind": "method",
+   "params": "(key: RedisArgument, id: RedisArgument, message: Record<string, RedisArgument>, options?: XAddOptions | undefined)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "xAutoClaim",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, consumer: RedisArgument, minIdleTime: number, start: RedisArgument, options?: XAutoClaimOptions | undefined)",
+   "returns": "Promise<{ nextId: string; messages: ({ id: string; message: { [x: s..."
+  },
+  {
+   "name": "xAutoClaimJustId",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, consumer: RedisArgument, minIdleTime: number, start: RedisArgument, options?: XAutoClaimOptions | undefined)",
+   "returns": "Promise<{ nextId: string; messages: string[]; deletedMessages: stri..."
+  },
+  {
+   "name": "xCfgSet",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: XCfgSetOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "xClaim",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, consumer: RedisArgument, minIdleTime: number, id: RedisVariadicArgument, options?: XClaimOptions | undefined)",
+   "returns": "Promise<({ id: string; message: { [x: string]: string; }; millisEla..."
+  },
+  {
+   "name": "xClaimJustId",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, consumer: RedisArgument, minIdleTime: number, id: RedisVariadicArgument, options?: XClaimOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "xDel",
+   "kind": "method",
+   "params": "(key: RedisArgument, id: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "xDelEx",
+   "kind": "method",
+   "params": "(key: RedisArgument, id: RedisVariadicArgument, policy?: StreamDeletionPolicy | undefined)",
+   "returns": "Promise<StreamDeletionReplyCode[]>"
+  },
+  {
+   "name": "xGroupCreate",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, id: RedisArgument, options?: XGroupCreateOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "xGroupCreateConsumer",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, consumer: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "xGroupDelConsumer",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, consumer: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "xGroupDestroy",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "xGroupSetId",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, id: RedisArgument, options?: XGroupSetIdOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "xInfoConsumers",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument)",
+   "returns": "Promise<{ name: string; pending: number; idle: number; inactive: nu..."
+  },
+  {
+   "name": "xInfoGroups",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<{ name: string; consumers: number; pending: number; 'last-d..."
+  },
+  {
+   "name": "xInfoStream",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<{ length: number; \"radix-tree-keys\": number; \"radix-tree-no..."
+  },
+  {
+   "name": "xLen",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "xPending",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument)",
+   "returns": "Promise<{ pending: number; firstId: string | null; lastId: string |..."
+  },
+  {
+   "name": "xPendingRange",
+   "kind": "method",
+   "params": "(key: RedisArgument, group: RedisArgument, start: RedisArgument, end: RedisArgument, count: number, options?: XPendingRangeOptions | undefined)",
+   "returns": "Promise<{ id: string; consumer: string; millisecondsSinceLastDelive..."
+  },
+  {
+   "name": "xRange",
+   "kind": "method",
+   "params": "(key: RedisArgument, start: RedisArgument, end: RedisArgument, options?: XRangeOptions | undefined)",
+   "returns": "Promise<{ id: string; message: { [x: string]: string; }; millisElap..."
+  },
+  {
+   "name": "xRead",
+   "kind": "method",
+   "params": "(streams: XReadStreams, options?: XReadOptions | undefined)",
+   "returns": "Promise<{ name: string; messages: { id: string; message: { [x: stri..."
+  },
+  {
+   "name": "xReadGroup",
+   "kind": "method",
+   "params": "(group: RedisArgument, consumer: RedisArgument, streams: XReadStreams, options?: XReadGroupOptions | undefined)",
+   "returns": "Promise<{ name: string; messages: { id: string; message: { [x: stri..."
+  },
+  {
+   "name": "xRevRange",
+   "kind": "method",
+   "params": "(key: RedisArgument, start: RedisArgument, end: RedisArgument, options?: XRangeOptions | undefined)",
+   "returns": "Promise<{ id: string; message: { [x: string]: string; }; millisElap..."
+  },
+  {
+   "name": "xSetId",
+   "kind": "method",
+   "params": "(key: RedisArgument, lastId: RedisArgument, options?: XSetIdOptions | undefined)",
+   "returns": "Promise<\"OK\">"
+  },
+  {
+   "name": "xTrim",
+   "kind": "method",
+   "params": "(key: RedisArgument, strategy: \"MAXLEN\" | \"MINID\", threshold: string | number, options?: XTrimOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zAdd",
+   "kind": "method",
+   "params": "(key: RedisArgument, members: SortedSetMember | SortedSetMember[], options?: ZAddOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zAddIncr",
+   "kind": "method",
+   "params": "(key: RedisArgument, members: SortedSetMember | SortedSetMember[], options?: ZAddOptions | undefined)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "zCard",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, min: number | RedisArgument, max: number | RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zDiff",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "zDiffStore",
+   "kind": "method",
+   "params": "(destination: RedisArgument, inputKeys: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zDiffWithScores",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument)",
+   "returns": "Promise<{ value: string; score: number; }[]>"
+  },
+  {
+   "name": "zIncrBy",
+   "kind": "method",
+   "params": "(key: RedisArgument, increment: number, member: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zInter",
+   "kind": "method",
+   "params": "(keys: ZInterKeysType, options?: ZInterOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "zInterCard",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument, options?: number | ZInterCardOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zInterStore",
+   "kind": "method",
+   "params": "(destination: RedisArgument, keys: ZKeys, options?: ZInterOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zInterWithScores",
+   "kind": "method",
+   "params": "(keys: ZInterKeysType, options?: ZInterOptions | undefined)",
+   "returns": "Promise<{ value: string; score: number; }[]>"
+  },
+  {
+   "name": "zLexCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, min: RedisArgument, max: RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zmPop",
+   "kind": "method",
+   "params": "(keys: RedisVariadicArgument, side: SortedSetSide, options?: ZMPopOptions | undefined)",
+   "returns": "Promise<{ key: string; members: { value: string; score: number; }[]..."
+  },
+  {
+   "name": "zmScore",
+   "kind": "method",
+   "params": "(key: RedisArgument, member: RedisVariadicArgument)",
+   "returns": "Promise<(number | null)[]>"
+  },
+  {
+   "name": "zPopMax",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<{ value: string; score: number; } | null>"
+  },
+  {
+   "name": "zPopMaxCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<{ value: string; score: number; }[]>"
+  },
+  {
+   "name": "zPopMin",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<{ value: string; score: number; } | null>"
+  },
+  {
+   "name": "zPopMinCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<{ value: string; score: number; }[]>"
+  },
+  {
+   "name": "zRandMember",
+   "kind": "method",
+   "params": "(key: RedisArgument)",
+   "returns": "Promise<string | null>"
+  },
+  {
+   "name": "zRandMemberCount",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "zRandMemberCountWithScores",
+   "kind": "method",
+   "params": "(key: RedisArgument, count: number)",
+   "returns": "Promise<{ value: string; score: number; }[]>"
+  },
+  {
+   "name": "zRange",
+   "kind": "method",
+   "params": "(key: RedisArgument, min: number | RedisArgument, max: number | RedisArgument, options?: ZRangeOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "zRangeByLex",
+   "kind": "method",
+   "params": "(key: RedisArgument, min: RedisArgument, max: RedisArgument, options?: ZRangeByLexOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "zRangeByScore",
+   "kind": "method",
+   "params": "(key: RedisArgument, min: string | number, max: string | number, options?: ZRangeByScoreOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "zRangeByScoreWithScores",
+   "kind": "method",
+   "params": "(key: RedisArgument, min: string | number, max: string | number, options?: ZRangeByScoreOptions | undefined)",
+   "returns": "Promise<{ value: string; score: number; }[]>"
+  },
+  {
+   "name": "zRangeStore",
+   "kind": "method",
+   "params": "(destination: RedisArgument, source: RedisArgument, min: number | RedisArgument, max: number | RedisArgument, options?: ZRangeStoreOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zRangeWithScores",
+   "kind": "method",
+   "params": "(key: RedisArgument, min: number | RedisArgument, max: number | RedisArgument, options?: ZRangeOptions | undefined)",
+   "returns": "Promise<{ value: string; score: number; }[]>"
+  },
+  {
+   "name": "zRank",
+   "kind": "method",
+   "params": "(key: RedisArgument, member: RedisArgument)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "zRankWithScore",
+   "kind": "method",
+   "params": "(key: RedisArgument, member: RedisArgument)",
+   "returns": "Promise<{ rank: number; score: number; } | null>"
+  },
+  {
+   "name": "zRem",
+   "kind": "method",
+   "params": "(key: RedisArgument, member: RedisVariadicArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zRemRangeByLex",
+   "kind": "method",
+   "params": "(key: RedisArgument, min: number | RedisArgument, max: number | RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zRemRangeByRank",
+   "kind": "method",
+   "params": "(key: RedisArgument, start: number, stop: number)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zRemRangeByScore",
+   "kind": "method",
+   "params": "(key: RedisArgument, min: number | RedisArgument, max: number | RedisArgument)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zRevRank",
+   "kind": "method",
+   "params": "(key: RedisArgument, member: RedisArgument)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "zScan",
+   "kind": "method",
+   "params": "(key: RedisArgument, cursor: RedisArgument, options?: ScanCommonOptions | undefined)",
+   "returns": "Promise<{ cursor: string; members: { value: string; score: number; ..."
+  },
+  {
+   "name": "zScanIterator",
+   "kind": "method",
+   "params": "(key: RedisArgument, options?: (ScanCommonOptions & ScanIteratorOptions) | undefined)",
+   "returns": "AsyncGenerator<{ value: string; score: number; }[], void, unknown>"
+  },
+  {
+   "name": "zScore",
+   "kind": "method",
+   "params": "(key: RedisArgument, member: RedisArgument)",
+   "returns": "Promise<number | null>"
+  },
+  {
+   "name": "zUnion",
+   "kind": "method",
+   "params": "(keys: ZKeys, options?: ZUnionOptions | undefined)",
+   "returns": "Promise<string[]>"
+  },
+  {
+   "name": "zUnionStore",
+   "kind": "method",
+   "params": "(destination: RedisArgument, keys: ZKeys, options?: ZUnionOptions | undefined)",
+   "returns": "Promise<number>"
+  },
+  {
+   "name": "zUnionWithScores",
+   "kind": "method",
+   "params": "(keys: ZKeys, options?: ZUnionOptions | undefined)",
+   "returns": "Promise<{ value: string; score: number; }[]>"
+  }
+ ],
+ "multi": {
+  "shared": [
+   "aclCat",
+   "aclDelUser",
+   "aclDryRun",
+   "aclGenPass",
+   "aclGetUser",
+   "aclList",
+   "aclLoad",
+   "aclLog",
+   "aclLogReset",
+   "aclSave",
+   "aclSetUser",
+   "aclUsers",
+   "aclWhoAmI",
+   "append",
+   "asking",
+   "auth",
+   "bf",
+   "bgRewriteAof",
+   "bgSave",
+   "bitCount",
+   "bitField",
+   "bitFieldRo",
+   "bitOp",
+   "bitPos",
+   "blMove",
+   "blmPop",
+   "blPop",
+   "brPop",
+   "brPopLPush",
+   "bzmPop",
+   "bzPopMax",
+   "bzPopMin",
+   "cf",
+   "clientCaching",
+   "clientGetName",
+   "clientGetRedir",
+   "clientId",
+   "clientInfo",
+   "clientKill",
+   "clientList",
+   "clientNoEvict",
+   "clientNoTouch",
+   "clientPause",
+   "clientSetName",
+   "clientTracking",
+   "clientTrackingInfo",
+   "clientUnpause",
+   "clusterAddSlots",
+   "clusterAddSlotsRange",
+   "clusterBumpEpoch",
+   "clusterCountFailureReports",
+   "clusterCountKeysInSlot",
+   "clusterDelSlots",
+   "clusterDelSlotsRange",
+   "clusterFailover",
+   "clusterFlushSlots",
+   "clusterForget",
+   "clusterGetKeysInSlot",
+   "clusterInfo",
+   "clusterKeySlot",
+   "clusterLinks",
+   "clusterMeet",
+   "clusterMyId",
+   "clusterMyShardId",
+   "clusterNodes",
+   "clusterReplicas",
+   "clusterReplicate",
+   "clusterReset",
+   "clusterSaveConfig",
+   "clusterSetConfigEpoch",
+   "clusterSetSlot",
+   "clusterSlots",
+   "cms",
+   "command",
+   "commandCount",
+   "commandGetKeys",
+   "commandGetKeysAndFlags",
+   "commandInfo",
+   "commandList",
+   "configGet",
+   "configResetStat",
+   "configRewrite",
+   "configSet",
+   "copy",
+   "dbSize",
+   "decr",
+   "decrBy",
+   "del",
+   "delEx",
+   "digest",
+   "dump",
+   "echo",
+   "eval",
+   "evalRo",
+   "evalSha",
+   "evalShaRo",
+   "exists",
+   "expire",
+   "expireAt",
+   "expireTime",
+   "fCall",
+   "fCallRo",
+   "flushAll",
+   "flushDb",
+   "ft",
+   "functionDelete",
+   "functionDump",
+   "functionFlush",
+   "functionKill",
+   "functionList",
+   "functionListWithCode",
+   "functionLoad",
+   "functionRestore",
+   "functionStats",
+   "geoAdd",
+   "geoDist",
+   "geoHash",
+   "geoPos",
+   "geoRadius",
+   "geoRadiusByMember",
+   "geoRadiusByMemberRo",
+   "geoRadiusByMemberRoWith",
+   "geoRadiusByMemberStore",
+   "geoRadiusByMemberWith",
+   "geoRadiusRo",
+   "geoRadiusRoWith",
+   "geoRadiusStore",
+   "geoRadiusWith",
+   "geoSearch",
+   "geoSearchStore",
+   "geoSearchWith",
+   "get",
+   "getBit",
+   "getDel",
+   "getEx",
+   "getRange",
+   "getSet",
+   "hDel",
+   "hello",
+   "hExists",
+   "hExpire",
+   "hExpireAt",
+   "hExpireTime",
+   "hGet",
+   "hGetAll",
+   "hGetDel",
+   "hGetEx",
+   "hIncrBy",
+   "hIncrByFloat",
+   "hKeys",
+   "hLen",
+   "hmGet",
+   "hotkeysGet",
+   "hotkeysReset",
+   "hotkeysStart",
+   "hotkeysStop",
+   "hPersist",
+   "hpExpire",
+   "hpExpireAt",
+   "hpExpireTime",
+   "hpTTL",
+   "hRandField",
+   "hRandFieldCount",
+   "hRandFieldCountWithValues",
+   "hScan",
+   "hScanNoValues",
+   "hSet",
+   "hSetEx",
+   "hSetNX",
+   "hStrLen",
+   "hTTL",
+   "hVals",
+   "incr",
+   "incrBy",
+   "incrByFloat",
+   "info",
+   "json",
+   "keys",
+   "lastSave",
+   "latencyDoctor",
+   "latencyGraph",
+   "latencyHistogram",
+   "latencyHistory",
+   "latencyLatest",
+   "latencyReset",
+   "lcs",
+   "lcsIdx",
+   "lcsIdxWithMatchLen",
+   "lcsLen",
+   "lIndex",
+   "lInsert",
+   "lLen",
+   "lMove",
+   "lmPop",
+   "lPop",
+   "lPopCount",
+   "lPos",
+   "lPosCount",
+   "lPush",
+   "lPushX",
+   "lRange",
+   "lRem",
+   "lSet",
+   "lTrim",
+   "memoryDoctor",
+   "memoryMallocStats",
+   "memoryPurge",
+   "memoryStats",
+   "memoryUsage",
+   "mGet",
+   "migrate",
+   "moduleList",
+   "moduleLoad",
+   "moduleUnload",
+   "move",
+   "mSet",
+   "mSetEx",
+   "mSetNX",
+   "objectEncoding",
+   "objectFreq",
+   "objectIdleTime",
+   "objectRefCount",
+   "persist",
+   "pExpire",
+   "pExpireAt",
+   "pExpireTime",
+   "pfAdd",
+   "pfCount",
+   "pfMerge",
+   "ping",
+   "pSetEx",
+   "pTTL",
+   "publish",
+   "pubSubChannels",
+   "pubSubNumPat",
+   "pubSubNumSub",
+   "pubSubShardChannels",
+   "pubSubShardNumSub",
+   "randomKey",
+   "readonly",
+   "rename",
+   "renameNX",
+   "replicaOf",
+   "restore",
+   "restoreAsking",
+   "role",
+   "rPop",
+   "rPopCount",
+   "rPopLPush",
+   "rPush",
+   "rPushX",
+   "sAdd",
+   "scan",
+   "sCard",
+   "scriptDebug",
+   "scriptExists",
+   "scriptFlush",
+   "scriptKill",
+   "scriptLoad",
+   "sDiff",
+   "sDiffStore",
+   "select",
+   "sendCommand",
+   "set",
+   "setBit",
+   "setEx",
+   "setNX",
+   "setRange",
+   "sInter",
+   "sInterCard",
+   "sInterStore",
+   "sIsMember",
+   "sMembers",
+   "smIsMember",
+   "sMove",
+   "sort",
+   "sortRo",
+   "sortStore",
+   "sPop",
+   "sPopCount",
+   "sPublish",
+   "sRandMember",
+   "sRandMemberCount",
+   "sRem",
+   "sScan",
+   "strLen",
+   "sUnion",
+   "sUnionStore",
+   "swapDb",
+   "tDigest",
+   "time",
+   "topK",
+   "touch",
+   "ts",
+   "ttl",
+   "type",
+   "unlink",
+   "vAdd",
+   "vCard",
+   "vDim",
+   "vEmb",
+   "vEmbRaw",
+   "vGetAttr",
+   "vInfo",
+   "vLinks",
+   "vLinksWithScores",
+   "vRandMember",
+   "vRange",
+   "vRem",
+   "vSetAttr",
+   "vSim",
+   "vSimWithScores",
+   "wait",
+   "xAck",
+   "xAckDel",
+   "xAdd",
+   "xAddNoMkStream",
+   "xAutoClaim",
+   "xAutoClaimJustId",
+   "xCfgSet",
+   "xClaim",
+   "xClaimJustId",
+   "xDel",
+   "xDelEx",
+   "xGroupCreate",
+   "xGroupCreateConsumer",
+   "xGroupDelConsumer",
+   "xGroupDestroy",
+   "xGroupSetId",
+   "xInfoConsumers",
+   "xInfoGroups",
+   "xInfoStream",
+   "xLen",
+   "xPending",
+   "xPendingRange",
+   "xRange",
+   "xRead",
+   "xReadGroup",
+   "xRevRange",
+   "xSetId",
+   "xTrim",
+   "zAdd",
+   "zAddIncr",
+   "zCard",
+   "zCount",
+   "zDiff",
+   "zDiffStore",
+   "zDiffWithScores",
+   "zIncrBy",
+   "zInter",
+   "zInterCard",
+   "zInterStore",
+   "zInterWithScores",
+   "zLexCount",
+   "zmPop",
+   "zmScore",
+   "zPopMax",
+   "zPopMaxCount",
+   "zPopMin",
+   "zPopMinCount",
+   "zRandMember",
+   "zRandMemberCount",
+   "zRandMemberCountWithScores",
+   "zRange",
+   "zRangeByLex",
+   "zRangeByScore",
+   "zRangeByScoreWithScores",
+   "zRangeStore",
+   "zRangeWithScores",
+   "zRank",
+   "zRankWithScore",
+   "zRem",
+   "zRemRangeByLex",
+   "zRemRangeByRank",
+   "zRemRangeByScore",
+   "zRevRank",
+   "zScan",
+   "zScore",
+   "zUnion",
+   "zUnionStore",
+   "zUnionWithScores"
+  ],
+  "only": [
+   {
+    "name": "addCommand",
+    "kind": "method",
+    "params": "(args: CommandArguments, transformReply?: TransformReply | undefined)",
+    "returns": "the multi chain"
+   },
+   {
+    "name": "exec",
+    "kind": "method",
+    "params": "(execAsPipeline?: boolean | undefined)",
+    "returns": "Promise<MultiReplyType<T, []>>"
+   },
+   {
+    "name": "execAsPipeline",
+    "kind": "method",
+    "params": "()",
+    "returns": "Promise<MultiReplyType<T, []>>"
+   },
+   {
+    "name": "execAsPipelineTyped",
+    "kind": "method",
+    "params": "()",
+    "returns": "Promise<[]>"
+   },
+   {
+    "name": "execTyped",
+    "kind": "method",
+    "params": "(execAsPipeline?: boolean | undefined)",
+    "returns": "Promise<[]>"
+   }
+  ]
+ },
+ "db": [
+  {
+   "name": "query",
+   "kind": "method",
+   "params": "(text: string, params?: unknown[] | undefined)",
+   "returns": "Promise<{ rows: unknown[]; }>"
+  }
+ ],
+ "log": {
+  "call": {
+   "params": "(...args: unknown[])",
+   "returns": "void"
+  },
+  "members": [
+   {
+    "name": "apply",
+    "kind": "method",
+    "params": "(thisArg: any, argArray?: any)",
+    "returns": "any",
+    "doc": "Calls the function, substituting the specified object for the this value of the function, and the specified array for the arguments of the function."
+   },
+   {
+    "name": "arguments",
+    "kind": "property",
+    "type": "any"
+   },
+   {
+    "name": "bind",
+    "kind": "method",
+    "params": "(thisArg: any, ...argArray: any[])",
+    "returns": "any",
+    "doc": "For a given function, creates a bound function that has the same body as the original function. The this object of the bound function is associated with the specified object, and has the specified initial parameters."
+   },
+   {
+    "name": "call",
+    "kind": "method",
+    "params": "(thisArg: any, ...argArray: any[])",
+    "returns": "any",
+    "doc": "Calls a method of an object, substituting another object for the current object."
+   },
+   {
+    "name": "caller",
+    "kind": "property",
+    "type": "Function"
+   },
+   {
+    "name": "length",
+    "kind": "property",
+    "type": "number"
+   },
+   {
+    "name": "name",
+    "kind": "property",
+    "type": "string",
+    "doc": "Returns the name of the function. Function names are read-only and can not be changed."
+   },
+   {
+    "name": "prototype",
+    "kind": "property",
+    "type": "any"
+   },
+   {
+    "name": "toString",
+    "kind": "method",
+    "params": "()",
+    "returns": "string",
+    "doc": "Returns a string representation of a function."
+   }
+  ]
+ }
+}
