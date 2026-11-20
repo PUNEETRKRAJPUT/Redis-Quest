@@ -1,0 +1,6 @@
+# Right counter and expiry, plus a list that repeats the count.
+INCR canteen:tokens:today
+INCR canteen:tokens:today
+INCR canteen:tokens:today
+EXPIRE canteen:tokens:today 3600
+RPUSH canteen:tokens:list t1 t2 t3

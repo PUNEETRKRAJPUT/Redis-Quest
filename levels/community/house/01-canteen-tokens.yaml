@@ -1,0 +1,67 @@
+id: house-01-canteen-tokens
+chapter: house
+title: "The canteen token counter"
+mode: cli
+author:
+  name: "The house"
+
+story: |
+  Lunch at the canteen runs on paper tokens, and the uncle at the counter loses count every day.
+  Three students have just collected a token. The counter has to say 3, and it has to start
+  again at zero by itself in an hour so nobody has to remember to reset it.
+
+brainstorm:
+  prompt: "A number that only goes up by one, per student, and clears itself later. What would you reach for?"
+  options:
+    - { id: counter-key, label: "One string key I increment, with an expiry", is_reasonable: true }
+    - { id: list-of-tokens, label: "A list with one entry per token, counted with LLEN", is_reasonable: false }
+    - { id: not-redis, label: "Not Redis: a variable inside the app", is_reasonable: false }
+
+teach: |
+  `INCR key` adds one to the number stored at `key` and returns the new value. A key that does not
+  exist yet is treated as 0, so the first `INCR` returns 1. It is a single command, so two students
+  collecting a token at the same moment cannot overwrite each other's update.
+
+  `EXPIRE key seconds` makes the key delete itself after that many seconds, and `TTL key` reports
+  how many seconds are left (-1 when the key has no expiry).
+
+  Worked example, with a different key: `INCR bus:riders` then `EXPIRE bus:riders 60`.
+
+task: |
+  The key is `canteen:tokens:today`. Increment it three times, then make it expire after
+  3600 seconds. Do not keep any second copy of the count.
+
+setup:
+  - cmd: [DEL, "canteen:tokens:today", "canteen:tokens:list"]
+
+hints:
+  - "INCR takes only the key. Run it once per token."
+  - "EXPIRE takes the key and then the number of seconds."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [GET, "canteen:tokens:today"]
+        equals: 3
+        message: "The counter should read 3 after three tokens."
+      - cmd: [TTL, "canteen:tokens:today"]
+        between: [1, 3600]
+        message: "The counter needs an expiry of at most 3600 seconds, so it resets by itself."
+  - type: antipattern
+    checks:
+      - cmd: [EXISTS, "canteen:tokens:list"]
+        equals: 0
+        message: "This passes today, but you also keep a list of tokens next to the counter. Two copies of one number drift apart."
+
+reward:
+  xp: 10
+
+solutions:
+  reference: solutions/01-reference.redis
+  wrong:
+    - path: solutions/01-wrong-no-expiry.redis
+      expect: wrong
+      because: "The count is right but the key never expires: TTL is -1, so nothing resets it."
+    - path: solutions/01-works-but-wrong-list-copy.redis
+      expect: works_but_wrong
+      because: "Correct counter and expiry, plus a list copy of the same number."
