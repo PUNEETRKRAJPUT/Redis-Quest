@@ -3,8 +3,8 @@
 // real engine over HTTP and prints a truth table (level, solution, declared verdict, engine verdict,
 // PASS / MISMATCH / SKIPPED). A level is only done when its table has no MISMATCH row.
 //
-//   scripts/grade/grade.sh [--engine URL] [--workspace DIR] [--levels DIR] [--run-ops] [--json FILE]
-//                          <chapter-dir | level-id>...
+//   scripts/grade/grade.sh [--engine URL] [--workspace DIR] [--levels DIR] [--run-ops] [--deterministic]
+//                          [--json FILE] <chapter-dir | level-id>...
 //
 // It reads levels with the @quest/shared loader (built output in packages/shared/dist) and never parses
 // YAML itself. The engine must already be running with the same level files mounted. Exit codes:
@@ -25,6 +25,7 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { deterministicSkipReason } from '../ci/deterministic.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..', '..');
@@ -48,6 +49,10 @@ const USAGE = `usage: scripts/grade/grade.sh [options] <chapter-dir | level-id>.
                     run with this tool's environment: export COMPOSE_PROJECT_NAME, COMPOSE_FILE and COMPOSE_ENV_FILES (as
                     scripts/check/G-01.sh does with G01_RUN_OPS=1) so docker compose acts on the grading stack; without
                     them it is the default project
+  --deterministic   grade only what cannot depend on the machine's speed or on Docker (D-01, used for pull requests on a
+                    hosted runner): levels of mode cli, code and decision. Every other level (ops, compose profiles, a real
+                    Redis outage, traffic checks, a timed load run, random interview pools) is SKIPPED with its reason, and a
+                    skip is never a failure. Cannot be combined with --run-ops
   --json FILE       also write the table as JSON
   -h, --help        this text`;
 
@@ -56,6 +61,7 @@ const opts = {
   workspace: null,
   levels: join(ROOT, 'levels'),
   runOps: false,
+  deterministic: false,
   json: null,
   targets: [],
 };
@@ -72,6 +78,7 @@ const opts = {
     else if (k === '--levels') opts.levels = resolve(val());
     else if (k === '--json') opts.json = resolve(val());
     else if (k === '--run-ops') opts.runOps = true;
+    else if (k === '--deterministic') opts.deterministic = true;
     else if (k === '-h' || k === '--help') {
       console.log(USAGE);
       process.exit(0);
@@ -79,6 +86,10 @@ const opts = {
     else opts.targets.push(k);
   }
   if (!opts.targets.length) usageExit('give at least one chapter directory or level id');
+  if (opts.deterministic && opts.runOps)
+    usageExit(
+      '--deterministic grades nothing that needs Docker: it cannot be combined with --run-ops',
+    );
   opts.engine = opts.engine.replace(/\/+$/, '');
 }
 function usageExit(msg) {
@@ -1068,6 +1079,28 @@ async function gradeLevel(lv) {
   const id = x.id;
   log(`== ${id} (${x.mode})`);
 
+  // D-01: on a hosted runner only levels whose verdict cannot depend on the machine are graded. The rest are
+  // skipped, one row per declared solution with the reason, and still completed so later levels unlock.
+  if (opts.deterministic) {
+    const why = deterministicSkipReason(x);
+    if (why) {
+      const note = `SKIPPED (deterministic mode: ${why}; graded by hand)`;
+      if (x.mode === 'decision') {
+        skipped(lv, `reference [${(x.solutions.reference ?? []).join(', ')}]`, 'right', note);
+        for (const w of x.solutions.wrong ?? [])
+          skipped(lv, `option ${w.option}`, w.expect, note, w.because);
+      } else if (x.solutions) {
+        skipped(lv, String(x.solutions.reference), 'right', note);
+        for (const w of x.solutions.wrong ?? []) skipped(lv, w.path, w.expect, note, w.because);
+      } else {
+        skipped(lv, '(no solutions of its own)', 'right', note);
+      }
+      await ensureUnlocked(id);
+      await api('POST', `/api/levels/${id}/complete`);
+      return;
+    }
+  }
+
   if (x.mode === 'decision') {
     await ensureUnlocked(id);
     const quizzes = x.verify.map((v, i) => [v, i]).filter(([v]) => v.type === 'quiz');
@@ -1375,6 +1408,10 @@ function printTable() {
 
 try {
   await resolveTargets();
+  if (opts.deterministic)
+    log(
+      'deterministic mode: grading cli, code and decision levels that do not depend on machine speed; every other level is SKIPPED with its reason',
+    );
   await loadSlotFiles();
   await ensurePlayer();
   watchProgress();
