@@ -36,8 +36,8 @@ Intel Macs and Linux are not supported. Everything runs locally, nothing is host
 licensed. The repository has a docs site with screenshots and the full level catalogue for anyone who cannot run it.
 
 Where it stands: this is a release candidate, and nobody except me has played it yet. I do not know how long a
-chapter takes, where people get stuck, or whether it teaches what I want it to. That is why I am posting. The
-fastest way to help is to play Chapter 0 and the first levels of Chapter 1 and tell me where you stopped.
+chapter takes, where people get stuck, or whether it teaches what I want it to. That is why I am posting. If you want
+to help, play Chapter 0 and the first levels of Chapter 1 and tell me where you stopped.
 
 Redis Quest is an independent project and is not affiliated with or endorsed by Redis.
 
