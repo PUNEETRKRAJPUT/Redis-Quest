@@ -2,12 +2,12 @@
 
 Nothing here is posted. Four drafts:
 
-| File | For | Length |
+| File | For | Contents |
 | --- | --- | --- |
-| `01-show-hn.md` | Show HN: title, text, a first comment | about 400 words |
-| `02-redis-community.md` | a Redis community of your choice | about 450 words |
-| `03-thread.md` | a seven-post thread, with images | seven posts under 280 characters |
-| `04-how-it-was-built.md` | a blog post: spec, check, handoff, parallel agents, the incident | about 1,500 words |
+| `01-show-hn.md` | Show HN: title, text, a first comment | title, text, a first comment |
+| `02-redis-community.md` | a Redis community of your choice | title, text |
+| `03-thread.md` | a seven-post thread, with images | seven posts under 280 characters, with images |
+| `04-how-it-was-built.md` | a blog post: spec, check, handoff, parallel agents, the incident | a long post |
 
 Rules the drafts follow, and that an edit should keep: every sentence is true of the repository and checkable in it;
 no number from memory; no superlatives; no claim about what learners achieve (nobody except the owner has played the

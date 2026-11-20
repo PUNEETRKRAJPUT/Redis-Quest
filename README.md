@@ -7,6 +7,13 @@ wrong in the best way, one chapter at a time. Everything runs on your own Mac: e
 something real against a real Redis, a real Postgres and real traffic, and tells you honestly what broke and
 what you fixed.
 
+Redis Quest is an independent project. It is not affiliated with or endorsed by Redis, and it does not use Redis's
+logo or visual identity. Nobody except its author has played it through yet: see [Status](#status).
+
+A docs site with the screenshots, the full level catalogue, an index of the commands each level uses and a page on how
+levels are graded is generated from this repository: run `pnpm --filter @quest/shared build` and then
+`node scripts/site/build.mjs`, and open `site/index.html`. <!-- SITE-LINK: put the published address here once GitHub Pages is on -->
+
 ![The season map: each chapter a match night with its incident, each level a ball in an over](docs/img/map.jpg)
 
 ## What is inside
@@ -105,7 +112,7 @@ the verdict and the checks). Every level has the same seven stages, and you only
 4. **Teach**: the concept, the commands and a link to the official docs.
 5. **Build**: run commands in the terminal, fill in one file, run a command on your Mac, or make a decision.
    Hints open one at a time.
-6. **The decision**: press **Check my work**. The check plays like a third-umpire review ("Decision pending")
+6. **The decision**: press **Verify my work**. The check plays like a third-umpire review ("Decision pending")
    and then shows one of three verdicts:
    - **Right**: it works, and the "show me" panel shows it running on your own keys.
    - **Works, but wrong**: it passes today, and the game shows you how it fails under load.
@@ -142,10 +149,12 @@ stack:
   did a message arrive on a channel, did the terminal get `BUSY` and did you `SCRIPT KILL` it.
 - **Quizzes and typed answers**: for the decisions, with a model answer that reasons.
 
-Every level ships with a reference solution and at least one wrong one, each declaring the verdict it must
-get. A grading harness plays all of them through the engine the way a learner would, including the ops
-levels by their own shell scripts on an isolated copy of the stack; the current build grades 315 declared
-solutions with no mismatch. The same harness is how a new level earns its place.
+Every level except the three drawn mock interviews ships with a reference solution and at least one wrong one, each
+declaring the verdict it must get. A grading harness plays all of them through the engine the way a learner would,
+including the ops levels by their own shell scripts on an isolated copy of the stack. Its last full run, recorded in
+the decisions log of [docs/BUILD.md](docs/BUILD.md) (2026-11-19), graded 316 solution rows with no mismatch; six more
+rows need a real outage or the cluster join and were played by hand. The same harness is how a new level earns its
+place.
 
 ## The tools
 
@@ -199,7 +208,8 @@ Everything is Docker Compose on your Mac; nothing is hosted and nothing phones h
 | `insight`  | Redis Insight, provisioned to the game's Redis.                                                                                                                    |
 
 Your code gets `{ redis, db, log }`: a counted, fail-fast node-redis client (two seconds, then an error you
-can catch), a Postgres query function, and a logger that lands in the Logs page. The same contract holds on
+can catch), a Postgres query function, and a logger that lands in the Logs page. Chapter 5 level 6 adds a fourth,
+`redisCached`, a second client with client-side caching. The same contract holds on
 the runner and inside the app, on a single node, behind Sentinel or on the cluster.
 
 ## Where your work lives
@@ -244,6 +254,8 @@ Every port is bound to 127.0.0.1, so nothing is reachable from your network.
   preflight fails below 6 GB.
 - **Disk under 10 GB**: empty the Trash; `docker system prune -a` removes unused images.
 - **The first start loads a 60 MB seed into Postgres**: give it a minute before you open the game.
+- **A traffic level is too heavy for your Mac**: set `LOW_POWER=1` in `.env` to halve the load generator's caps
+  (`LOAD_MAX_CONNECTIONS`, 200 by default, and `LOAD_MAX_DURATION_SEC`, 30), then run `scripts/start` again.
 - **Docker is not running**: `open -a Docker`, wait until the whale stops animating, then try again.
 
 ## Status
@@ -251,6 +263,10 @@ Every port is bound to 127.0.0.1, so nothing is reachable from your network.
 Release candidate (`v1.0.0-rc2`): every planned chapter is built and every level is machine-graded. A
 five-person playtest is the next step; findings go through the issue template. If you are one of the
 testers, start with [docs/TESTING.md](docs/TESTING.md).
+
+What is not known yet: nobody except the author has played the game through, so there are no completion times, no
+list of where people get stuck, and no evidence yet about how well it teaches. Safari and Firefox are untested, and the
+sound cues have not been heard by a person.
 
 ## Contributing and how it was built
 
