@@ -13,6 +13,7 @@ import {
   useReducedMotion,
   variantsFor,
 } from '@/design';
+import { FeatureStrip } from '../features/FeatureStrip';
 import { CapsShelf } from '../map/CapsShelf';
 import { FixtureDetail } from '../map/FixtureDetail';
 import { nextMatch, seasonTotals } from '../map/model';
@@ -220,6 +221,8 @@ export function ChapterMap() {
           ))}
         </div>
       </Rise>
+
+      <FeatureStrip />
     </main>
   );
 }

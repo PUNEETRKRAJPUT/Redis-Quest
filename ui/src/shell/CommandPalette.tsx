@@ -27,6 +27,7 @@ import { toast } from '@/design/toast';
 import type { Route } from '../routes';
 import { useQuest } from '../store';
 import type { LevelStatus } from '../types';
+import { FEATURES } from '../features/registry';
 import { NAV } from './nav';
 import { paletteScore } from './paletteScore';
 
@@ -78,7 +79,7 @@ export function CommandPalette({
   onClose: () => void;
   onShortcuts: () => void;
   /** Navigates with the shell's own cross-fade. */
-  go: (route: Route) => void;
+  go: (to: Route | string) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [search, setSearch] = useState('');
@@ -178,6 +179,22 @@ export function CommandPalette({
               </Command.Item>
             ))}
           </Command.Group>
+
+          {FEATURES.length > 0 ? (
+            <Command.Group heading="Beyond the season" className={GROUP}>
+              {FEATURES.map((f) => (
+                <Command.Item
+                  key={f.id}
+                  value={`go ${f.label}`}
+                  keywords={['screen', 'open', f.id]}
+                  onSelect={run(() => go(f.path))}
+                  className={ITEM}
+                >
+                  <Row icon={f.icon}>{f.label}</Row>
+                </Command.Item>
+              ))}
+            </Command.Group>
+          ) : null}
 
           <Command.Group heading="Settings" className={GROUP}>
             <Command.Item

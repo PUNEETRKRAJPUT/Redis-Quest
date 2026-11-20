@@ -79,7 +79,9 @@ function ReadyShell({ children }: { children: ReactNode }) {
   useEventToasts();
 
   // Link clicks and these navigations carry the same transition type, so only they cross-fade <main>.
-  const go = (route: Route) => router.push(pathFor(route), { transitionTypes: ['rq-nav'] });
+  // A Route for the six main screens and levels; a plain path for the extra screens in src/features.
+  const go = (to: Route | string) =>
+    router.push(typeof to === 'string' ? to : pathFor(to), { transitionTypes: ['rq-nav'] });
 
   const armed = useShellKeys({
     onPalette: () => {

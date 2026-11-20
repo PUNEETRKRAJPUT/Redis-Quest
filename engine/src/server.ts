@@ -10,6 +10,7 @@ import { parseTarget, SLOT_NAME, TemplateError } from '@quest/shared';
 import { etagOf, matchesEtag, type AppConfig } from './appconfig.js';
 import { cliCommandLabel, DANGEROUS_COMMANDS, isBusyReply, isScriptKilled, runCli } from './cli.js';
 import { CommandDocsInputError, parseNames, pickDocs, type CommandDocs } from './command-docs.js';
+import { registerFeatures } from './features/index.js';
 import type { Config } from './config.js';
 import type { EventBus, LevelEventData } from './events.js';
 import {
@@ -903,6 +904,9 @@ export async function buildServer(d: Deps): Promise<FastifyInstance> {
         const snap = d.commandDocs?.snapshot();
         return snap ? { reply: pickDocs(snap, names) } : { available: false };
       });
+
+      // Routes of the ten-day plan's features live in engine/src/features/, one file per task.
+      await registerFeatures({ api, deps: d });
 
       api.get('/slots', async () => ({ active: activeSlots() }));
       api.put('/slots', async (req) => {
