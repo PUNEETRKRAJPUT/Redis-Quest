@@ -14,7 +14,6 @@ logs
 .progress
 workspace
 docs
-fiction
 postgres
 graphify-out
 .DS_Store

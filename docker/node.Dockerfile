@@ -60,6 +60,9 @@ COPY --from=build /repo/runner/dist runner/dist
 # Own folder: the standalone output carries its own node_modules and must not mix with the install above.
 COPY --from=build /ui-standalone ui-standalone
 # Level and scenario data are read by the engine at run time.
+# The credits read the cast and the contributors list (D-06).
+COPY fiction/cast.json fiction/cast.json
+COPY CONTRIBUTORS.md ./
 COPY levels levels
 COPY scenarios scenarios
 
