@@ -1,0 +1,20 @@
+title: Keep the newest five
+task: |
+  `feed:latest` is the match feed, newest first, and holds e5, e4, e3, e2, e1 (e5 is the newest). Three events
+  arrive in this order: e6, e7, e8. Put them on the front of the feed, then keep only the five newest, so the feed
+  reads, newest first:
+
+  `e8, e7, e6, e5, e4`
+par: 4
+setup:
+  - cmd: [LPUSH, "feed:latest", e1]
+  - cmd: [LPUSH, "feed:latest", e2]
+  - cmd: [LPUSH, "feed:latest", e3]
+  - cmd: [LPUSH, "feed:latest", e4]
+  - cmd: [LPUSH, "feed:latest", e5]
+checks:
+  - cmd: [LRANGE, "feed:latest", 0, -1]
+    equals: [e8, e7, e6, e5, e4]
+    message: the feed must read e8, e7, e6, e5, e4 from the front
+  - cmd: [LLEN, "feed:latest"]
+    equals: 5

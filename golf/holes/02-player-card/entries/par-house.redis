@@ -1,0 +1,5 @@
+# House entry: one HSET per field, so four commands. Par.
+HSET player:7 name "Meera Rao"
+HSET player:7 team "Hostel Hawks"
+HSET player:7 runs 412
+HSET player:7 wickets 9

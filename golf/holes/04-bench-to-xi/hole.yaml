@@ -1,0 +1,31 @@
+title: Everyone off the bench
+task: |
+  `squad:bench` holds p1, p2, p3 and p4. `squad:xi` holds p5, p6 and p7. Move the whole bench into the XI:
+
+  - `squad:xi` ends with all seven players;
+  - `squad:bench` no longer exists (the check is that the key is gone).
+par: 4
+setup:
+  - cmd: [SADD, "squad:bench", p1]
+  - cmd: [SADD, "squad:bench", p2]
+  - cmd: [SADD, "squad:bench", p3]
+  - cmd: [SADD, "squad:bench", p4]
+  - cmd: [SADD, "squad:xi", p5]
+  - cmd: [SADD, "squad:xi", p6]
+  - cmd: [SADD, "squad:xi", p7]
+checks:
+  - cmd: [SCARD, "squad:xi"]
+    equals: 7
+  - cmd: [SISMEMBER, "squad:xi", p1]
+    equals: 1
+  - cmd: [SISMEMBER, "squad:xi", p2]
+    equals: 1
+  - cmd: [SISMEMBER, "squad:xi", p3]
+    equals: 1
+  - cmd: [SISMEMBER, "squad:xi", p4]
+    equals: 1
+  - cmd: [SISMEMBER, "squad:xi", p5]
+    equals: 1
+  - cmd: [EXISTS, "squad:bench"]
+    equals: 0
+    message: squad:bench must be gone

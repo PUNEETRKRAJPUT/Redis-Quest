@@ -1,0 +1,5 @@
+# House entry: push the events one at a time, then trim to five. Four commands. Par.
+LPUSH feed:latest e6
+LPUSH feed:latest e7
+LPUSH feed:latest e8
+LTRIM feed:latest 0 4
