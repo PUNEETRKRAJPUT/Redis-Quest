@@ -62,6 +62,8 @@ COPY --from=build /ui-standalone ui-standalone
 # Level and scenario data are read by the engine at run time.
 COPY levels levels
 COPY scenarios scenarios
+# Match Day reads its incident deck from here (D-09).
+COPY incidents incidents
 
 USER node
 CMD ["node", "engine/dist/main.js"]
