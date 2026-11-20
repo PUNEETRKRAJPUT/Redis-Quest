@@ -6,7 +6,7 @@ name: pr-verdict
 # a compose profile or traffic judged on timing are SKIPPED with their reason; the maintainer grades those on a Mac
 # (scripts/review-pr). A skip is never a failure; a MISMATCH is.
 #
-# Safety: `pull_request` (never `pull_request_target`), a read-only token, no secrets, and nothing from the pull
+# Safety: `pull_request` (never the privileged variant that runs with secrets), a read-only token, no secrets, and nothing from the pull
 # request's text is ever interpolated into a script. A pull request from a fork runs with the same read-only token.
 
 on:

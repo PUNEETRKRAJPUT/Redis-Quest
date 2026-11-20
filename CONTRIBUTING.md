@@ -79,7 +79,11 @@ the machine. It writes the table into the job summary on the pull request. Your 
 the `ci` workflow: build, lint, unit tests, format check and level validation.
 
 A green verdict is necessary, not sufficient. The maintainer reads the diff, and for anything that touches
-levels, scripts or workflows also runs the full checks on a Mac.
+levels, scripts or workflows also runs the full checks on a Mac with `scripts/review-pr <number>`. That script
+runs your pull request's code on the maintainer's machine, so it refuses any pull request that changes
+`scripts/`, `.github/`, `docker-compose.yml`, `docker/`, a `package.json`, the lockfile or any `.sh` file until the
+maintainer has read the diff and says so. A pull request that touches those files will wait longer for that
+reason, not because it is unwelcome.
 
 ## Running things yourself
 
