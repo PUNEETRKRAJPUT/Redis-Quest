@@ -73,6 +73,41 @@ export const cmd = {
   ],
   expire: (key: string, seconds: number): string[] => ['EXPIRE', key, String(seconds)],
   persist: (key: string): string[] => ['PERSIST', key],
+  /** XADD key * field value [field value]: the server picks the entry id. */
+  xadd: (key: string, fields: [string, string][]): string[] => [
+    'XADD',
+    key,
+    '*',
+    ...fields.flatMap(([f, v]) => [f, v]),
+  ],
+  /** JSON.SET key path value: `json` is the JSON text itself (a number, "a string", an object ...). */
+  jsonSet: (key: string, path: string, json: string): string[] => ['JSON.SET', key, path, json],
+  jsonNumIncrBy: (key: string, path: string, by: number): string[] => [
+    'JSON.NUMINCRBY',
+    key,
+    path,
+    String(by),
+  ],
+  /** SETBIT key offset value. */
+  setbit: (key: string, offset: number, value: 0 | 1): string[] => [
+    'SETBIT',
+    key,
+    String(offset),
+    String(value),
+  ],
+  pfadd: (key: string, element: string): string[] => ['PFADD', key, element],
+  /** GEOADD key longitude latitude member (longitude first). */
+  geoadd: (key: string, lon: number, lat: number, member: string): string[] => [
+    'GEOADD',
+    key,
+    String(lon),
+    String(lat),
+    member,
+  ],
+  bfAdd: (key: string, item: string): string[] => ['BF.ADD', key, item],
+  bfExists: (key: string, item: string): string[] => ['BF.EXISTS', key, item],
+  /** TS.ADD key * value: `*` is the server's own clock, so "now". */
+  tsAdd: (key: string, value: number): string[] => ['TS.ADD', key, '*', String(value)],
 };
 
 /** The key a command acts on (every command the panels send has it as the first argument). */
@@ -94,6 +129,55 @@ export function parseSeconds(text: string): number | null {
   if (!/^\d+$/.test(t)) return null;
   const n = Number(t);
   return n >= 1 && n <= TTL_MAX_SECONDS ? n : null;
+}
+
+/** A finite number from a text box (`-3`, `1.5`, `2e3`); null for anything else, including empty text. */
+export function parseNumber(text: string): number | null {
+  const t = text.trim();
+  if (t === '' || !/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** GEOADD's accepted ranges (longitude -180..180, latitude about -85.05..85.05); not in the docs digest. */
+export const GEO_LAT_LIMIT = 85.05112878;
+
+/** Rounds to 5 decimals (about a metre) and keeps the point inside what GEOADD accepts. */
+export function clampLonLat(lon: number, lat: number): { lon: number; lat: number } {
+  const r = (n: number) => Math.round(n * 1e5) / 1e5;
+  return {
+    lon: r(Math.max(-180, Math.min(180, lon))),
+    lat: r(Math.max(-GEO_LAT_LIMIT, Math.min(GEO_LAT_LIMIT, lat))),
+  };
+}
+
+export interface GeoBounds {
+  minLon: number;
+  maxLon: number;
+  minLat: number;
+  maxLat: number;
+}
+
+/**
+ * The inverse of the map's drawing: a click at (x, y) in the 360x220 viewBox becomes a longitude and latitude.
+ * With one point (or points on one line) there is no scale; a click is placed about a hundred metres per unit away.
+ */
+export function mapToLonLat(
+  x: number,
+  y: number,
+  b: GeoBounds,
+  size = { w: 360, h: 220, pad: 30 },
+): { lon: number; lat: number } {
+  const { w, h, pad } = size;
+  const lon =
+    b.maxLon === b.minLon
+      ? b.minLon + (x - w / 2) * 0.001
+      : b.minLon + ((x - pad) / (w - 2 * pad)) * (b.maxLon - b.minLon);
+  const lat =
+    b.maxLat === b.minLat
+      ? b.minLat - (y - h / 2) * 0.001
+      : b.minLat + ((h - pad - y) / (h - 2 * pad)) * (b.maxLat - b.minLat);
+  return clampLonLat(lon, lat);
 }
 
 export function fmtSeconds(s: number): string {
@@ -178,9 +262,46 @@ export function describeReply(argv: string[], reply: string, type: string): stri
         : n === 0
           ? 'Nothing changed: the key has no expiry or does not exist.'
           : null;
+    case 'XADD': {
+      const id = unquote(reply);
+      return id ? `Added the entry ${id}; the server chose that id.` : null;
+    }
+    case 'JSON.SET':
+      return 'Saved at that path.';
+    case 'JSON.NUMINCRBY':
+      // With a `$` path the reply is a JSON array of the new value(s), with a legacy path a bare number.
+      return `The number at that path is now ${unquote(reply)}.`;
+    case 'SETBIT':
+      return n === 1 || n === 0 ? `That bit was ${n} before this command.` : null;
+    case 'PFADD':
+      return n === 1
+        ? 'The estimate may have changed: the sketch was updated.'
+        : n === 0
+          ? 'The sketch did not change: that visitor looks already counted.'
+          : null;
+    case 'GEOADD':
+      return n === 1 ? 'A new place was added.' : n === 0 ? 'The place already existed.' : null;
+    case 'BF.ADD':
+      return n === 1
+        ? 'Added: it was not in the filter before.'
+        : n === 0
+          ? 'It may already have been in the filter.'
+          : null;
+    case 'BF.EXISTS':
+      return n === 1
+        ? 'It may exist: a Bloom filter can be wrong this way.'
+        : n === 0
+          ? 'Definitely not in the filter.'
+          : null;
+    case 'TS.ADD':
+      return n === null ? null : `Stored one sample at timestamp ${n} (server time, in ms).`;
     default:
       return null;
   }
+}
+
+function unquote(reply: string): string {
+  return reply.replace(/^"|"$/g, '').trim();
 }
 
 /** Sends one command through `cli`. Refuses engine keys before any request; never throws. */

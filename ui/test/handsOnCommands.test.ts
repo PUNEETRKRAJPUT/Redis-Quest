@@ -12,7 +12,10 @@ import {
   formatArg,
   formatCommand,
   isEngineKey,
+  clampLonLat,
+  mapToLonLat,
   nextTtlTotal,
+  parseNumber,
   parseSeconds,
   plainError,
   runCommand,
@@ -175,4 +178,135 @@ test('the nets stay under practice:, and every setup command parses', () => {
       expect(key.startsWith('practice:')).toBe(true);
     }
   }
+});
+
+test('the seven new gestures build the commands the spec names, in the documented argument order', () => {
+  expect(cmd.xadd('k', [['over', '17.3']])).toEqual(['XADD', 'k', '*', 'over', '17.3']);
+  expect(
+    cmd.xadd('k', [
+      ['over', '17.3'],
+      ['runs', '4'],
+    ]),
+  ).toEqual(['XADD', 'k', '*', 'over', '17.3', 'runs', '4']);
+  expect(cmd.jsonSet('k', '$.stats.runs', '600')).toEqual(['JSON.SET', 'k', '$.stats.runs', '600']);
+  expect(cmd.jsonNumIncrBy('k', '$.stats.runs', 4)).toEqual([
+    'JSON.NUMINCRBY',
+    'k',
+    '$.stats.runs',
+    '4',
+  ]);
+  expect(cmd.jsonNumIncrBy('k', '$.a', -1.5)[3]).toBe('-1.5');
+  expect(cmd.setbit('k', 11, 1)).toEqual(['SETBIT', 'k', '11', '1']);
+  expect(cmd.setbit('k', 3, 0)).toEqual(['SETBIT', 'k', '3', '0']);
+  expect(cmd.pfadd('k', 'visitor-9')).toEqual(['PFADD', 'k', 'visitor-9']);
+  // longitude first, then latitude
+  expect(cmd.geoadd('k', 73.86, 18.52, 'Gate 1')).toEqual([
+    'GEOADD',
+    'k',
+    '73.86',
+    '18.52',
+    'Gate 1',
+  ]);
+  expect(cmd.bfAdd('k', 'asha')).toEqual(['BF.ADD', 'k', 'asha']);
+  expect(cmd.bfExists('k', 'asha')).toEqual(['BF.EXISTS', 'k', 'asha']);
+  expect(cmd.tsAdd('k', 31.5)).toEqual(['TS.ADD', 'k', '*', '31.5']);
+});
+
+test('the new commands round-trip through the engine parser for every awkward value', () => {
+  for (const v of NASTY) {
+    for (const argv of [
+      cmd.xadd('practice:x', [
+        ['f ield', v],
+        [v, 'second'],
+      ]),
+      cmd.jsonSet('practice:j', '$.a b', v),
+      cmd.pfadd('practice:p', v),
+      cmd.geoadd('practice:g', -73.5, 18.25, v),
+      cmd.bfAdd('practice:b', v),
+      cmd.bfExists('practice:b', v),
+    ]) {
+      expect(splitArgs(formatCommand(argv))).toEqual(argv);
+    }
+  }
+  // a JSON document with quotes and spaces survives as one argument
+  const doc = '{"name": "Asha \"the wall\"", "tags": ["a b"]}';
+  expect(splitArgs(formatCommand(cmd.jsonSet('practice:json', '$', doc)))).toEqual([
+    'JSON.SET',
+    'practice:json',
+    '$',
+    doc,
+  ]);
+});
+
+test('every new gesture refuses game: keys before any request', async () => {
+  let calls = 0;
+  const cli = async () => {
+    calls++;
+    return { reply: 'OK', type: 'status', ms: 1 };
+  };
+  for (const argv of [
+    cmd.xadd('game:s', [['a', 'b']]),
+    cmd.jsonSet('game:j', '$', '1'),
+    cmd.jsonNumIncrBy('game:j', '$.n', 1),
+    cmd.setbit('game:b', 0, 1),
+    cmd.pfadd('game:h', 'x'),
+    cmd.geoadd('game:g', 1, 2, 'm'),
+    cmd.bfAdd('game:f', 'x'),
+    cmd.bfExists('game:f', 'x'),
+    cmd.tsAdd('game:t', 1),
+  ]) {
+    const r = await runCommand(argv, cli);
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe(ENGINE_REFUSAL);
+  }
+  expect(calls).toBe(0);
+});
+
+test('reply notes for the new commands', () => {
+  expect(describeReply(['XADD', 'k', '*', 'a', 'b'], '"1712-0"', 'string')).toContain('1712-0');
+  expect(describeReply(['SETBIT', 'k', '1', '1'], '(integer) 0', 'integer')).toContain('was 0');
+  expect(describeReply(['PFADD', 'k', 'x'], '(integer) 0', 'integer')).toContain('did not change');
+  expect(describeReply(['GEOADD', 'k', '1', '2', 'm'], '(integer) 1', 'integer')).toContain(
+    'new place',
+  );
+  expect(describeReply(['BF.EXISTS', 'k', 'x'], '(integer) 0', 'integer')).toContain(
+    'Definitely not',
+  );
+  expect(describeReply(['BF.EXISTS', 'k', 'x'], '(integer) 1', 'integer')).toContain('may exist');
+  expect(describeReply(['TS.ADD', 'k', '*', '1'], '(integer) 1712000000000', 'integer')).toContain(
+    '1712000000000',
+  );
+  expect(describeReply(['JSON.NUMINCRBY', 'k', '$.n', '1'], '"[513]"', 'string')).toContain(
+    '[513]',
+  );
+  expect(describeReply(['JSON.SET', 'k', '$', '1'], 'OK', 'status')).toBe('Saved at that path.');
+});
+
+test('parseNumber accepts only finite numbers', () => {
+  expect(parseNumber('42')).toBe(42);
+  expect(parseNumber(' -1.5 ')).toBe(-1.5);
+  expect(parseNumber('2e3')).toBe(2000);
+  expect(parseNumber('.5')).toBe(0.5);
+  for (const bad of ['', ' ', 'abc', '1,5', 'NaN', 'Infinity', '0x10', '1e999', '--1'])
+    expect(parseNumber(bad)).toBeNull();
+});
+
+test('a click on the map becomes a longitude and latitude the map would draw there', () => {
+  const b = { minLon: 73.82, maxLon: 73.9, minLat: 18.5, maxLat: 18.56 };
+  // the corners of the plotted area (pad 30 in a 360x220 box)
+  expect(mapToLonLat(30, 190, b)).toEqual({ lon: 73.82, lat: 18.5 });
+  expect(mapToLonLat(330, 30, b)).toEqual({ lon: 73.9, lat: 18.56 });
+  // the centre is the middle of the box
+  expect(mapToLonLat(180, 110, b)).toEqual({ lon: 73.86, lat: 18.53 });
+  // one point: no scale, so a click is placed relative to the centre
+  const one = { minLon: 73.86, maxLon: 73.86, minLat: 18.52, maxLat: 18.52 };
+  expect(mapToLonLat(180, 110, one)).toEqual({ lon: 73.86, lat: 18.52 });
+  expect(mapToLonLat(190, 100, one).lon).toBeGreaterThan(73.86);
+  expect(mapToLonLat(190, 100, one).lat).toBeGreaterThan(18.52);
+});
+
+test('clampLonLat keeps a point inside what GEOADD accepts and rounds to 5 decimals', () => {
+  expect(clampLonLat(200, 90)).toEqual({ lon: 180, lat: 85.05113 });
+  expect(clampLonLat(-200, -90)).toEqual({ lon: -180, lat: -85.05113 });
+  expect(clampLonLat(73.8612345678, 18.5)).toEqual({ lon: 73.86123, lat: 18.5 });
 });
