@@ -61,6 +61,8 @@ COPY --from=build /repo/runner/dist runner/dist
 COPY --from=build /ui-standalone ui-standalone
 # Level and scenario data are read by the engine at run time.
 COPY levels levels
+# The Economy League reads its holes and entries from here (D-07).
+COPY golf golf
 COPY scenarios scenarios
 
 USER node
