@@ -533,3 +533,27 @@ levels/_examples/invalid/two-assertions/01-scoreboard.yaml:17:9 verify[0].checks
 
 and exits 1 if there is any. `levels/_examples` as a whole fails on purpose (it contains
 `invalid/`); validate the example chapters one by one.
+
+## Community levels
+
+Levels written by people outside the game live in `levels/community/<pack>/`, in the same files as above (a
+`chapter.yaml` and `NN-slug.yaml` levels), with one extra required field:
+
+```yaml
+author:
+  name: "Your Name"
+  github: "your-handle"      # optional, no @
+```
+
+They are loaded apart from the campaign: no XP, no badges, never locked, not in `GET /api/chapters`, not on the season
+map and not in the "96 levels". The pack directory name is the chapter id, so level ids read `<pack>-<NN>-<slug>`; a pack
+may not be named like a campaign chapter (`ch0` ... `finale`, `example-*`). A broken pack is listed on `/community` with its
+errors and never stops the engine. For now a community level is a `cli` or `decision` level whose checks are read-only
+(`redis`, `antipattern` with `checks`, `quiz`, `answer`); its setup and solution scripts may not run server-changing
+commands (CONFIG, DEBUG, SCRIPT, EVAL, FLUSHALL ...) or touch a `game:*` key. The rules are in
+`packages/shared/src/levels/community.ts`.
+
+Two ways to write one: the level studio at `/studio` (a form, a live preview, a play-test against the real engine, and
+"Get the files"), or `scripts/level-new --pack <pack> --id <NN-slug> [--mode cli|decision] [--author "Name"]`, which
+scaffolds the files for you to edit. Send the result as a pull request: `git checkout -b level/<pack>-<slug>`,
+`git add levels/community/<pack>`, `git commit`.
