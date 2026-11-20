@@ -58,6 +58,19 @@ export type ScoreResult =
       checks: CheckOutcome[];
     };
 
+/** A check as a player reads it: the command, and what it has to answer (`12`, `between 55 and 60`, `nil`). */
+export function describeCheck(check: RedisCheck): {
+  cmd: string;
+  expected: string;
+  message?: string;
+} {
+  return {
+    cmd: formatArgv(check.cmd),
+    expected: evaluateAssertion(check, null).expected,
+    ...(check.message ? { message: check.message } : {}),
+  };
+}
+
 class ScratchError extends Error {}
 
 const errorText = (e: unknown): string => (e instanceof Error ? e.message : String(e));

@@ -20,6 +20,7 @@ export {
 export {
   LEAGUE_DB,
   assertScratch,
+  describeCheck,
   keysNamedBy,
   scoreEntry,
   type CheckOutcome,
@@ -38,4 +39,10 @@ export {
   type BoardRow,
   type ScoreKey,
 } from './rank.js';
+// The scorer's copy of the engine's check evaluation, exported so engine/test/league-parity.test.ts can pin them together.
+export {
+  evaluateAssertion as evaluateLeagueAssertion,
+  normalizeReply as normalizeLeagueReply,
+  type AssertionOutcome as LeagueAssertionOutcome,
+} from './evaluate.js';
 export { openScratch, type Scratch } from './scratch.js';
