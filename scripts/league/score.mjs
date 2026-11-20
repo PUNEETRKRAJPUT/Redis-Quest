@@ -29,15 +29,19 @@ const summaryFile = process.env.GITHUB_STEP_SUMMARY;
 
 function usage(message) {
   console.error(`score.mjs: ${message}`);
-  console.error('usage: REDIS_URL=redis://host:port node scripts/league/score.mjs [hole-dir-or-id ...]');
+  console.error(
+    'usage: REDIS_URL=redis://host:port node scripts/league/score.mjs [hole-dir-or-id ...]',
+  );
   process.exit(2);
 }
 
 const url = process.env.REDIS_URL;
 if (!url) usage('REDIS_URL is not set');
-if (!/^rediss?:\/\//i.test(url)) usage('REDIS_URL must be redis://host:port (one node; a cluster has one database)');
+if (!/^rediss?:\/\//i.test(url))
+  usage('REDIS_URL must be redis://host:port (one node; a cluster has one database)');
 const db = process.env.LEAGUE_DB === undefined ? LEAGUE_DB : Number(process.env.LEAGUE_DB);
-if (!Number.isInteger(db) || db <= 0) usage('LEAGUE_DB must be a whole number above 0 (database 0 is never used)');
+if (!Number.isInteger(db) || db <= 0)
+  usage('LEAGUE_DB must be a whole number above 0 (database 0 is never used)');
 
 const wanted = process.argv.slice(2).map((a) => basename(resolve(a)));
 
@@ -49,7 +53,9 @@ function emit(line = '') {
 function annotate(file, line, message) {
   if (!onActions) return;
   const rel = relative(repo, file);
-  console.log(`::error file=${rel}${line ? `,line=${line}` : ''}::${message.replace(/\r?\n/g, ' ')}`);
+  console.log(
+    `::error file=${rel}${line ? `,line=${line}` : ''}::${message.replace(/\r?\n/g, ' ')}`,
+  );
 }
 
 const vsPar = (n) => (n > 0 ? `-${n}` : n === 0 ? 'par' : `+${-n}`);
@@ -63,7 +69,8 @@ for (const e of errors) {
 }
 const holes = wanted.length ? allHoles.filter((h) => wanted.includes(h.id)) : allHoles;
 for (const w of wanted) {
-  if (!allHoles.some((h) => h.id === w)) usage(`no hole named ${w} under ${relative(repo, golf)}/holes`);
+  if (!allHoles.some((h) => h.id === w))
+    usage(`no hole named ${w} under ${relative(repo, golf)}/holes`);
 }
 
 let scratch;
@@ -81,7 +88,9 @@ try {
     emit();
     if (!h.entries.some((e) => e.handle === HOUSE)) {
       failures++;
-      emit(`FAIL ${h.id}: entries/${HOUSE}.redis is missing (every hole needs a house entry at par)`);
+      emit(
+        `FAIL ${h.id}: entries/${HOUSE}.redis is missing (every hole needs a house entry at par)`,
+      );
       annotate(join(h.dir, 'hole.yaml'), 1, `${h.id} needs entries/${HOUSE}.redis`);
     }
     for (const entry of h.entries) {
@@ -100,13 +109,21 @@ try {
         emit(`FAIL ${h.id} ${HOUSE}: ${msg}`);
         annotate(file, 1, msg);
       }
-      rows.push({ handle: entry.handle, commands: r.commands, bytes: r.bytes, chars: r.chars, underPar: r.underPar });
+      rows.push({
+        handle: entry.handle,
+        commands: r.commands,
+        bytes: r.bytes,
+        chars: r.chars,
+        underPar: r.underPar,
+      });
     }
     emit();
     emit('| rank | handle | commands | bytes | chars | vs par |');
     emit('| ---- | ------ | -------- | ----- | ----- | ------ |');
     for (const row of rankBoard(rows)) {
-      emit(`| ${row.rank} | ${row.handle} | ${row.commands} | ${row.bytes} | ${row.chars} | ${vsPar(row.underPar)} |`);
+      emit(
+        `| ${row.rank} | ${row.handle} | ${row.commands} | ${row.bytes} | ${row.chars} | ${vsPar(row.underPar)} |`,
+      );
     }
     emit();
   }
@@ -114,7 +131,9 @@ try {
   await scratch.close();
 }
 
-emit(`league: ${holes.length} hole(s), ${scored} entr${scored === 1 ? 'y' : 'ies'} scored, ${failures} problem(s)`);
+emit(
+  `league: ${holes.length} hole(s), ${scored} entr${scored === 1 ? 'y' : 'ies'} scored, ${failures} problem(s)`,
+);
 if (summaryFile) {
   try {
     appendFileSync(summaryFile, `${out}\n`);
