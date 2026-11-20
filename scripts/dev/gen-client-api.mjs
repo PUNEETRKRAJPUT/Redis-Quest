@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as prettier from 'prettier';
 import ts from 'typescript';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -233,7 +234,10 @@ const result = {
 };
 
 fs.mkdirSync(path.dirname(outFile), { recursive: true });
-fs.writeFileSync(outFile, `${JSON.stringify(result, null, 1)}\n`);
+// Written the way `prettier --check .` wants it, so regenerating gives the same bytes that are committed.
+const config = (await prettier.resolveConfig(outFile)) ?? {};
+const text = await prettier.format(JSON.stringify(result), { ...config, filepath: outFile });
+fs.writeFileSync(outFile, text);
 console.log(
   `wrote ${path.relative(root, outFile)}: redis ${redisMembers.length} members (${redisMembers
     .filter((m) => m.kind === 'namespace')

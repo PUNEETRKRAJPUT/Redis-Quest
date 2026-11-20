@@ -13,7 +13,10 @@ import 'monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching';
 import 'monaco-editor/editor/contrib/comment/browser/comment';
 import 'monaco-editor/editor/contrib/indentation/browser/indentation';
 import 'monaco-editor/editor/contrib/wordOperations/browser/wordOperations';
+// The suggest widget (no language service behind it): the completion provider below is the only source.
+import 'monaco-editor/editor/contrib/suggest/browser/suggestController';
 import { isReducedMotionNow } from '../design/motion';
+import { registerClientCompletion } from '../editor/register';
 import { monoFontStack, nightTheme, THEME_NAME } from '../career/tools/monacoTheme';
 
 // Bundle Monaco instead of letting the loader fetch it from a CDN: the game must work offline. The bundler turns
@@ -32,6 +35,14 @@ loader.config({ monaco });
 // The night theme (literal hex values from the design tokens; Monaco cannot read CSS variables). Defined once at
 // module load, which only ever happens in the browser.
 monaco.editor.defineTheme(THEME_NAME, nightTheme);
+
+// Completion for `redis.`, `redis.multi().`, `db.` and `log.` from the generated client members. Registered once
+// per page, even when hot reload runs this module again.
+const registered = self as unknown as { __questClientCompletion?: boolean };
+if (!registered.__questClientCompletion) {
+  registered.__questClientCompletion = true;
+  registerClientCompletion(monaco);
+}
 
 export default function MonacoEditor({
   value,
@@ -103,6 +114,8 @@ export default function MonacoEditor({
       smoothScrolling: !isReducedMotionNow(),
       scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
       guides: { indentation: true, bracketPairs: false },
+      // Only the Redis client's members are offered (no words from the file next to them).
+      suggest: { showWords: false },
       ariaLabel: readOnly ? 'Reference solution (read only)' : 'Code editor',
     };
   }, [readOnly]);
