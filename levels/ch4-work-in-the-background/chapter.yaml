@@ -22,6 +22,10 @@ incident:
   - from: you
     time: "22:43"
     text: "the work has left the request. it needs a log that remembers, a queue that survives a crash, and a rule for repeats: once, even if told twice"
+    choices:
+      - "the work has left the request. it needs a log that remembers, a queue that survives a crash, and a rule for repeats: once, even if told twice"
+      - "kaam ab request se bahar nikal gaya hai. use chahiye ek log jo yaad rakhe, ek queue jo crash mein bachi rahe, aur repeats ka ek rule: ek baar, chahe do baar bola jaye"
+      - "kaam request ke bahar chala gaya. ab yaad rakhne wala log chahiye, crash ke baad bhi bachne wali queue, aur repeat ka rule: ek hi baar, chahe do baar bolein"
   - from: senior
     time: "22:45"
     text: "I do not follow but the last ball is soon. Please. Before the trophy, bhai"

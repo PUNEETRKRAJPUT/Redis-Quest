@@ -10,6 +10,10 @@ incident:
   - from: you
     time: "19:26"
     text: "it is the same three players every time. what is Postgres doing"
+    choices:
+      - "it is the same three players every time. what is Postgres doing"
+      - "har baar wahi teen players aa rahe hain. Postgres kar kya raha hai?"
+      - "teeno players toh wahi hain bhai. Postgres ko kya ho gaya?"
   - from: roommate
     time: "19:27"
     text: "reading me its logs. same query. same query. same query. it sounds very tired"
@@ -22,6 +26,10 @@ incident:
   - from: you
     time: "19:28"
     text: "more servers means more people asking Postgres the same question. give me two minutes"
+    choices:
+      - "more servers means more people asking Postgres the same question. give me two minutes"
+      - "zyada servers matlab Postgres se wahi sawaal zyada log pooch rahe. do minute de"
+      - "servers badhaoge toh Postgres se wahi sawaal zyada baar poochha jayega. do minute do"
 levels:
   - ch2-01-feel-it
   - ch2-02-cache-aside-v1

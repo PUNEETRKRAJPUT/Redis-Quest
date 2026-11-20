@@ -129,6 +129,49 @@ export function TypingBubble({
   );
 }
 
+/**
+ * The player's turn: two or three ways to say the same thing, as chips on the player's side. Buttons in a labelled
+ * group, so a keyboard and a screen reader can pick; the thread's own list announces the line once it lands.
+ */
+export function ChoiceTray({
+  choices,
+  onPick,
+  reduced,
+}: {
+  choices: readonly string[];
+  onPick: (index: number) => void;
+  reduced: boolean;
+}) {
+  return (
+    <motion.div
+      role="group"
+      aria-label="Pick your reply"
+      data-testid="thread-choices"
+      className="mt-3 flex flex-col items-end gap-1.5"
+      initial={{ opacity: 0, y: reduced ? 0 : 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reduced ? 0.12 : 0.2, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <span aria-hidden="true" className="label-caps text-xs text-chalk-dim">
+        Pick your reply
+      </span>
+      {choices.map((choice, i) => (
+        <button
+          // Position is the identity: the same three lines in the same order until the player picks.
+          key={i}
+          type="button"
+          data-testid="thread-choice"
+          data-choice={i}
+          onClick={() => onPick(i)}
+          className="min-h-9 max-w-[82%] cursor-pointer whitespace-pre-wrap break-words rounded-lg border border-flood-500/45 bg-night-800 px-3 py-1.5 text-left text-md text-chalk transition-colors duration-fast hover:bg-night-700 rounded-tr-xs"
+        >
+          {choice}
+        </button>
+      ))}
+    </motion.div>
+  );
+}
+
 /** Night wallpaper with floodlight glow (accent at 9%, the brief allows 6 to 10), like a chat background. */
 export const WALLPAPER =
   'bg-night-900 bg-[radial-gradient(120%_70%_at_50%_-10%,color-mix(in_oklab,var(--color-flood-500)_9%,transparent),transparent_62%),radial-gradient(80%_50%_at_100%_100%,color-mix(in_oklab,var(--color-sky)_5%,transparent),transparent_70%)]';

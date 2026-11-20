@@ -7,6 +7,10 @@ incident:
   - from: you
     time: "19:02"
     text: "how many teams were on it?"
+    choices:
+      - "how many teams were on it?"
+      - "kitni teams thi us pe?"
+      - "kitne teams ek saath use kar rahe the?"
   - from: roommate
     time: "19:03"
     text: "forty thousand. were. WERE 😭"
@@ -16,6 +20,10 @@ incident:
   - from: you
     time: "19:14"
     text: "three things, in order. it has to survive a restart. then it has to survive losing a whole box. then it has to hold more than one box can. and nobody restarts anything to fix a warning, ever again"
+    choices:
+      - "three things, in order. it has to survive a restart. then it has to survive losing a whole box. then it has to hold more than one box can. and nobody restarts anything to fix a warning, ever again"
+      - "teen cheezein, is order mein. pehle restart ke baad bachna hai. phir poora box khone ke baad bachna hai. phir ek box se zyada sambhalna hai. aur warning theek karne ke liye ab koi kuch restart nahi karega, kabhi nahi"
+      - "teen kaam, kramvaar. restart pe zinda rehna, poora box jaane pe zinda rehna, aur ek box se zyada load uthana. aur warning aaye toh restart karke theek karna band, hamesha ke liye"
   - from: rival-college
     time: "19:21"
     text: "Evening, bhai. Funny thing: port 6379 on your fest server answers me from the hostel wifi. No password. I only said hello 😏"

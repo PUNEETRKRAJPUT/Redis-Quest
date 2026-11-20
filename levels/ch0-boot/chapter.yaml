@@ -7,6 +7,10 @@ incident:
   - from: you
     time: "19:25"
     text: "works on mine. what does it say"
+    choices:
+      - "works on mine. what does it say"
+      - "mere pe toh chal raha hai yaar. kya likha aa raha hai?"
+      - "ruk, mere pe chal raha hai. error ka text bhej"
   - from: roommate
     time: "19:27"
     text: "ERR_CONNECTION_REFUSED. screenshot attached. 12 screenshots actually"
@@ -16,6 +20,10 @@ incident:
   - from: you
     time: "19:34"
     text: "which thing"
+    choices:
+      - "which thing"
+      - "kaunsi cheez?"
+      - "ek cheez? kaunsi, bata na"
   - from: roommate
     time: "19:36"
     text: "closed the terminal. was that the server"
@@ -25,6 +33,10 @@ incident:
   - from: you
     time: "20:07"
     text: "one command brings the whole thing up. then we look at what is inside it"
+    choices:
+      - "one command brings the whole thing up. then we look at what is inside it"
+      - "ek command se sab upar aa jaata hai. phir andar dekhenge kya hai"
+      - "ek hi command. sab chalu, phir andar jhaank ke dekhte hain"
   - from: roommate
     time: "20:09"
     text: "ok. and if I ever run docker compose down again, is our data gone? asking for a friend 😅"

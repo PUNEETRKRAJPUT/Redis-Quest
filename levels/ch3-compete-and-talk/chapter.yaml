@@ -19,6 +19,10 @@ incident:
   - from: you
     time: "22:17"
     text: "each copy is counting in its own memory. the count has to live in one place both of them ask"
+    choices:
+      - "each copy is counting in its own memory. the count has to live in one place both of them ask"
+      - "har copy apni memory mein ginti kar rahi hai. ginti ek jagah rehni chahiye jahan dono puchhein"
+      - "dono copies alag alag gin rahi hain. count ek hi jagah chahiye, jahan se dono padhein"
   - from: sms-vendor
     time: "22:18"
     text: "Sir, 11 numbers have received 40 OTPs each since 22:10. Kindly advise before the next invoice."

@@ -6,15 +6,23 @@ import { useCallback, useLayoutEffect, useRef, useState, type CSSProperties } fr
 import { Button } from '../design';
 import {
   Avatar,
+  ChoiceTray,
   LIST_RESET,
   MessageRow,
   SCROLL_AREA,
   TypingBubble,
   WALLPAPER,
 } from '../thread/parts';
-import { MAX_REVEAL_MS, participants, startsGroup, type AnimateMode } from '../thread/logic';
+import {
+  MAX_REVEAL_MS,
+  applyPicks,
+  choicesOf,
+  participants,
+  startsGroup,
+  type AnimateMode,
+  type ChoiceMessage,
+} from '../thread/logic';
 import { useReveal } from '../thread/useReveal';
-import type { ThreadMessage } from '../types';
 
 // Display names mirror fiction/cast.json (slug -> nickname). The UI does not bundle the JSON.
 const NAMES: Record<string, string> = {
@@ -31,7 +39,8 @@ export function nameOf(slug: string): string {
 }
 
 export type ThreadProps = {
-  messages: ThreadMessage[];
+  /** Messages from the player (`from: you`) may carry `choices`: the thread then waits for a pick (see useReveal). */
+  messages: ChoiceMessage[];
   /** Accessible name of the message list. */
   label: string;
   /** Header title of the chat. Default "Chapter thread". */
@@ -79,8 +88,11 @@ export function Thread({
   const [unread, setUnread] = useState(0);
 
   const members = participants(messages);
-  const visibleMessages = messages.slice(0, r.shown);
+  // The player's picks are applied for display only; timing and the "seen" hash stay on the engine's own text.
+  const shownMessages = applyPicks(messages, r.picks);
+  const visibleMessages = shownMessages.slice(0, r.shown);
   const typingMsg = r.typingIndex === null ? undefined : messages[r.typingIndex];
+  const askLines = r.askIndex === null ? [] : choicesOf(messages[r.askIndex]);
 
   const toBottom = useCallback(() => {
     const el = scroller.current;
@@ -99,7 +111,7 @@ export function Thread({
     }
     if (stick.current) toBottom();
     else if (grew > 0) setUnread((n) => n + grew);
-  }, [r.shown, r.typingIndex, toBottom]);
+  }, [r.shown, r.typingIndex, r.askIndex, toBottom]);
 
   const onScroll = () => {
     const el = scroller.current;
@@ -149,13 +161,15 @@ export function Thread({
           <p
             className={clsx(
               'truncate text-xs leading-4',
-              typingMsg ? 'text-turf' : 'text-chalk-dim',
+              typingMsg || askLines.length > 0 ? 'text-turf' : 'text-chalk-dim',
             )}
             aria-hidden="true"
           >
             {typingMsg
               ? `${typingName} ${typingName === 'You' ? 'are' : 'is'} typing\u2026`
-              : members.map((s) => nameOf(s)).join(', ')}
+              : askLines.length > 0
+                ? 'Waiting for your reply'
+                : members.map((s) => nameOf(s)).join(', ')}
           </p>
         </div>
         {/* One button for both jobs, so keyboard focus survives the swap from "Show all" to "Replay". */}
@@ -202,6 +216,14 @@ export function Thread({
             name={typingName}
             mine={typingMsg.from === 'you'}
             tight={r.shown > 0 && messages[r.shown - 1]?.from === typingMsg.from}
+            reduced={r.reduced}
+          />
+        )}
+        {r.askIndex !== null && askLines.length > 0 && (
+          <ChoiceTray
+            key={r.askIndex}
+            choices={askLines}
+            onPick={(choice) => r.choose(r.askIndex as number, choice)}
             reduced={r.reduced}
           />
         )}

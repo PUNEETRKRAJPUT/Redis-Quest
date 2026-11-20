@@ -10,6 +10,10 @@ incident:
   - from: you
     time: "09:06"
     text: "it is a mock. they pick something I built, I rebuild it from an empty file, then they ask what happens when it breaks. I have broken every one of these at least once"
+    choices:
+      - "it is a mock. they pick something I built, I rebuild it from an empty file, then they ask what happens when it breaks. I have broken every one of these at least once"
+      - "yeh mock hai. woh mere banaye mein se kuch chunte hain, main khaali file se dobara banata hoon, phir poochte hain toot jaye toh kya hoga. in sab ko main kam se kam ek baar tod chuka hoon"
+      - "mock hai bas. woh meri banayi cheez chunenge, main khaali file se rebuild karunga, phir poochenge ki toot gayi toh? maine inme se har ek tod ke dekha hai"
   - from: senior
     time: "09:12"
     text: "They will not ask what Redis is. They will ask what happens when it is not there. Keep that sentence in your head"
@@ -22,6 +26,10 @@ incident:
   - from: you
     time: "09:27"
     text: "good. then I already know his three questions: what if it is down, what if there are two of me, what if everybody asks at once"
+    choices:
+      - "good. then I already know his three questions: what if it is down, what if there are two of me, what if everybody asks at once"
+      - "badhiya. toh unke teen sawaal mujhe pehle se pata hain: down ho gaya toh, do copies ho gayi toh, sab ek saath pooch lein toh"
+      - "achha hai. unke teen sawaal toh main jaanta hoon: band ho jaye toh, do mere jaise ho jayein toh, sab ek saath poochein toh"
   - from: senior
     time: "09:30"
     text: "Laptop is open. Go. And if you say 'it depends', say what on"

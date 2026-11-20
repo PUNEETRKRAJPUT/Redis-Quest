@@ -2,6 +2,60 @@
 // No React, no DOM: everything here runs under vitest in plain Node.
 import type { ThreadMessage } from '../types';
 
+/* ------------------------------------------------------------------ reply choices (D-02) */
+
+/**
+ * A thread message as the engine sends it. `choices` is only ever on the player's own messages (the schema in
+ * packages/shared says so): two or three ways to say the same thing, the first being `text` itself.
+ */
+export type ChoiceMessage = ThreadMessage & { choices?: readonly string[] };
+
+/** The lines the player can pick from, or an empty list when this message is not a choice. */
+export function choicesOf(m: ChoiceMessage | undefined): readonly string[] {
+  if (!m || m.from !== 'you' || !Array.isArray(m.choices)) return [];
+  const lines = m.choices.filter((c) => typeof c === 'string' && c.trim().length > 0);
+  return lines.length >= 2 ? lines : [];
+}
+
+/** Message index to chosen choice index. */
+export type Picks = Readonly<Record<number, number>>;
+
+/** The text the player "said": their pick, or the first choice (which is the message's own text). */
+export function chosenText(m: ChoiceMessage, pick: number | undefined): string {
+  const lines = choicesOf(m);
+  if (pick === undefined || lines.length === 0) return m.text;
+  return lines[pick] ?? m.text;
+}
+
+/** The thread with the player's picks applied. Everything else is passed through untouched. */
+export function applyPicks(messages: readonly ChoiceMessage[], picks: Picks): ChoiceMessage[] {
+  return messages.map((m, i) => {
+    const text = chosenText(m, picks[i]);
+    return text === m.text ? m : { ...m, text };
+  });
+}
+
+/** Does the arrival have to wait for the player at message `i`? */
+export function needsChoice(messages: readonly ChoiceMessage[], i: number, picks: Picks): boolean {
+  return choicesOf(messages[i]).length > 0 && picks[i] === undefined;
+}
+
+/** Only picks that point at a real choice of a real message survive: stale or hand-edited storage is ignored. */
+export function sanitizePicks(raw: unknown, messages: readonly ChoiceMessage[]): Picks {
+  const out: Record<number, number> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const i = Number(k);
+    if (!Number.isInteger(i) || i < 0 || i >= messages.length) continue;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) continue;
+    if (v < choicesOf(messages[i]).length) out[i] = v;
+  }
+  return out;
+}
+
+export const CHOICES_PREFIX = 'rq:thread-choices:';
+export const choicesKey = (hash: string): string => CHOICES_PREFIX + hash;
+
 /* ------------------------------------------------------------------ grouping */
 
 export type MessageGroup = {
@@ -136,6 +190,32 @@ export function writeSeen(hash: string, storage: StorageLike | undefined = brows
     storage?.setItem(seenKey(hash), '1');
   } catch {
     /* storage full or blocked: the thread simply animates again next time */
+  }
+}
+
+/** What the player picked in this thread (JSON `{ "<message index>": <choice index> }`), per content hash. */
+export function readPicks(
+  hash: string,
+  messages: readonly ChoiceMessage[],
+  storage: StorageLike | undefined = browserStorage(),
+): Picks {
+  try {
+    const raw = storage?.getItem(choicesKey(hash));
+    return sanitizePicks(raw ? JSON.parse(raw) : null, messages);
+  } catch {
+    return {};
+  }
+}
+
+export function writePicks(
+  hash: string,
+  picks: Picks,
+  storage: StorageLike | undefined = browserStorage(),
+): void {
+  try {
+    storage?.setItem(choicesKey(hash), JSON.stringify(picks));
+  } catch {
+    /* storage full or blocked: the thread asks again next time */
   }
 }
 
