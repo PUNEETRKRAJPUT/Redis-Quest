@@ -121,6 +121,9 @@ export const FACTS: readonly CabinetFact[] = [
   {
     id: 'score',
     rule: 'Score is the number of clients served in time. A round lasts one minute of game time.',
-    source: { kind: 'simplification', what: 'The game’s scoring.' },
+    source: {
+      kind: 'simplification',
+      what: 'The game’s own scoring and round length: a game rule, not a Redis fact.',
+    },
   },
 ];
