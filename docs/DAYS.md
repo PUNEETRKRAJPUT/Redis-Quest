@@ -7,7 +7,7 @@ short on memory and disk. So every day below was written without being run.
 **Where it stands (2026-11-22):** all ten days are on `main`. No pull request was ever opened: only the owner's
 account may open one here and the `gh` login on this Mac is not that account, so Puneet chose to have the ten
 branches merged and pushed directly instead. Local testing stays on hold at his word. **None of the ten has been
-run on a Mac.** GitHub's CI on `main` is the only test the merged code has had (see "Status").
+run on a Mac.** GitHub's CI on `main` is the only test the merged code has had, and it is green (see "Status").
 
 ## The git identity: decided on 2026-11-22
 The decisions log in `BUILD.md` (2026-11-01) says this repository's own git identity is the GitHub no-reply
@@ -57,9 +57,13 @@ Shared rules: `specs/_days-common.md`. Extension points that kept the branches a
 "Complete" means the day's handoff says "code complete and unverified". The handoffs are on `main` now:
 `docs/handoffs/D-0n.md` (sections Status, Done, Remaining, How to verify).
 
-**CI on `main`:** the push of 2026-11-22 started the first CI run the merged code has had (build, lint, format
-check, unit tests, level validation, the docker-free checks, and the docs site build). Result: not known when this
-was written; the decisions log in `BUILD.md` records it.
+**CI on `main`: green on `12bfc03` (2026-11-22), on the fifth run.** It builds every package (the UI with
+`next build`), lints, checks the format, runs 1,219 unit tests (shared 239, UI 508, engine 295, runner 41, app
+136), validates the campaign (still 8 chapters and 96 levels), runs the docker-free checks (D-01, D-10, G-03)
+and builds the docs site. What the first four runs found is under "Merged on 2026-11-22" below.
+
+CI does **not** build the Docker image, start the stack, open a screen or send one command to the game's own
+Redis. So "green" says the code compiles and its unit tests hold, not that the game starts or that a day works.
 
 ## Merged on 2026-11-22, without pull requests
 One merge commit per day, in this order (least risky first), starting from `ecf3925`:
@@ -71,10 +75,24 @@ D-07, D-09 (they send commands to Redis), D-02 last (it changes how the game sta
 - One fix came with it (`cb87d77`): `ci.yml` and `pr-verdict.yml` passed every folder under `levels/` to the
   validator and the grader as a campaign chapter, which now would include `levels/community` (D-05). Both skip
   it, as the loader does.
+- CI then needed four fixes before it went green, each its own commit:
+  - `f53f055`, `6db8dde` (D-06): **three engine source files had never been committed.** The root `.gitignore`
+    rule `coverage/`, meant for test coverage reports, matched `engine/src/coverage/`, so git, the linter and the
+    formatter all skipped it; the day's own type check passed because the files were on its disk. They were
+    recovered from the day's worktree. The rule and the lint config now except that folder.
+  - `690c816`, `c1da20e` (D-07) and `12bfc03` (D-08): three test expectations that were wrong and had never run
+    (a sample hole no entry could pass; a tie the test did not expect; a note one character too short for the
+    arcade's own rule). No product code changed.
+  - `a03082f`: CI now runs every package's tests even when one package fails, so one run shows every failure.
 - To take one day back out: `git revert -m 1 <its merge commit>` and push. D-06 is built on D-05, so D-06 goes
   first. Bringing a day back later means reverting that revert, not merging its branch again.
 - The ten branches are still on GitHub, and their worktrees are in `~/personal-repo/Redis-Quest.worktrees/`.
   Nothing more is committed to them: work continues on `main`, one task and one commit at a time (`CLAUDE.md`).
+  **The `day-06-your-turn` branch does not build on its own** (it lacks the three recovered files); `main` does.
+  Checked after the recovery: the worktrees hold nothing else that git lacks (only D-10's generated site).
+- Lesson: before a branch is called complete, list what git ignores in it
+  (`git ls-files --others --ignored --exclude-standard`, minus `node_modules` and build output). A file can pass
+  every local check and still not be in the repository.
 
 ## Keep these off a save you care about until they are proven
 `main` is also the folder the owner's own game starts from, so his next `./scripts/start` builds and runs all ten
@@ -166,8 +184,8 @@ Adds:
   sample level by the house, `scripts/level-new`, and an optional `author` on a level.
 
 Still owed:
-- It changes the campaign loader, which now skips a directory named `community`. Confirm the grader's totals did
-  not move (316 rows at the last full run).
+- It changes the campaign loader, which now skips a directory named `community`. CI's validator still counts 8
+  chapters and 96 levels; the grader's totals (316 rows at the last full run) are not confirmed.
 - A community level is `cli` or `decision` only, and its screen has no interview, slots, traffic or show-me panel.
 - Nobody has opened the screens: expect layout fixes.
 
@@ -182,6 +200,8 @@ Adds:
 - `/credits`: the cast, the authors of community levels, `CONTRIBUTORS.md` (new), and the player's own line.
 
 Still owed:
+- `engine/src/coverage/` (the board, the usage reader, the contributors parser) reached git only on 2026-11-22,
+  from the day's worktree. Its unit tests pass in CI; nobody has seen the board with a real server's command list.
 - The engine image now copies `fiction/cast.json` and `CONTRIBUTORS.md` (never built).
 - The handoff's count of taught commands (about 68) was made without a Redis: compare it with a real server.
 - Two wishes outside its own files: the map card should read as the next thing after the Finale (the logic is
