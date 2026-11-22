@@ -6,8 +6,9 @@ short on memory and disk. So every day below was written without being run.
 
 **Where it stands (2026-11-22):** all ten days are on `main`. No pull request was ever opened: only the owner's
 account may open one here and the `gh` login on this Mac is not that account, so Puneet chose to have the ten
-branches merged and pushed directly instead. Local testing stays on hold at his word. **None of the ten has been
-run on a Mac.** GitHub's CI on `main` is the only test the merged code has had, and it is green (see "Status").
+branches merged and pushed directly instead. CI on `main` is green, and on the same day the merged code was run
+end to end: started with the real `scripts/start` on the owner's Mac in a throwaway project, and checked day by
+day on hosted arm64 runners (see "Verified on 2026-11-22").
 
 ## The git identity: decided on 2026-11-22
 The decisions log in `BUILD.md` (2026-11-01) says this repository's own git identity is the GitHub no-reply
@@ -41,18 +42,21 @@ Shared rules: `specs/_days-common.md`. Extension points that kept the branches a
 `ui/src/features/` (each feature has its own file and turns itself on there).
 
 ## Status (the orchestrating session edits this table, nobody else)
-| Day | Code | On `main` (merge commit) | Run on a Mac |
+| Day | Code | On `main` (merge commit) | Its own check, 2026-11-22 |
 |---|---|---|---|
-| D-01 | complete | `d0690ba` | no |
-| D-02 | complete | `cacbff6` | no |
-| D-03 | complete | `912c1f6` | no |
-| D-04 | complete | `be30de1` | no |
-| D-05 | complete | `ceafa29` | no |
-| D-06 | complete | `2932bde` | no |
-| D-07 | complete | `2f68034` | no |
-| D-08 | complete | `0d51877` | no |
-| D-09 | complete | `28034f0` | no |
-| D-10 | complete | `b3f0c42` | no |
+| D-01 | complete | `d0690ba` | passes in `ci.yml` |
+| D-02 | complete | `cacbff6` | static and proxy parts pass on arm64; the full start ran on the Mac |
+| D-03 | complete | `912c1f6` | passes on arm64 |
+| D-04 | complete | `be30de1` | passes on arm64, live request included |
+| D-05 | complete | `ceafa29` | passes on arm64 |
+| D-06 | complete | `2932bde` | one line fails: the check's own expected range is wrong |
+| D-07 | complete | `2f68034` | passes on arm64 |
+| D-08 | complete | `0d51877` | passes on arm64 |
+| D-09 | complete | `28034f0` | passes on arm64 |
+| D-10 | complete | `b3f0c42` | passes in `ci.yml` |
+
+Every day's screens and routes also answered on the Mac run (see "Verified on 2026-11-22"). What nobody has done
+yet is play each new feature by hand for feel: layout, sound, difficulty.
 
 "Complete" means the day's handoff says "code complete and unverified". The handoffs are on `main` now:
 `docs/handoffs/D-0n.md` (sections Status, Done, Remaining, How to verify).
@@ -64,6 +68,30 @@ and builds the docs site. What the first four runs found is under "Merged on 202
 
 CI does **not** build the Docker image, start the stack, open a screen or send one command to the game's own
 Redis. So "green" says the code compiles and its unit tests hold, not that the game starts or that a day works.
+
+## Verified on 2026-11-22
+Puneet lifted the hold on local runs the same evening ("test here on this Mac"). `main` was `ae6e574`.
+
+**On his Mac, in a throwaway project** (`quest_isolate`, own ports and volumes; his own game was never started):
+- `scripts/start` as it is: preflight all PASS, the image built with the new pnpm download stage, every container
+  healthy, the stage file ended at `ready`. 65 seconds with a warm network.
+- `scripts/ci/stack-probe.mjs up` (on the `e2e/stack` branch): all 16 pages answer 200; 8 chapters, 96 levels; 16
+  reply choices; a fresh game creates a player; the community pack loads; the board lists 288 commands, 100
+  taught; all six League holes score their house entry at par; a shorter entry scores under par; the phone's
+  traced request carries its trace and an ordinary one does not.
+- In a browser: the map, a level screen and the eight new screens render with no console error.
+- A copy of his real save (160 XP, 9 levels passed) loaded in the new engine and came back byte-identical.
+
+**On hosted Linux arm64 runners** (pull request 1, branch `e2e/stack`, workflow `stack`): a fresh start with the
+same probe, green; and the days' own check scripts: D-03, D-04 (with a live traced request), D-05, D-07, D-08
+and D-09 pass. D-09 is the one that mattered most: a whole match and a stopped one, `maxmemory` lowered and put
+back, every key outside `cache:*` unchanged, no undo journal left behind. D-02 passes its static part and the
+proxy-alone part (the start page keeps the 502 status); its full-start part needs a Mac's preflight and was
+covered by the run above. D-06 fails one line: its own check expects 65 to 72 taught commands, a count made
+without a Redis, and the server says 100 (the list was read and is right). D-01 and D-10 run in `ci.yml`.
+
+Not finished when this was written: the grader over all 96 levels and the older P and C checks (Chapter 0 played
+in a browser among them) were still running on the arm64 runners. `BUILD.md` records how they end.
 
 ## Merged on 2026-11-22, without pull requests
 One merge commit per day, in this order (least risky first), starting from `ecf3925`:
@@ -96,17 +124,19 @@ D-07, D-09 (they send commands to Redis), D-02 last (it changes how the game sta
   (`git ls-files --others --ignored --exclude-standard`, minus `node_modules` and build output). A file can pass
   every local check and still not be in the repository.
 
-## Keep these off a save you care about until they are proven
-`main` is also the folder the owner's own game starts from, so his next `./scripts/start` builds and runs all ten
-days. Four things reach beyond their own screens, and none has run:
-- **`scripts/start` itself (D-02)** now brings the proxy up first, then builds, then starts the rest. If a start
+## Four things that reach beyond their own screens
+`main` is also the folder the owner's own game starts from. Each of these ran on an isolated stack on 2026-11-22
+(above) and did what it says; they still act on the Redis they are pointed at, by design:
+- **`scripts/start` itself (D-02)** brings the proxy up first, then builds, then starts the rest. If a start ever
   fails in a way it did not before, take D-02 out (`git revert -m 1 cacbff6`) and start again.
 - **Match Day (D-09)** changes the running Redis on purpose and undoes it from a journal.
-- **Scoring a League entry (D-07)** empties logical database 7, on a connection of its own.
+- **Scoring a League entry (D-07)** empties logical database 7, on a connection of its own. Opening `/league`
+  scores the committed entries, so it does this too.
 - **The studio's play-test (D-05)** writes a draft level's keys to the player's Redis, after checking that none
   of them exists.
 
-Prove each on an isolated stack first (`scripts/check/lib/isolate.sh`; never a bare `docker compose`).
+A check of any of them still runs on an isolated stack (`scripts/check/lib/isolate.sh`; never a bare
+`docker compose`).
 
 ## Per day: what it adds, and what is still owed
 Written from the handoffs. Every block ends the same way: nothing in it has been run.
