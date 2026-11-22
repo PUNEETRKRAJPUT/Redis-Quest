@@ -101,6 +101,7 @@ open-source plan. Brief: `docs/design/EXPERIENCE.md` ("Night match"). Shared rul
 | F-25 | Integration: e2e tests play the new UI (welcome, map, levels, palette, routes, rain delay, terminal help on the real endpoints), UI checks, the legacy stylesheet removed, README images (spec: specs/F-25, handoff: handoffs/F-25) | done (orchestrator run: P0-10 and every UI check OK, each in its own compose project) |
 | E-06 | The engine serves Redis's own command docs from one snapshot, so the terminal's completion never sends a helper command during a level (spec: specs/E-06, handoff: handoffs/E-06) | done (check green: 669 names, fifty requests send nothing to Redis) |
 | G-03 | No check may act on the default compose project: `scripts/check/lib/isolate.sh`, six Phase 0 checks converted (P0-01, 02, 06, 07, 08, 11), a Docker-free tripwire in CI (spec: specs/G-03, handoff: handoffs/G-03) | done (each converted check passes beside a running `redis-quest` project and leaves it untouched; the tripwire catches all five original scripts) |
+| G-04 | The real stack on hosted Linux arm64 runners: workflow `stack` (a fresh start probed from outside, the days' own checks, every P and C check with the browser test), run-as-a-Mac helpers in `scripts/ci/` (spec: specs/G-04, handoff: handoffs/G-04) | done (three jobs green; the full grader and one disk proof stay Mac checks, by design) |
 
 ## The ten-day plan (started 2026-11-20)
 Ten tasks, D-01 to D-10, each written on its own branch and merged into `main` on 2026-11-22 without pull

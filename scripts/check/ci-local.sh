@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Full local CI: runs scripts/check/all.sh on this Mac and appends the result to docs/ci-local.log.
-# GitHub's runners cannot run the arm64 Docker stacks, so this log is the evidence for Docker-backed checks.
+# This log is the evidence for Docker-backed checks on a Mac. Hosted arm64 runners run most of them too since G-04
+# (.github/workflows/stack.yml); what judges a time on the machine, the full grader above all, still belongs here.
 # Takes many minutes and starts Docker stacks. bash 3.2 compatible.
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
