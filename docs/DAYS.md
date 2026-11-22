@@ -102,9 +102,13 @@ The rows that do not are all rows that judge a time on the machine: the referenc
 interview levels that reuse it) and ch4b-01 miss an absolute p99 limit (60 ms and 100 ms) under load, and once
 ch4-15 counted its search index before it had filled. Was that the merge? The same grader on the code from
 before the merge (`ecf3925`), on the same kind of runner: 310 pass, and it misses the same limits (ch3-06 at 403
-ms, ch3-14 at 156 ms, ch4b-01) plus ch2-02 and ch4-15. **So it is the 4-CPU runner, not the merge.** On the
-owner's Mac the grader last ran on 2026-11-19, before the merge: 316 pass, none missed. It has not been run on
-his Mac since; nothing on those rows' path changed (levels, solutions, scenarios, load generator, verifier).
+ms, ch3-14 at 156 ms, ch4b-01) plus ch2-02 and ch4-15. **So it is the 4-CPU runner, not the merge.**
+
+**And on the owner's Mac, on the merged code, later that evening:** `G01_RUN_OPS=1 scripts/check/G-01.sh`, in
+its own project beside his running game: **316 PASS, 0 MISMATCH, 6 SKIPPED** in 20 minutes, the same totals as
+the run of 2026-11-19 before the merge. The rows that miss their limit on the runner pass here. His game was
+snapshotted before and after (container ids and start times, the save file's hash, Redis key counts and
+`maxmemory`, Postgres row counts): nothing changed but one key's remaining time to live.
 
 **`pr-verdict.yml` (D-01) ran to the end for the first time**, on pull request 1: 238 rows pass, none
 mismatches, 62 are skipped by design (ops, traffic and random-pool levels).
