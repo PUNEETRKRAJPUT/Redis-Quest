@@ -1,9 +1,12 @@
 name: stack
 
-# Builds the real image and starts the real compose stack on a hosted Linux arm64 runner, then looks at it from
-# the outside. ci.yml proves the code (build, lint, unit tests, level validation); this proves the thing a learner
-# starts. GitHub's Mac runners cannot run Docker, so this runner is the closest hosted machine to the game's home:
-# the same architecture and the same images. It is not a Mac: scripts/preflight.sh and `open` are not exercised.
+# Builds the real image and runs the real compose stack on hosted Linux arm64 runners. ci.yml proves the code
+# (build, lint, unit tests, level validation); this proves the thing a learner starts, and runs the Docker-backed
+# checks that until now only a developer's Mac could run. GitHub's Mac runners cannot run Docker, so these runners
+# are the closest hosted machines to the game's home: the same architecture and the same images.
+#
+# They are not a Mac. scripts/ci/run-check.sh and scripts/ci/linux-shims.sh say what is stood in for (file
+# ownership under Docker Desktop, three Mac commands). Docker Desktop itself, and `open`, are not exercised.
 
 on:
   push:
@@ -18,14 +21,20 @@ permissions:
   contents: read
 
 env:
-  BASE: http://127.0.0.1:3000
+  NEXT_TELEMETRY_DISABLED: "1"
 
 jobs:
+  # A fresh clone, started in the order scripts/start uses, on the default ports, then looked at from outside.
   stack:
+    name: a fresh start, seen from outside
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
+    env:
+      BASE: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -37,9 +46,11 @@ jobs:
           echo "cpus: $(nproc)"
           free -g | sed -n '1,2p'
           df -h / | tail -1
-          id
           docker version --format 'docker client {{.Client.Version}}, server {{.Server.Version}}'
           docker compose version
+
+      - name: Prepare the runner
+        run: bash scripts/ci/runner-setup.sh
 
       # On a Mac, Docker Desktop lets a container write to any bind-mounted folder. On Linux the folder's owner
       # counts, and the game's containers run as `node` (uid 1000) or `postgres`, not as this runner's user.
@@ -65,7 +76,6 @@ jobs:
             sleep 1
           done
           echo "the proxy answered $code after about ${i} s"
-          docker compose ps
 
       - name: The start page, while nothing else is up
         run: node scripts/ci/stack-probe.mjs start-page "$BASE"
@@ -92,11 +102,16 @@ jobs:
             sleep 2
           done
           echo "engine up: $api, ui up: $ui, after $(( $(date +%s) - start )) s"
-          docker compose ps -a
           [ "$api" -eq 1 ] && [ "$ui" -eq 1 ]
 
       - name: The stack, from the outside
         run: node scripts/ci/stack-probe.mjs up "$BASE"
+
+      - name: "D-04: the phone, with a live traced request"
+        if: ${{ !cancelled() }}
+        env:
+          QUEST_BASE_URL: http://127.0.0.1:3000
+        run: scripts/ci/run-check.sh scripts/check/D-04.sh
 
       - name: What the containers said
         if: always()
@@ -104,10 +119,119 @@ jobs:
           docker compose ps -a || true
           for s in engine app runner ui proxy redis postgres insight-init; do
             echo "::group::logs $s"
-            docker compose logs --no-color --tail 120 "$s" 2>&1 || true
+            docker compose logs --no-color --tail 150 "$s" 2>&1 || true
             echo "::endgroup::"
           done
-          echo "::group::files the containers wrote"
-          ls -la logs .progress 2>&1 | head -60 || true
-          echo "::endgroup::"
-          docker system df || true
+
+  # The ten days' own check scripts that need Docker or were never marked docker-free. D-01 and D-10 already run in
+  # ci.yml; D-04 runs above, where a stack is up. D-05, D-06 and D-07 share a port, so they run one after another.
+  days:
+    name: the ten days' own checks
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Prepare the runner
+        run: bash scripts/ci/runner-setup.sh
+
+      - name: "D-02: the first five minutes (the whole start included)"
+        if: ${{ !cancelled() }}
+        env:
+          D02_FULL: "1"
+        run: scripts/ci/run-check.sh scripts/check/D-02.sh
+
+      - name: "D-03: hands-on panels and editor completion"
+        if: ${{ !cancelled() }}
+        run: scripts/ci/run-check.sh scripts/check/D-03.sh
+
+      - name: "D-05: the level studio and community levels"
+        if: ${{ !cancelled() }}
+        run: scripts/ci/run-check.sh scripts/check/D-05.sh
+
+      - name: "D-06: your turn, the board, the credits"
+        if: ${{ !cancelled() }}
+        run: scripts/ci/run-check.sh scripts/check/D-06.sh
+
+      - name: "D-07: the Economy League"
+        if: ${{ !cancelled() }}
+        run: scripts/ci/run-check.sh scripts/check/D-07.sh
+
+      - name: "D-08: the arcade"
+        if: ${{ !cancelled() }}
+        run: scripts/ci/run-check.sh scripts/check/D-08.sh
+
+      - name: "D-09: Match Day, played and undone"
+        if: ${{ !cancelled() }}
+        run: scripts/ci/run-check.sh scripts/check/D-09.sh
+
+  # Every declared solution of every level, right and wrong, played through the real engine. Ops levels included:
+  # they stop and start Redis, fail a master over and join a cluster.
+  grader:
+    name: every level, graded by the engine
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Prepare the runner
+        run: bash scripts/ci/runner-setup.sh
+
+      - name: "G-01: the grader, ops levels included"
+        env:
+          G01_RUN_OPS: "1"
+        run: scripts/ci/run-check.sh scripts/check/G-01.sh
+
+  # The checks scripts/check/all.sh runs on a developer's Mac (P0-01 to P0-12, the chapter checks), P0-10's browser
+  # test of Chapter 0 among them. Unlike all.sh this does not stop at the first failure: one run shows them all.
+  suite:
+    name: the P and C checks, the browser test included
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Prepare the runner
+        run: bash scripts/ci/runner-setup.sh
+
+      - name: Playwright's browser
+        run: cd ui && npx --no-install playwright install --with-deps chromium
+
+      - name: Every P and C check
+        run: |
+          set -u
+          failed=""
+          passed=0
+          for f in $(cd scripts/check && ls P*.sh C*.sh | sort); do
+            printf '\n######## %s\n' "$f"
+            start=$(date +%s)
+            if scripts/ci/run-check.sh "scripts/check/$f"; then
+              echo "RESULT PASS $f ($(( $(date +%s) - start )) s)"
+              passed=$((passed + 1))
+            else
+              echo "RESULT FAIL $f ($(( $(date +%s) - start )) s)"
+              failed="$failed $f"
+            fi
+          done
+          printf '\n==== summary ====\n'
+          echo "passed: $passed"
+          if [ -n "$failed" ]; then echo "failed:$failed"; exit 1; fi
+          echo "ALL P AND C CHECKS PASSED"
