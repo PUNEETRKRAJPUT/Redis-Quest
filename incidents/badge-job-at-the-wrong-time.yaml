@@ -1,0 +1,25 @@
+id: badge-job-at-the-wrong-time
+title: "The badge job runs at the wrong time"
+sees: |
+  Somebody started the nightly badge job in the middle of the match. For about a second Redis does nothing for
+  anyone else: every page that needs it waits.
+cause:
+  summary: |
+    A few seconds into the over the engine sends one short Lua script that only counts: no keys, no writes. Redis
+    runs it as one piece of work, so every other command waits behind it. The script is bounded and ends by itself.
+  steps:
+    - kind: block_script
+      iterations: 30000000
+      startAfterSec: 3
+ends: |
+  When the script returns, normally within about a second, and in any case before the over is scored. Nothing in
+  Redis is changed by it.
+facts:
+  - text: "A script's execution blocks all server activity for as long as it runs, so a slow script blocks every client."
+    source: digest
+    ref: "https://redis.io/docs/latest/develop/programmability/"
+  - text: "After busy-reply-threshold (5 seconds by default) Redis starts to answer other clients with BUSY; this script is sized to end well before that."
+    source: digest
+    ref: "https://redis.io/docs/latest/develop/programmability/"
+  - text: "How long 30 million loop steps take depends on the machine, so the pause is a simulation of a slow script, not a measured one."
+    source: simulation

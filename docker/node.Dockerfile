@@ -81,6 +81,8 @@ COPY levels levels
 # The Economy League reads its holes and entries from here (D-07).
 COPY golf golf
 COPY scenarios scenarios
+# Match Day reads its incident deck from here (D-09).
+COPY incidents incidents
 
 USER node
 CMD ["node", "engine/dist/main.js"]
