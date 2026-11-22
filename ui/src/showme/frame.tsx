@@ -357,6 +357,7 @@ export function PanelFrame({
   icon,
   typeLabel,
   handsOn = false,
+  readOnlyWhy,
   preview,
   children,
   className,
@@ -371,6 +372,8 @@ export function PanelFrame({
   typeLabel?: string;
   /** This panel has direct manipulation in hands-on mode. */
   handsOn?: boolean;
+  /** For a panel that stays read-only: why, in one line (shown in hands-on mode). */
+  readOnlyWhy?: string;
   preview?: string | null;
   children: ReactNode;
   className?: string;
@@ -441,7 +444,8 @@ export function PanelFrame({
           >
             <Terminal size={15} className="mt-0.5 shrink-0 text-chalk-faint" aria-hidden />
             <span>
-              This panel only reads. Change the key from the terminal and watch it move here.
+              {readOnlyWhy ??
+                'This panel only reads. Change the key from the terminal and watch it move here.'}
             </span>
           </p>
         )}

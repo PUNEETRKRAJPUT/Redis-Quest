@@ -31,7 +31,17 @@ import {
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Button, Segmented, useReducedMotion } from '@/design';
-import { cmd, fmtSeconds, formatCommand, parseSeconds } from './commands';
+import {
+  clampLonLat,
+  cmd,
+  fmtSeconds,
+  formatCommand,
+  isJsonText,
+  mapToLonLat,
+  parseDayOffset,
+  parseNumber,
+  parseSeconds,
+} from './commands';
 import { Empty, Facts, Num, PanelFrame, Spark, freshClass, useFrame, useFresh } from './frame';
 import styles from './showme.module.css';
 
@@ -864,15 +874,21 @@ export interface BitmapStreakProps {
   name: string;
   /** One 0/1 per day, oldest first, the last entry is the most recent day. */
   bits: number[];
+  /** How many days the wrapper reads (the grid's size); a day beyond it cannot be shown. */
+  days?: number;
 }
 export function currentStreak(bits: number[]): number {
   let n = 0;
   for (let i = bits.length - 1; i >= 0 && bits[i] === 1; i--) n++;
   return n;
 }
-export function BitmapStreakView({ name, bits }: BitmapStreakProps) {
+export function BitmapStreakView({ name, bits, days = 30 }: BitmapStreakProps) {
   const total = bits.reduce((a, b) => a + b, 0);
   const fresh = useFresh(bits.map((b, i) => (b ? `d${i}` : '')).filter(Boolean));
+  const c = useControls();
+  const [dayText, setDayText] = useState('');
+  const day = parseDayOffset(dayText, days, bits.length);
+  const preview = c.show && day !== null ? formatCommand(cmd.setbit(name, day, 1)) : null;
   return (
     <PanelFrame
       kind="bitmap_streak"
@@ -880,25 +896,36 @@ export function BitmapStreakView({ name, bits }: BitmapStreakProps) {
       name={name}
       icon={<CalendarCheck size={ICON} />}
       typeLabel="bitmap"
+      handsOn
+      preview={preview}
     >
       <div
         className="flex flex-wrap gap-1.5"
-        role="img"
+        role={c.show ? 'group' : 'img'}
         aria-label={`${total} days set out of ${bits.length}`}
       >
-        {bits.map((b, i) => (
-          <i
-            key={i}
-            className={clsx(
-              'block size-5 rounded-xs',
-              b
-                ? 'bg-turf shadow-[0_0_10px_rgb(46_226_129/0.45)]'
-                : 'bg-night-900 ring-1 ring-night-600',
-              fresh.has(`d${i}`) && styles.fresh,
-            )}
-            title={`day ${i + 1}: ${b ? 'logged in' : 'missed'}`}
-          />
-        ))}
+        {bits.map((b, i) => {
+          const cls = clsx(
+            'block size-5 rounded-xs',
+            b
+              ? 'bg-turf shadow-[0_0_10px_rgb(46_226_129/0.45)]'
+              : 'bg-night-900 ring-1 ring-night-600',
+            fresh.has(`d${i}`) && styles.fresh,
+          );
+          return c.show ? (
+            <button
+              key={i}
+              type="button"
+              disabled={c.disabled}
+              onClick={() => void c.go(cmd.setbit(name, i, b ? 0 : 1))}
+              aria-label={`Day ${i + 1}: ${b ? 'logged in, click to clear (SETBIT 0)' : 'missed, click to set (SETBIT 1)'}`}
+              title={`day ${i + 1} (offset ${i}): ${b ? 'logged in' : 'missed'}. Click to ${b ? 'clear' : 'set'} it`}
+              className={clsx(cls, 'cursor-pointer disabled:cursor-not-allowed')}
+            />
+          ) : (
+            <i key={i} className={cls} title={`day ${i + 1}: ${b ? 'logged in' : 'missed'}`} />
+          );
+        })}
       </div>
       <p className="text-md text-chalk-dim">
         <strong className="font-display text-xl font-semibold text-chalk">
@@ -906,6 +933,32 @@ export function BitmapStreakView({ name, bits }: BitmapStreakProps) {
         </strong>{' '}
         day streak, <strong className="text-chalk">{total}</strong> of {bits.length} days set
       </p>
+      {c.show && (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (day === null) return;
+            void c.go(cmd.setbit(name, day, 1)).then((ok) => ok && setDayText(''));
+          }}
+        >
+          <TextBox
+            label="Day offset"
+            value={dayText}
+            onChange={setDayText}
+            placeholder={`day offset, blank = next (${bits.length})`}
+            disabled={c.disabled}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={c.disabled || day === null}
+            leading={<Plus size={14} />}
+          >
+            SETBIT
+          </Button>
+        </form>
+      )}
     </PanelFrame>
   );
 }
@@ -917,6 +970,9 @@ export interface HllCounterProps {
   count: number;
 }
 export function HllCounterView({ name, count }: HllCounterProps) {
+  const c = useControls();
+  const [visitor, setVisitor] = useState('');
+  const addable = visitor.trim() !== '';
   return (
     <PanelFrame
       kind="hll_counter"
@@ -924,6 +980,8 @@ export function HllCounterView({ name, count }: HllCounterProps) {
       name={name}
       icon={<Users size={ICON} />}
       typeLabel="hyperloglog"
+      handsOn
+      preview={c.show && addable ? formatCommand(cmd.pfadd(name, visitor.trim())) : null}
     >
       <div
         className="font-display tabular text-4xl font-semibold text-flood-400"
@@ -934,6 +992,32 @@ export function HllCounterView({ name, count }: HllCounterProps) {
       <p className="text-sm leading-5 text-chalk-dim">
         A HyperLogLog keeps this in about 12 KB however many visitors there are.
       </p>
+      {c.show && (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!addable) return;
+            void c.go(cmd.pfadd(name, visitor.trim())).then((ok) => ok && setVisitor(''));
+          }}
+        >
+          <TextBox
+            label="Visitor"
+            value={visitor}
+            onChange={setVisitor}
+            placeholder="a visitor, for example visitor-25"
+            disabled={c.disabled}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={c.disabled || !addable}
+            leading={<Plus size={14} />}
+          >
+            PFADD
+          </Button>
+        </form>
+      )}
     </PanelFrame>
   );
 }
@@ -958,6 +1042,29 @@ export function GeoMapView({ name, points }: GeoMapProps) {
   const sy = (lat: number) =>
     maxLat === minLat ? H / 2 : H - pad - ((lat - minLat) / (maxLat - minLat)) * (H - 2 * pad);
   const fresh = useFresh(points.map((p) => p.member));
+  const c = useControls();
+  const [place, setPlace] = useState('');
+  const [lonText, setLonText] = useState('');
+  const [latText, setLatText] = useState('');
+  const [hover, setHover] = useState<{ lon: number; lat: number } | null>(null);
+  const member = place.trim();
+  const typed = parseNumber(lonText) !== null && parseNumber(latText) !== null;
+  const typedAt = typed
+    ? { lon: parseNumber(lonText) as number, lat: parseNumber(latText) as number }
+    : null;
+  const typedOk =
+    typedAt !== null &&
+    typedAt.lon >= -180 &&
+    typedAt.lon <= 180 &&
+    Math.abs(typedAt.lat) <= 85.05112878;
+  const where = typedOk ? typedAt : hover;
+  const at = (e: { clientX: number; clientY: number; currentTarget: SVGSVGElement }) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return null;
+    const x = ((e.clientX - r.left) / r.width) * W;
+    const y = ((e.clientY - r.top) / r.height) * H;
+    return mapToLonLat(x, y, { minLon, maxLon, minLat, maxLat });
+  };
   return (
     <PanelFrame
       kind="geo_map"
@@ -965,15 +1072,34 @@ export function GeoMapView({ name, points }: GeoMapProps) {
       name={name}
       icon={<MapPin size={ICON} />}
       typeLabel="geo"
+      handsOn
+      preview={
+        c.show && member !== '' && where
+          ? formatCommand(cmd.geoadd(name, where.lon, where.lat, member))
+          : null
+      }
     >
       {points.length === 0 ? (
         <Empty>No coordinates stored under this key.</Empty>
       ) : (
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="w-full rounded-md"
+          className={clsx('w-full rounded-md', c.show && member !== '' && 'cursor-crosshair')}
           role="img"
           aria-label={`${points.length} places plotted by longitude and latitude`}
+          onMouseMove={c.show ? (e) => setHover(at(e)) : undefined}
+          onMouseLeave={c.show ? () => setHover(null) : undefined}
+          onClick={
+            c.show
+              ? (e) => {
+                  const p = at(e);
+                  if (!p || member === '' || c.disabled) return;
+                  void c
+                    .go(cmd.geoadd(name, p.lon, p.lat, member))
+                    .then((ok) => ok && setPlace(''));
+                }
+              : undefined
+          }
         >
           <rect
             x="0.5"
@@ -1025,6 +1151,62 @@ export function GeoMapView({ name, points }: GeoMapProps) {
           })}
         </svg>
       )}
+      {c.show && (
+        <>
+          <p className="text-sm leading-5 text-chalk-dim">
+            Name a place, then click the map to add it there (GEOADD takes longitude, then
+            latitude). The map redraws to fit every place, so a new point can move the others.
+          </p>
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (member === '' || !typedOk || !typedAt) return;
+              const p = clampLonLat(typedAt.lon, typedAt.lat);
+              void c.go(cmd.geoadd(name, p.lon, p.lat, member)).then((ok) => {
+                if (ok) {
+                  setPlace('');
+                  setLonText('');
+                  setLatText('');
+                }
+              });
+            }}
+          >
+            <TextBox
+              label="Place name"
+              value={place}
+              onChange={setPlace}
+              placeholder="place name"
+              disabled={c.disabled}
+              className="min-w-[8rem]"
+            />
+            <TextBox
+              label="Longitude"
+              value={lonText}
+              onChange={setLonText}
+              placeholder="longitude"
+              disabled={c.disabled}
+              className="max-w-[7rem]"
+            />
+            <TextBox
+              label="Latitude"
+              value={latText}
+              onChange={setLatText}
+              placeholder="latitude"
+              disabled={c.disabled}
+              className="max-w-[7rem]"
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={c.disabled || member === '' || !typedOk}
+              leading={<Plus size={14} />}
+            >
+              GEOADD
+            </Button>
+          </form>
+        </>
+      )}
     </PanelFrame>
   );
 }
@@ -1037,6 +1219,17 @@ export interface StreamLogProps {
 }
 export function StreamLogView({ name, entries }: StreamLogProps) {
   const fresh = useFresh(entries.map((e) => e.id));
+  const c = useControls();
+  const [f1, setF1] = useState('');
+  const [v1, setV1] = useState('');
+  const [f2, setF2] = useState('');
+  const [v2, setV2] = useState('');
+  const first = f1.trim() !== '' && v1 !== '';
+  const second = f2.trim() !== '' && v2 !== '';
+  const none2 = f2.trim() === '' && v2 === '';
+  const fields: [string, string][] = [[f1.trim(), v1]];
+  if (second) fields.push([f2.trim(), v2]);
+  const valid = first && (second || none2);
   return (
     <PanelFrame
       kind="stream_log"
@@ -1044,6 +1237,8 @@ export function StreamLogView({ name, entries }: StreamLogProps) {
       name={name}
       icon={<Waypoints size={ICON} />}
       typeLabel="stream"
+      handsOn
+      preview={c.show && valid ? formatCommand(cmd.xadd(name, fields)) : null}
     >
       {entries.length === 0 ? (
         <Empty>No entries in the stream.</Empty>
@@ -1064,6 +1259,64 @@ export function StreamLogView({ name, entries }: StreamLogProps) {
             </li>
           ))}
         </ul>
+      )}
+      {c.show && (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!valid) return;
+            void c.go(cmd.xadd(name, fields)).then((ok) => {
+              if (ok) {
+                setF1('');
+                setV1('');
+                setF2('');
+                setV2('');
+              }
+            });
+          }}
+        >
+          <TextBox
+            label="First field"
+            value={f1}
+            onChange={setF1}
+            placeholder="field"
+            disabled={c.disabled}
+            className="max-w-[7rem]"
+          />
+          <TextBox
+            label="First value"
+            value={v1}
+            onChange={setV1}
+            placeholder="value"
+            disabled={c.disabled}
+            className="max-w-[8rem]"
+          />
+          <TextBox
+            label="Second field (optional)"
+            value={f2}
+            onChange={setF2}
+            placeholder="field 2 (optional)"
+            disabled={c.disabled}
+            className="max-w-[8rem]"
+          />
+          <TextBox
+            label="Second value (optional)"
+            value={v2}
+            onChange={setV2}
+            placeholder="value 2"
+            disabled={c.disabled}
+            className="max-w-[8rem]"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={c.disabled || !valid}
+            leading={<Plus size={14} />}
+          >
+            XADD
+          </Button>
+        </form>
       )}
     </PanelFrame>
   );
@@ -1116,6 +1369,21 @@ function JsonNode({ k, v, depth }: { k: string | null; v: unknown; depth: number
   );
 }
 export function JsonTreeView({ name, value }: JsonTreeProps) {
+  const c = useControls();
+  const [path, setPath] = useState('');
+  const [text, setText] = useState('');
+  const [by, setBy] = useState('');
+  const p = path.trim();
+  const setOk = p !== '' && isJsonText(text);
+  const amount = parseNumber(by);
+  const incOk = p !== '' && amount !== null;
+  const preview = !c.show
+    ? null
+    : setOk
+      ? formatCommand(cmd.jsonSet(name, p, text.trim()))
+      : incOk
+        ? formatCommand(cmd.jsonNumIncrBy(name, p, amount))
+        : null;
   return (
     <PanelFrame
       kind="json_tree"
@@ -1123,12 +1391,79 @@ export function JsonTreeView({ name, value }: JsonTreeProps) {
       name={name}
       icon={<Braces size={ICON} />}
       typeLabel="json"
+      handsOn
+      preview={preview}
     >
       {value === undefined ? (
         <Empty>No JSON document under this key.</Empty>
       ) : (
         <div className="rounded-md border border-night-600/70 bg-night-950/50 p-3 font-mono text-sm leading-5 text-chalk">
           <JsonNode k={null} v={value} depth={0} />
+        </div>
+      )}
+      {c.show && (
+        <div className="space-y-2">
+          <TextBox
+            label="JSON path"
+            value={path}
+            onChange={setPath}
+            placeholder="path, for example $.stats.runs ($ is the whole document)"
+            disabled={c.disabled}
+            className="w-full"
+          />
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!setOk) return;
+              void c.go(cmd.jsonSet(name, p, text.trim())).then((ok) => ok && setText(''));
+            }}
+          >
+            <TextBox
+              label="JSON value"
+              value={text}
+              onChange={setText}
+              placeholder='a JSON value: 600, "text" (in quotes), {"a": 1}'
+              disabled={c.disabled}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={c.disabled || !setOk}
+              leading={<Pencil size={14} />}
+            >
+              JSON.SET
+            </Button>
+          </form>
+          {text.trim() !== '' && !isJsonText(text) && (
+            <p className="text-sm leading-5 text-chalk-dim">
+              That is not JSON yet: text needs double quotes, like &quot;Asha&quot;.
+            </p>
+          )}
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!incOk || amount === null) return;
+              void c.go(cmd.jsonNumIncrBy(name, p, amount)).then((ok) => ok && setBy(''));
+            }}
+          >
+            <TextBox
+              label="Add this number"
+              value={by}
+              onChange={setBy}
+              placeholder="a number to add at the path, for example 4"
+              disabled={c.disabled}
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={c.disabled || !incOk}
+              leading={<Plus size={14} />}
+            >
+              JSON.NUMINCRBY
+            </Button>
+          </form>
         </div>
       )}
     </PanelFrame>
@@ -1152,6 +1487,7 @@ export function CacheStatsView({ hits, misses, keys, commands }: CacheStatsProps
   return (
     <PanelFrame
       kind="cache_stats"
+      readOnlyWhy="This panel only reads: these are the server's own counters (INFO stats), and no single command sets them."
       title="Cache health"
       name="INFO stats"
       icon={<Gauge size={ICON} />}
@@ -1215,6 +1551,7 @@ export function StatsLatencyView({
   return (
     <PanelFrame
       kind="stats_latency_panel"
+      readOnlyWhy="This panel only reads: latency comes from the route's own traffic, so it moves when the app is called, not when a key is edited."
       title="Stats route, live"
       name={route}
       icon={<Activity size={ICON} />}
@@ -1289,6 +1626,7 @@ export function OtpLimiterView({
   return (
     <PanelFrame
       kind="otp_limiter_panel"
+      readOnlyWhy="This panel only reads: the app writes this key as its route runs, so call the route and watch it change."
       title={title}
       name={name}
       icon={<ShieldCheck size={ICON} />}
@@ -1361,6 +1699,7 @@ export function StreamGroupsView({ name, length, groups }: StreamGroupsProps) {
   return (
     <PanelFrame
       kind="stream_groups"
+      readOnlyWhy="This panel only reads: groups and pending counts come from consumers (XREADGROUP, XACK), which is several commands, not one gesture."
       title="Stream consumer groups"
       name={name}
       icon={<Database size={ICON} />}
@@ -1455,6 +1794,9 @@ export function fmtRetention(ms: number): string {
   return `${ms} ms`;
 }
 export function TsChartView({ name, info, values }: TsChartProps) {
+  const c = useControls();
+  const [val, setVal] = useState('');
+  const n = parseNumber(val);
   return (
     <PanelFrame
       kind="ts_chart"
@@ -1462,6 +1804,8 @@ export function TsChartView({ name, info, values }: TsChartProps) {
       name={name}
       icon={<Activity size={ICON} />}
       typeLabel="time series"
+      handsOn
+      preview={c.show && n !== null ? formatCommand(cmd.tsAdd(name, n)) : null}
     >
       {info === null || (info.totalSamples === 0 && values.length === 0) ? (
         <Empty>no samples yet</Empty>
@@ -1489,6 +1833,32 @@ export function TsChartView({ name, info, values }: TsChartProps) {
           ) : null}
         </>
       )}
+      {c.show && (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (n === null) return;
+            void c.go(cmd.tsAdd(name, n)).then((ok) => ok && setVal(''));
+          }}
+        >
+          <TextBox
+            label="Sample value"
+            value={val}
+            onChange={setVal}
+            placeholder="a number, stored with the server's time now"
+            disabled={c.disabled}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={c.disabled || n === null}
+            leading={<Plus size={14} />}
+          >
+            TS.ADD
+          </Button>
+        </form>
+      )}
     </PanelFrame>
   );
 }
@@ -1510,6 +1880,9 @@ export interface BfCardProps {
 export function BfCardView({ name, info, card }: BfCardProps) {
   const show = (n: number | null) => (n === null ? 'n/a' : n.toLocaleString('en-US'));
   const fresh = useFresh([`i${info?.inserted}`, `c${card}`]);
+  const c = useControls();
+  const [item, setItem] = useState('');
+  const it = item.trim();
   return (
     <PanelFrame
       kind="bf_card"
@@ -1517,6 +1890,8 @@ export function BfCardView({ name, info, card }: BfCardProps) {
       name={name}
       icon={<Filter size={ICON} />}
       typeLabel="bloom filter"
+      handsOn
+      preview={c.show && it !== '' ? formatCommand(cmd.bfAdd(name, it)) : null}
     >
       {info === null ? (
         <Empty>no filter yet</Empty>
@@ -1541,6 +1916,41 @@ export function BfCardView({ name, info, card }: BfCardProps) {
           ]}
         />
       )}
+      {c.show && (
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (it !== '') void c.go(cmd.bfAdd(name, it));
+          }}
+        >
+          <TextBox
+            label="Item"
+            value={item}
+            onChange={setItem}
+            placeholder="an item, for example asha"
+            disabled={c.disabled}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={c.disabled || it === ''}
+            leading={<Plus size={14} />}
+          >
+            BF.ADD
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={c.disabled || it === ''}
+            leading={<Search size={14} />}
+            onClick={() => void c.go(cmd.bfExists(name, it))}
+          >
+            BF.EXISTS
+          </Button>
+        </form>
+      )}
     </PanelFrame>
   );
 }
@@ -1558,6 +1968,7 @@ export function FtCardView({ name, info, docIds }: FtCardProps) {
   return (
     <PanelFrame
       kind="ft_card"
+      readOnlyWhy="This panel only reads: the index follows the documents under its prefix, so it changes when you write a document."
       title="Search index"
       name={name}
       icon={<Search size={ICON} />}
@@ -1637,6 +2048,7 @@ export function AclUsersView({ users }: AclUsersProps) {
   return (
     <PanelFrame
       kind="acl_users"
+      readOnlyWhy="This panel only reads: changing users is security configuration, so it is left to the terminal."
       title="ACL users"
       name="ACL LIST"
       icon={<ShieldCheck size={ICON} />}
