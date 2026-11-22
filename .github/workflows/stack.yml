@@ -1,0 +1,113 @@
+name: stack
+
+# Builds the real image and starts the real compose stack on a hosted Linux arm64 runner, then looks at it from
+# the outside. ci.yml proves the code (build, lint, unit tests, level validation); this proves the thing a learner
+# starts. GitHub's Mac runners cannot run Docker, so this runner is the closest hosted machine to the game's home:
+# the same architecture and the same images. It is not a Mac: scripts/preflight.sh and `open` are not exercised.
+
+on:
+  push:
+    branches: [main, "e2e/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: stack-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BASE: http://127.0.0.1:3000
+
+jobs:
+  stack:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Runner facts
+        run: |
+          uname -srm
+          echo "cpus: $(nproc)"
+          free -g | sed -n '1,2p'
+          df -h / | tail -1
+          id
+          docker version --format 'docker client {{.Client.Version}}, server {{.Server.Version}}'
+          docker compose version
+
+      # On a Mac, Docker Desktop lets a container write to any bind-mounted folder. On Linux the folder's owner
+      # counts, and the game's containers run as `node` (uid 1000) or `postgres`, not as this runner's user.
+      - name: Folders the containers write to
+        run: |
+          set -eu
+          mkdir -p logs/start .progress workspace postgres/init
+          chmod -R a+rwX logs .progress workspace
+          cp .env.example .env
+
+      # The order scripts/start uses since D-02: the proxy first, so the start page can say what is happening.
+      - name: Proxy first
+        run: |
+          set -eu
+          now=$(date +%s)
+          printf '{"stage":"building","startedAt":%s,"stageStartedAt":%s,"updatedAt":%s,"detail":"Downloading images and building the game."}\n' \
+            "$now" "$now" "$now" > logs/start/stage.json
+          docker compose up -d proxy
+          code=000
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$BASE/_starting/stage.json" || true)
+            [ "$code" != "000" ] && break
+            sleep 1
+          done
+          echo "the proxy answered $code after about ${i} s"
+          docker compose ps
+
+      - name: The start page, while nothing else is up
+        run: node scripts/ci/stack-probe.mjs start-page "$BASE"
+
+      - name: Build the image
+        run: |
+          set -eu
+          start=$(date +%s)
+          docker compose build
+          echo "image built in $(( $(date +%s) - start )) s"
+          docker image ls redis-quest-node
+
+      - name: Start everything
+        run: |
+          set -eu
+          start=$(date +%s)
+          docker compose up -d
+          api=0
+          ui=0
+          for i in $(seq 1 150); do
+            [ "$api" -eq 1 ] || { curl -fs -o /dev/null --max-time 3 "$BASE/health" && api=1; } || true
+            [ "$ui" -eq 1 ] || { [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$BASE/")" = "200" ] && ui=1; } || true
+            [ "$api" -eq 1 ] && [ "$ui" -eq 1 ] && break
+            sleep 2
+          done
+          echo "engine up: $api, ui up: $ui, after $(( $(date +%s) - start )) s"
+          docker compose ps -a
+          [ "$api" -eq 1 ] && [ "$ui" -eq 1 ]
+
+      - name: The stack, from the outside
+        run: node scripts/ci/stack-probe.mjs up "$BASE"
+
+      - name: What the containers said
+        if: always()
+        run: |
+          docker compose ps -a || true
+          for s in engine app runner ui proxy redis postgres insight-init; do
+            echo "::group::logs $s"
+            docker compose logs --no-color --tail 120 "$s" 2>&1 || true
+            echo "::endgroup::"
+          done
+          echo "::group::files the containers wrote"
+          ls -la logs .progress 2>&1 | head -60 || true
+          echo "::endgroup::"
+          docker system df || true
