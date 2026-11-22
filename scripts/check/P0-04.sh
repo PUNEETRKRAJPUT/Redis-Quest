@@ -118,7 +118,9 @@ q "DELETE FROM contests WHERE name = 'check'" >/dev/null
 
 # --- determinism: regenerate and diff against the committed seed
 node "$ROOT/postgres/seed/generate.mjs" --out "$TMP/seed.sql.gz" 2>/dev/null
-if cmp -s "$TMP/seed.sql.gz" "$ROOT/postgres/init/002-seed.sql.gz"; then ok "generator output byte-identical to committed 002-seed.sql.gz"; else bad "generator output differs from committed 002-seed.sql.gz"; fi
+# Compared as SQL, after gunzip: the gzip bytes depend on the zlib inside the Node that ran the generator, and that
+# differs between machines (a Mac and a Linux arm64 runner gave different bytes on 2026-11-22).
+if [ -s "$TMP/seed.sql.gz" ] && gunzip -c "$TMP/seed.sql.gz" | cmp -s - <(gunzip -c "$ROOT/postgres/init/002-seed.sql.gz"); then ok "generator output is the committed seed (the same SQL, compared after gunzip)"; else bad "generator output differs from committed 002-seed.sql.gz (compared after gunzip)"; fi
 
 docker rm -f "$C" >/dev/null 2>&1 && ok "throwaway container removed"
 echo

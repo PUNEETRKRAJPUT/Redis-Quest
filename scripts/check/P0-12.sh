@@ -32,7 +32,7 @@ fi
 
 echo
 echo "== required content"
-for pat in "pnpm install --frozen-lockfile" "pnpm -r build" "pnpm -r lint" "pnpm -r test" "levels:validate" "ubuntu-latest" "macos-latest" "docker info" "docker-free"; do
+for pat in "pnpm install --frozen-lockfile" "pnpm -r build" "pnpm -r lint" "pnpm -r --no-bail test" "levels:validate" "ubuntu-latest" "macos-latest" "docker info" "docker-free"; do
   grep -qF -- "$pat" "$WF" && pass "workflow contains '$pat'" || fail "workflow lacks '$pat'"
 done
 
