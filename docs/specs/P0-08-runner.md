@@ -36,8 +36,9 @@ engine or the app ever importing learner code in-process.
     `redisUrl` / `databaseUrl` override the env defaults (Chapter 5 points at replicas and clusters).
 - **Isolation:** every `/run` executes in a fresh child process (`node` with `--max-old-space-size=256`),
   so module caches never go stale and a crash, `process.exit`, infinite loop or unhandled rejection in
-  learner code cannot take the runner down. Hard kill at `timeoutMs + 1000`. The parent never imports
-  learner code.
+  learner code cannot take the runner down. Hard kill at `timeoutMs + 1000`, counted from the moment the
+  learner's code starts (the child tells the parent; until then the clock runs from the spawn, so an
+  import that never returns is still ended). The parent never imports learner code.
 - **Metrics:** `dbQueries` counts `db.query` calls; `redisCommands` counts commands sent through the
   injected client (wrap the client with a Proxy that counts method invocations and `sendCommand`;
   `multi()` chains count as one when executed; document the rule). Percentiles are over the per-call

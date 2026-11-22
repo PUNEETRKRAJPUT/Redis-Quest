@@ -49,7 +49,7 @@ Shared rules: `specs/_days-common.md`. Extension points that kept the branches a
 | D-03 | complete | `912c1f6` | passes on arm64 |
 | D-04 | complete | `be30de1` | passes on arm64, live request included |
 | D-05 | complete | `ceafa29` | passes on arm64 |
-| D-06 | complete | `2932bde` | one line fails: the check's own expected range is wrong |
+| D-06 | complete | `2932bde` | passes on arm64, once its own expected range was corrected |
 | D-07 | complete | `2f68034` | passes on arm64 |
 | D-08 | complete | `0d51877` | passes on arm64 |
 | D-09 | complete | `28034f0` | passes on arm64 |
@@ -87,11 +87,34 @@ same probe, green; and the days' own check scripts: D-03, D-04 (with a live trac
 and D-09 pass. D-09 is the one that mattered most: a whole match and a stopped one, `maxmemory` lowered and put
 back, every key outside `cache:*` unchanged, no undo journal left behind. D-02 passes its static part and the
 proxy-alone part (the start page keeps the 502 status); its full-start part needs a Mac's preflight and was
-covered by the run above. D-06 fails one line: its own check expects 65 to 72 taught commands, a count made
-without a Redis, and the server says 100 (the list was read and is right). D-01 and D-10 run in `ci.yml`.
+covered by the run above. D-06 passes once its own expected range was corrected: it wanted 65 to 72 taught
+commands, a count made without a Redis, and the server says 100 (the list was read and is right). D-01 and D-10
+run in `ci.yml`.
 
-Not finished when this was written: the grader over all 96 levels and the older P and C checks (Chapter 0 played
-in a browser among them) were still running on the arm64 runners. `BUILD.md` records how they end.
+**The older checks, there too.** Of the 22 P and C checks, 21 pass on every run, P0-10 among them (Chapter 0
+played in Chromium). Three were wrong about themselves and are fixed: P0-12 (it looked for a CI line as it was
+written before that day), P0-04 (it compared the seed as gzip bytes, which differ between machines; it compares
+the SQL now) and D-06 (above). The twenty-second, C5, re-measures a disk benchmark for level 03 that passes on
+one run and fails on the next on the runner's disk; that one proof is left to a Mac.
+
+**The grader, and the question it raised.** With ops levels, on the merged code: 312 of 316 rows pass, twice.
+The rows that do not are all rows that judge a time on the machine: the reference solutions of ch3-06 (and the
+interview levels that reuse it) and ch4b-01 miss an absolute p99 limit (60 ms and 100 ms) under load, and once
+ch4-15 counted its search index before it had filled. Was that the merge? The same grader on the code from
+before the merge (`ecf3925`), on the same kind of runner: 310 pass, and it misses the same limits (ch3-06 at 403
+ms, ch3-14 at 156 ms, ch4b-01) plus ch2-02 and ch4-15. **So it is the 4-CPU runner, not the merge.**
+
+**And on the owner's Mac, on the merged code, later that evening:** `G01_RUN_OPS=1 scripts/check/G-01.sh`, in
+its own project beside his running game: **316 PASS, 0 MISMATCH, 6 SKIPPED** in 20 minutes, the same totals as
+the run of 2026-11-19 before the merge. The rows that miss their limit on the runner pass here. His game was
+snapshotted before and after (container ids and start times, the save file's hash, Redis key counts and
+`maxmemory`, Postgres row counts): nothing changed but one key's remaining time to live.
+
+**`pr-verdict.yml` (D-01) ran to the end for the first time**, on pull request 1: 238 rows pass, none
+mismatches, 62 are skipped by design (ops, traffic and random-pool levels).
+
+**The owner then started his own game** (`./scripts/start`, 20:01 that evening): preflight clean, image from the
+cache, every container up, his save loaded (160 XP, 9 levels passed, on ch1-05).
 
 ## Merged on 2026-11-22, without pull requests
 One merge commit per day, in this order (least risky first), starting from `ecf3925`:
@@ -151,8 +174,8 @@ Adds:
   pull request that changes scripts, workflows, Docker files or package manifests unless told the diff was read.
 
 Still owed:
-- The verdict workflow has never run. It runs on pull requests only, so its first run will be the first pull
-  request anyone opens. Rows that fail there may be the runner (amd64, a bare `redis:8`) and not the content.
+- The verdict workflow first ran to the end on pull request 1 (2026-11-22): 238 rows pass, none mismatches, 62
+  are skipped. It has not yet judged a pull request that changes a level, which is what it is for.
 - It skips ops levels, outage and profile events, random interview pools, and every level with a traffic check.
 - `scripts/check/D-01.sh` is marked docker-free, so the `fast` job in `ci.yml` runs it on every push.
 - `.github/workflows/README.md` should gain a `pr-verdict` section.

@@ -563,26 +563,34 @@ describe('learner path with the reference fixtures', () => {
 
   test('a wrong return is a slot contract error (500, x-quest-slot-error)', async () => {
     mkdirSync(path.join(ws, 'ch3'), { recursive: true });
-    // An earlier test may have left contest.join loaded from its own file. The app swaps a changed file in on its
-    // next poll, so a request sent straight after the write can still run the old version (it answered 402 once,
-    // in a full local run under load). Wait until the slot reports a load newer than the one seen before the write.
+    // An earlier test left contest.join loaded from the reference file, and the app keeps that module until it
+    // notices the file changed. A request sent too soon after the write still runs the old version: it answered 402
+    // instead of 500, once in a full local run and once on a hosted CI runner (2026-11-22).
     const loadedAt = async (): Promise<string | undefined> => {
       const s = await call('/app/slots');
       return (s.body.slots as Array<{ name: string; loadedAt?: string }>).find(
         (x) => x.name === 'contest.join',
       )?.loadedAt;
     };
+    // Switch the slot on BEFORE reading loadedAt: only an active slot reports one. The first version of this wait
+    // read it while the slot was off, compared the next value against undefined, and so never waited at all.
+    await setConfig(['contest.join']);
     const before = await loadedAt();
+    expect(before).toBeDefined();
     // contest.join must say true or false
     const dest = path.join(ws, 'ch3', 'contest-join.js');
     writeFileSync(dest, 'export default async function join() { return 1; }\n');
     const t = new Date(Date.now() + 2000);
     utimesSync(dest, t, t);
-    await setConfig(['contest.join']);
+    const wrote = Date.now();
     await waitFor('contest.join reloaded from the new file', async () => {
       const now = await loadedAt();
       return now !== undefined && now !== before;
     });
+    // And the guarantee that does not depend on the poller: a request stats the slot's file itself once 500 ms
+    // have passed since that slot's last stat (SlotRuntime.maybeReload), which was before the write.
+    const sinceWrite = Date.now() - wrote;
+    if (sinceWrite < 600) await sleep(600 - sinceWrite);
     const r = await post('/app/contests/9001/join', { userId: 'u-a02-test' });
     expect(r.status).toBe(500);
     expect(r.body).toMatchObject({ error: 'slot_error', slot: 'contest.join' });
