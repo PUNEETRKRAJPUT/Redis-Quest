@@ -270,6 +270,11 @@ sound cues have not been heard by a person.
 
 ## Contributing and how it was built
 
+Want to help? Start with [CONTRIBUTING.md](CONTRIBUTING.md): the ways in by size, the limits (Apple Silicon
+Macs only, about 16 GB of RAM for the full checks, and no check ever acts on the default compose project), and
+what the machine verdict on a pull request does. Please also read the [code of conduct](CODE_OF_CONDUCT.md) and
+[SECURITY.md](SECURITY.md).
+
 The game was built in small tasks, each with a written spec, one acceptance check in `scripts/check/` and a
 handoff note, then committed by one orchestrating session: forty tasks, each check re-run by the
 orchestrator before its commit, with the whole set runnable as one local check run whose evidence line is

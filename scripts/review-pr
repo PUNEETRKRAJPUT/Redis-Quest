@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# scripts/review-pr (D-01): judge someone else's pull request on the maintainer's Mac, with the full stack.
+#
+#   scripts/review-pr [--comment] [--i-read-the-diff] [--keep] <pull request number>
+#   scripts/review-pr --classify-stdin           (reads file names on stdin, prints the ones that run on this Mac)
+#
+# What it does, in order:
+#   1. fetches the pull request into refs/review-pr/* and a temporary git worktree (never your checkout, never main);
+#   2. lists the changed files and REFUSES (exit 2) when any of them is code that runs on this Mac: everything under
+#      scripts/ or .github/, plus docker-compose.yml, docker/, package.json files, the lockfile, .npmrc and any .sh file,
+#      unless you pass --i-read-the-diff, which says you read `gh pr diff <n>` first;
+#   3. runs scripts/check/G-03.sh in the worktree (the check that no check acts on the default compose project);
+#   4. only if that passed, runs `G01_RUN_OPS=1 scripts/check/G-01.sh` there, which grades every level in its own
+#      compose project `quest-g01` with its own ports (3500, 6395, 5437, 5545), never the default project `redis-quest`;
+#   5. prints an evidence block, saves it to a file, and with --comment posts it with `gh pr comment`;
+#   6. removes the worktree, the refs, and anything left in project quest-g01.
+# Nothing is posted without --comment. It never touches the default compose project: it does not run `docker compose`
+# without `-p quest-g01`, and it refuses to start when containers of quest-g01 already exist (another run is going, or
+# a crashed one left them: remove them yourself, the command is printed).
+#
+# Needs: Apple Silicon Mac, Docker running, gh (logged in), git, node, pnpm. A full run takes many minutes, a few
+# GB of memory and about 10 GB of disk (a node_modules for the worktree, images, a seeded database). bash 3.2 safe.
+# Exit codes: 0 both checks passed, 1 a check failed, 2 refused or could not run.
+set -u
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REMOTE="${REVIEW_PR_REMOTE:-origin}"
+PROJECT=quest-g01
+
+say() { printf '\n== %s\n' "$*"; }
+die() { printf 'review-pr: %s\n' "$*" >&2; exit 2; }
+
+usage() {
+  echo "usage: scripts/review-pr [--comment] [--i-read-the-diff] [--keep] <pull request number>"
+  echo "       scripts/review-pr --classify-stdin     (file names on stdin; prints those that run on this Mac)"
+  echo "  --comment           post the evidence as a comment on the pull request (gh pr comment)"
+  echo "  --i-read-the-diff   I read the diff; allow a pull request that changes code that runs on this Mac"
+  echo "  --keep              keep the worktree and the log files after the run"
+}
+
+# True for a path whose content runs on this Mac (or decides what does) when the checks run.
+is_sensitive() {
+  case "$1" in
+    scripts/*|.github/*) return 0 ;;
+    docker-compose.yml|docker-compose.*|docker/*) return 0 ;;
+    package.json|*/package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.npmrc|.node-version|.env.example) return 0 ;;
+    *.sh) return 0 ;;
+  esac
+  return 1
+}
+
+# Reads newline-separated names on stdin, prints the sensitive ones, returns 0 when there are none.
+classify_stdin() {
+  _found=0
+  while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    if is_sensitive "$_f"; then printf '%s\n' "$_f"; _found=1; fi
+  done
+  [ "$_found" -eq 0 ]
+}
+
+COMMENT=0; READ_DIFF=0; KEEP=0; PR=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --comment) COMMENT=1 ;;
+    --i-read-the-diff) READ_DIFF=1 ;;
+    --keep) KEEP=1 ;;
+    --classify-stdin) classify_stdin; exit $? ;;
+    -h|--help) usage; exit 0 ;;
+    -*) usage >&2; die "unknown option $1" ;;
+    *) if [ -n "$PR" ]; then die "give exactly one pull request number"; fi; PR="$1" ;;
+  esac
+  shift
+done
+[ -n "$PR" ] || { usage >&2; die "give a pull request number"; }
+case "$PR" in *[!0-9]*|'') die "the pull request number must be digits only, got \"$PR\"" ;; esac
+
+# ---- the machine ----------------------------------------------------------------------------------
+
+say "can this Mac run it?"
+[ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = arm64 ] || die "this needs an Apple Silicon Mac (found $(uname -s) $(uname -m)); the images are pinned to linux/arm64"
+for tool in git gh node pnpm docker; do command -v "$tool" >/dev/null 2>&1 || die "$tool is not installed"; done
+docker info >/dev/null 2>&1 || die "Docker is not running (open -a Docker, wait for it, retry)"
+gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login): it is needed to read the pull request"
+mem_gb=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
+echo "Mac memory: ${mem_gb} GB, node $(node --version), docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || echo '?')"
+[ "$mem_gb" -ge 16 ] || die "less than 16 GB of RAM: the full stack plus a worktree install does not fit"
+
+# G-01 uses the fixed compose project quest-g01. Containers already there belong to another run or a crashed one.
+leftover="$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null)"
+if [ -n "$leftover" ]; then
+  die "containers of compose project $PROJECT already exist (another G-01 run, or a crashed one). Remove them first:
+  docker ps -aq --filter label=com.docker.compose.project=$PROJECT | xargs docker rm -f
+  docker volume ls -q --filter label=com.docker.compose.project=$PROJECT | xargs docker volume rm"
+fi
+
+# ---- fetch the pull request -----------------------------------------------------------------------
+
+say "pull request #$PR"
+cd "$ROOT" || die "cannot enter $ROOT"
+base="$(gh pr view "$PR" --json baseRefName --jq .baseRefName 2>/dev/null)" || die "gh cannot read pull request #$PR in this repository"
+state="$(gh pr view "$PR" --json state --jq .state 2>/dev/null)"
+title="$(gh pr view "$PR" --json title --jq .title 2>/dev/null)"
+echo "title: $title"
+echo "state: $state, base branch: $base"
+[ "$state" = OPEN ] || echo "note: the pull request is $state, not OPEN"
+
+REF_BASE="refs/review-pr/base-$PR"
+REF_HEAD="refs/review-pr/head-$PR"
+TMP="$(mktemp -d "${TMPDIR:-/tmp}/review-pr-$PR.XXXXXX")" || die "cannot create a temporary directory"
+WT="$TMP/repo"
+OUT="${REVIEW_PR_OUT:-${TMPDIR:-/tmp}}/review-pr-$PR-evidence.md"
+WT_ADDED=0
+
+cleanup() {
+  rc=$?
+  say "cleanup"
+  if [ "$WT_ADDED" -eq 1 ] && [ -d "$WT" ]; then
+    # Belt and braces: G-01 removes its project itself; this only acts on quest-g01, with its own compose files.
+    if [ -n "$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null)" ]; then
+      echo "containers of $PROJECT are still there; removing them"
+      (cd "$WT" && docker compose -p "$PROJECT" --env-file .env.g01 -f docker-compose.yml -f scripts/grade/compose.g01.yaml --profile '*' down -v --remove-orphans >/dev/null 2>&1)
+      if [ -n "$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" 2>/dev/null)" ]; then
+        echo "still there. Remove by hand: docker ps -aq --filter label=com.docker.compose.project=$PROJECT | xargs docker rm -f"
+      fi
+    fi
+  fi
+  if [ "$KEEP" -eq 1 ]; then
+    echo "kept: $TMP (worktree at $WT, logs next to it). Remove with: git -C $ROOT worktree remove --force $WT"
+  else
+    if [ "$WT_ADDED" -eq 1 ]; then git -C "$ROOT" worktree remove --force "$WT" >/dev/null 2>&1; fi
+    rm -rf "$TMP"
+    git -C "$ROOT" worktree prune >/dev/null 2>&1
+    git -C "$ROOT" update-ref -d "$REF_BASE" >/dev/null 2>&1
+    git -C "$ROOT" update-ref -d "$REF_HEAD" >/dev/null 2>&1
+    echo "removed the worktree, the refs and $TMP"
+  fi
+  exit "$rc"
+}
+trap cleanup EXIT
+
+git fetch --quiet "$REMOTE" "+refs/heads/$base:$REF_BASE" || die "cannot fetch $base from $REMOTE"
+git fetch --quiet "$REMOTE" "+pull/$PR/head:$REF_HEAD" || die "cannot fetch pull/$PR/head from $REMOTE"
+head_sha="$(git rev-parse "$REF_HEAD")" || die "cannot resolve the pull request head"
+echo "head: $head_sha"
+
+# ---- refuse code that runs on this Mac ------------------------------------------------------------
+
+say "changed files"
+git diff --name-only --no-renames "$REF_BASE...$REF_HEAD" >"$TMP/changed.txt" || die "cannot diff the pull request against $base"
+nfiles="$(wc -l <"$TMP/changed.txt" | tr -d ' ')"
+[ "$nfiles" -gt 0 ] || die "the pull request changes no files"
+echo "$nfiles changed file(s)"
+head -n 60 "$TMP/changed.txt"
+[ "$nfiles" -le 60 ] || echo "... and $((nfiles - 60)) more"
+sensitive="$(classify_stdin <"$TMP/changed.txt")"
+if [ -n "$sensitive" ]; then
+  echo
+  echo "These files run on this Mac, or decide what runs, when the checks start:"
+  printf '%s\n' "$sensitive" | head -n 40 | sed 's/^/  /'
+  if [ "$READ_DIFF" -ne 1 ]; then
+    echo
+    echo "review-pr: REFUSING to run this pull request. Read what it changes first:"
+    echo "    gh pr diff $PR"
+    echo "then, if you are satisfied, run it again with --i-read-the-diff."
+    exit 2
+  fi
+  echo "(--i-read-the-diff given: continuing)"
+fi
+
+# ---- run the checks in a worktree -----------------------------------------------------------------
+
+say "worktree"
+git worktree add --detach --quiet "$WT" "$REF_HEAD" || die "cannot create the worktree"
+WT_ADDED=1
+echo "worktree at $WT, checked out $head_sha"
+
+L03="$TMP/g03.log"
+L01="$TMP/g01.log"
+
+say "G-03: no check acts on the default compose project (docker-free)"
+(cd "$WT" && env -u COMPOSE_PROJECT_NAME -u COMPOSE_FILE -u COMPOSE_ENV_FILES bash scripts/check/G-03.sh) 2>&1 | tee "$L03"
+rc03="${PIPESTATUS[0]}"
+echo "G-03 exit code: $rc03"
+
+rc01=-1
+if [ "$rc03" -eq 0 ]; then
+  say "G-01 with G01_RUN_OPS=1: every level graded in compose project $PROJECT (this takes a long time)"
+  (cd "$WT" && env -u COMPOSE_PROJECT_NAME -u COMPOSE_FILE -u COMPOSE_ENV_FILES G01_RUN_OPS=1 bash scripts/check/G-01.sh) 2>&1 | tee "$L01"
+  rc01="${PIPESTATUS[0]}"
+  echo "G-01 exit code: $rc01"
+else
+  say "G-01 not run: G-03 failed, so a check in this pull request may act on the default compose project"
+fi
+
+# ---- evidence -------------------------------------------------------------------------------------
+
+say "evidence"
+{
+  echo "### Maintainer check on a Mac (scripts/review-pr)"
+  echo
+  echo "- pull request: #$PR, head \`$head_sha\`, base \`$base\`"
+  echo "- machine: $(sw_vers -productName 2>/dev/null) $(sw_vers -productVersion 2>/dev/null), $(uname -m), ${mem_gb} GB, Docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || echo '?')"
+  echo "- changed files: $nfiles$( [ -n "$sensitive" ] && echo ', including code that runs on the Mac (diff read by the maintainer)' )"
+  if [ "$rc03" -eq 0 ]; then echo "- G-03 (no check touches the default compose project): **pass**"; else echo "- G-03 (no check touches the default compose project): **FAIL** (exit $rc03)"; fi
+  if [ "$rc01" -eq 0 ]; then echo "- G-01 with G01_RUN_OPS=1 (all levels, own compose project, ops and profile levels included): **pass**"
+  elif [ "$rc01" -eq -1 ]; then echo "- G-01: **not run** because G-03 failed"
+  else echo "- G-01 with G01_RUN_OPS=1: **FAIL** (exit $rc01)"; fi
+  echo
+  if [ "$rc03" -ne 0 ]; then
+    echo "G-03 findings:"; echo; echo '```'; grep '^FAIL' "$L03" | head -n 20; echo '```'; echo
+  fi
+  if [ -f "$L01" ]; then
+    echo "Per chapter and totals, as the check printed them:"; echo; echo '```'
+    grep -E '^(ch[0-9a-z]+|finale|example)[^ ]* +PASS [0-9]+ +MISMATCH|^totals:' "$L01" | head -n 40
+    echo '```'; echo
+    if grep -qE '^(MISMATCH|CONTENT-BUG|FAIL) ' "$L01"; then
+      echo "Failures:"; echo; echo '```'
+      grep -E '^(MISMATCH|CONTENT-BUG|FAIL) ' "$L01" | head -n 40
+      echo '```'; echo
+    fi
+    tail -n 1 "$L01" | grep -E '^G-01 (OK|FAILED)' | sed 's/^/Last line of the check: /'
+  fi
+  echo
+  echo "_Run by the maintainer with scripts/review-pr. The machine verdict from the pr-verdict workflow is separate; it skips what needs Docker._"
+} >"$OUT"
+cat "$OUT"
+echo
+echo "evidence saved to $OUT"
+
+if [ "$COMMENT" -eq 1 ]; then
+  say "posting the evidence on pull request #$PR"
+  gh pr comment "$PR" --body-file "$OUT" && echo "posted" || echo "review-pr: gh pr comment failed; the evidence is in $OUT" >&2
+else
+  echo "not posted (no --comment). To post the saved evidence by hand: gh pr comment $PR --body-file $OUT"
+fi
+
+if [ "$rc03" -eq 0 ] && [ "$rc01" -eq 0 ]; then exit 0; fi
+exit 1

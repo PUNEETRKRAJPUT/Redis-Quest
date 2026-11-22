@@ -1,0 +1,196 @@
+name: pr-verdict
+
+# A machine verdict on every pull request (D-01): build the backend, start it as plain processes against a Redis
+# and a Postgres service container, and play every declared solution of every level that cannot depend on the speed
+# of the machine through the real engine. The table lands in the job summary. Levels that need Docker, a real outage,
+# a compose profile or traffic judged on timing are SKIPPED with their reason; the maintainer grades those on a Mac
+# (scripts/review-pr). A skip is never a failure; a MISMATCH is.
+#
+# Safety: `pull_request` (never the privileged variant that runs with secrets), a read-only token, no secrets, and nothing from the pull
+# request's text is ever interpolated into a script. A pull request from a fork runs with the same read-only token.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: pr-verdict-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verdict:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # The same service containers as the `fast` job in ci.yml (amd64 is fine: nothing here is arm64-specific).
+    services:
+      redis:
+        image: redis:8
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli PING"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quest
+          POSTGRES_PASSWORD: quest
+          POSTGRES_DB: quest
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U quest -d quest"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+    env:
+      REDIS_URL: redis://localhost:6379
+      DATABASE_URL: postgres://quest:quest@localhost:5432/quest
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      # pnpm version comes from "packageManager" in package.json (pnpm@10.24.0).
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Environment
+        run: |
+          set -eu
+          echo "node $(node --version), pnpm $(pnpm --version)"
+          echo "psql: $(psql --version)"
+          echo "commit: $(git rev-parse HEAD)"
+          echo "event: $GITHUB_EVENT_NAME"
+          redis_state="$(timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/6379 && printf "PING\r\n" >&3 && head -c 5 <&3' || true)"
+          echo "redis answers: ${redis_state:-nothing}"
+          pg_isready -h localhost -p 5432 -U quest -d quest || true
+
+      - name: Locate pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # The pages (ui) are not needed to grade levels, so only the services and what they import are built.
+      - name: Build shared, engine, app and runner
+        run: |
+          set -eu
+          pnpm --filter '@quest/engine...' --filter '@quest/app...' --filter '@quest/runner...' build
+          for f in packages/shared/dist/index.js engine/dist/main.js app/dist/main.js runner/dist/main.js; do
+            test -f "$f" && echo "built: $f" || { echo "missing after build: $f"; exit 1; }
+          done
+
+      - name: Unit tests of the verdict scripts
+        run: node --test scripts/ci/stack-lib.test.mjs scripts/ci/deterministic.test.mjs scripts/ci/verdict-summary.test.mjs
+
+      # Same four files, same order as the `fast` job in ci.yml.
+      - name: Load schema and seed into the Postgres service
+        run: |
+          set -eu
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f postgres/init/001-schema.sql
+          gunzip -c postgres/init/002-seed.sql.gz | psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f postgres/init/003-outbox.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f postgres/init/004-slow-by-design.sql
+          psql "$DATABASE_URL" -Atc "select count(*) from users"
+
+      # Start and stop the stack in the same step as the grading: a process started in one step and used in the next is
+      # an easy way to get a confusing log. Everything the services print goes to $RUNNER_TEMP/stack.log, which is
+      # printed (last 400 lines) whenever something goes wrong.
+      - name: Start the stack and grade the levels
+        shell: bash
+        run: |
+          set +e
+          set -u
+          log="$RUNNER_TEMP/stack.log"
+          table="$RUNNER_TEMP/grade.log"
+          json="$RUNNER_TEMP/grade.json"
+
+          show_stack_log() {
+            echo "::group::stack log (last 400 lines of $log)"
+            tail -n 400 "$log"
+            echo "::endgroup::"
+          }
+
+          node scripts/ci/stack.mjs >"$log" 2>&1 &
+          stack_pid=$!
+          echo "stack.mjs started, pid $stack_pid"
+          stop_stack() {
+            kill -TERM "$stack_pid" 2>/dev/null
+            wait "$stack_pid" 2>/dev/null
+          }
+          trap stop_stack EXIT
+
+          origin=""
+          i=0
+          while [ "$i" -lt 180 ]; do
+            if ! kill -0 "$stack_pid" 2>/dev/null; then
+              echo "stack.mjs exited before it was ready"
+              break
+            fi
+            origin="$(sed -n 's/^STACK_ORIGIN=//p' "$log" | head -n 1)"
+            [ -n "$origin" ] && break
+            sleep 1
+            i=$((i + 1))
+          done
+          if [ -z "$origin" ]; then
+            echo "::error title=stack did not start::see the stack log below"
+            show_stack_log
+            {
+              echo "## Level verdict"
+              echo
+              echo "**The stack did not start**, so no level was graded. This is a problem with the pull request or with the workflow, not a verdict on a level. The log is in the job output."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "stack is up at $origin after about $i s"
+          curl -s -m 5 "$origin/health"; echo
+          curl -s -m 5 "$origin/app/health"; echo
+
+          # Every chapter directory except the ones that start with an underscore, in name order (as ci.yml does).
+          dirs=""
+          n=0
+          for dir in levels/*/; do
+            dir="${dir%/}"
+            case "$(basename "$dir")" in _*) continue ;; esac
+            dirs="$dirs $dir"
+            n=$((n + 1))
+          done
+          echo "grading $n chapter(s):$dirs"
+          if [ "$n" -eq 0 ]; then echo "::error::no chapter directories under levels/"; exit 1; fi
+
+          # The ports a level's text may read with {{env.NAME}}, as stack.mjs gives them to the engine (3000 is its default).
+          export REDIS_PORT=6379 PG_PORT=5432 PROXY_PORT=3000 INSIGHT_PORT=5540
+          # shellcheck disable=SC2086
+          node scripts/grade/grade.mjs --deterministic --engine "$origin" --json "$json" $dirs 2>&1 | tee "$table"
+          rc="${PIPESTATUS[0]}"
+          echo "grader exit code: $rc (0 no mismatch, 1 a mismatch, 2 the tool could not run)"
+
+          if [ -f "$json" ]; then
+            node scripts/ci/verdict-summary.mjs "$json" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Level verdict"
+              echo
+              echo "**The grader did not produce a table** (exit code $rc). The job output has the reason."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$rc" -ne 0 ]; then
+            show_stack_log
+            echo "::error title=level verdict::the grader exited with $rc; see the table and the stack log above"
+          fi
+          exit "$rc"
