@@ -44,7 +44,8 @@ imperative, body if useful, and end with:
 
 Before the first commit of a session, `git config user.email` must print a `users.noreply.github.com` address.
 The setting is repo-local, so a fresh clone loses it and git falls back to the Mac's global identity, which
-must not appear in this repository (it did, for 90 commits, in November 2026). Restore it from history:
+is not this repository's (it was used for 90 commits in November 2026; Puneet chose to leave those as they
+are). Restore it from history:
 `git config user.name "$(git log -1 --format=%an v1.0.0-rc2)"` and
 `git config user.email "$(git log -1 --format=%ae v1.0.0-rc2)"`.
 
