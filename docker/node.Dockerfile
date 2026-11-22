@@ -2,12 +2,27 @@
 # Build context is the repo root. Anything not wanted in the context is listed in
 # docker/node.Dockerfile.dockerignore (BuildKit reads it next to this file).
 
+# ---- base: Node plus the pinned pnpm, downloaded once for both stages below --
+FROM node:22-bookworm-slim AS base
+ENV CI=true
+# pnpm's version is pinned by "packageManager" in package.json; corepack downloads exactly that the first time
+# `pnpm` runs. Corepack does not retry, and both stages used to download it at the same moment, each inside its
+# own `pnpm install`: one dropped connection failed the whole build. So it is downloaded here, once, with
+# retries, in a layer that stays cached until package.json changes.
+RUN corepack enable
+WORKDIR /pnpm-pin
+COPY package.json ./
+RUN n=0; until pnpm --version; do \
+      n=$((n + 1)); \
+      if [ "$n" -ge 5 ]; then echo "could not download pnpm after $n attempts: check the network, then run the build again" >&2; exit 1; fi; \
+      echo "pnpm download failed; attempt $((n + 1)) of 5 in $((n * 10)) s" >&2; \
+      sleep $((n * 10)); \
+    done
+
 # ---- build: full install, compile every package ----------------------------
-FROM node:22-bookworm-slim AS build
+FROM base AS build
 ENV CI=true NEXT_TELEMETRY_DISABLED=1
 WORKDIR /repo
-# pnpm version is pinned by "packageManager" in package.json; corepack fetches exactly that.
-RUN corepack enable
 
 # Manifests first so the dependency layer is cached until a package.json or the lockfile changes.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
@@ -37,10 +52,9 @@ RUN rm -rf /ui-standalone/node_modules/.pnpm/@img+* /ui-standalone/node_modules/
     && find /ui-standalone -xtype l -delete
 
 # ---- runtime: production deps + dist/ + the standalone UI server -----------
-FROM node:22-bookworm-slim AS runtime
+FROM base AS runtime
 ENV NODE_ENV=production CI=true NEXT_TELEMETRY_DISABLED=1
 WORKDIR /srv
-RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY packages/shared/package.json packages/shared/
