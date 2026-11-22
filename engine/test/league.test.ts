@@ -145,7 +145,8 @@ describe('POST /league/score', () => {
       underPar: 1,
       handle: 'you',
     });
-    expect(body.rank).toMatchObject({ position: 1, of: 3, tiedWith: [] });
+    // The attempt is octocat's committed entry word for word (a trailing newline is not counted), so it ties with it.
+    expect(body.rank).toMatchObject({ position: 1, of: 3, tiedWith: ['octocat'] });
   });
 
   test('a worse attempt ranks below the committed entries', async () => {
