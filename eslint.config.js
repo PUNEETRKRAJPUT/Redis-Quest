@@ -8,6 +8,9 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/coverage/**',
+      // ...except engine/src/coverage: source (the wanted-commands board), not a coverage report.
+      '!engine/src/coverage/',
+      '!engine/src/coverage/**',
       '**/.next/**',
       '**/next-env.d.ts',
     ],

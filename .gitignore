@@ -1,6 +1,9 @@
 node_modules/
 dist/
 coverage/
+# ...except this one, which is source and not a test coverage report: the wanted-commands board (D-06). The rule
+# above kept its three files out of git until the first build of the merged tree failed on them (2026-11-22).
+!/engine/src/coverage/
 /logs/
 .progress/
 .env
