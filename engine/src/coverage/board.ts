@@ -46,7 +46,10 @@ export function fieldOf(doc: Reply | undefined, key: string): Reply | undefined 
 }
 
 /** Why a name is not on the board, or null when it is. */
-export function skipReason(name: string, group: string | undefined): 'subcommand' | 'module' | null {
+export function skipReason(
+  name: string,
+  group: string | undefined,
+): 'subcommand' | 'module' | null {
   if (name.includes('|')) return 'subcommand';
   if (name !== name.toLowerCase() || name.includes('.') || name.startsWith('_')) return 'module';
   if (group === 'module') return 'module';
@@ -98,7 +101,9 @@ export function buildBoard(snap: Snapshot, usage: Usage): Board {
     ),
   }));
   // The groups with the most still to write first.
-  groups.sort((a, b) => b.total - b.taught - (a.total - a.taught) || a.group.localeCompare(b.group));
+  groups.sort(
+    (a, b) => b.total - b.taught - (a.total - a.taught) || a.group.localeCompare(b.group),
+  );
   return {
     available: true,
     listed: snap.names.length,

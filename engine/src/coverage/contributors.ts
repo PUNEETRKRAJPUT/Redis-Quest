@@ -26,9 +26,10 @@ export function parseContributors(markdown: string): Contributor[] {
       if (!line.includes('-->')) inComment = true;
       continue;
     }
-    const m = /^[-*]\s+([^(:]+?)\s*(?:\(@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\))?\s*(?::\s*(.*))?$/.exec(
-      line,
-    );
+    const m =
+      /^[-*]\s+([^(:]+?)\s*(?:\(@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\))?\s*(?::\s*(.*))?$/.exec(
+        line,
+      );
     if (!m) continue;
     const name = (m[1] as string).trim();
     if (name === '') continue;

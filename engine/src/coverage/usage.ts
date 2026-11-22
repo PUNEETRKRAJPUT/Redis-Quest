@@ -96,7 +96,10 @@ export function commandsInCode(text: string, known: ReadonlySet<string>): string
   ))
     receivers.add(m[1] as string);
 
-  const start = new RegExp(`\\b(?:${[...receivers].join('|')})\\s*\\.\\s*([A-Za-z]\\w*)\\s*\\(`, 'g');
+  const start = new RegExp(
+    `\\b(?:${[...receivers].join('|')})\\s*\\.\\s*([A-Za-z]\\w*)\\s*\\(`,
+    'g',
+  );
   for (const m of text.matchAll(start)) {
     if (/^(call|pcall|sendCommand|duplicate)$/.test(m[1] as string)) continue;
     add(methodToCommand(m[1] as string, known));
@@ -126,7 +129,8 @@ export function commandsInChecks(verify: readonly VerifySpec[]): string[] {
     else if (v.type === 'antipattern') {
       if ('checks' in v) v.checks.forEach((c) => take(c.cmd));
       else v.assertions.forEach((a) => a.sideEffect?.forEach((c) => take(c.cmd)));
-    } else if (v.type === 'behavior') v.assertions.forEach((a) => a.sideEffect?.forEach((c) => take(c.cmd)));
+    } else if (v.type === 'behavior')
+      v.assertions.forEach((a) => a.sideEffect?.forEach((c) => take(c.cmd)));
     else if (v.type === 'answer') take(v.expected.cmd);
   }
   return out;
