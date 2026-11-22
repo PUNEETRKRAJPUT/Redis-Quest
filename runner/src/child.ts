@@ -8,7 +8,7 @@ import {
   type LearnerCallResult,
   type LearnerCounters,
 } from '@quest/shared';
-import type { ChildJob, ChildReply } from './protocol.js';
+import type { ChildJob, ChildReply, ChildStarted } from './protocol.js';
 
 const MAX_LOG_LINES = 1000;
 const MAX_LINE = 2000;
@@ -27,6 +27,18 @@ process.on('uncaughtException', (err) => pushLog(`[uncaughtException] ${err.mess
 
 function send(reply: ChildReply): void {
   process.send?.(reply, () => process.exit(0));
+}
+
+/**
+ * Tell the parent the learner's code is about to run, and wait until the message has left this process: a function
+ * that spins synchronously from its first line must not be able to hold it back.
+ */
+function announceStart(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!process.send) return resolve();
+    const started: ChildStarted = { started: true };
+    process.send(started, () => resolve());
+  });
 }
 
 async function runJob(job: ChildJob): Promise<ChildReply> {
@@ -67,6 +79,7 @@ async function runJob(job: ChildJob): Promise<ChildReply> {
   }
   try {
     const { fn } = await loadLearnerModule(job.workspaceDir, job.module, job.exportName);
+    await announceStart();
     const results = await runLearnerCalls(fn, ctx.deps, job.calls, {
       concurrency: job.concurrency,
       timeoutMs: job.timeoutMs,

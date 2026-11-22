@@ -2,7 +2,7 @@ import { fork } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { aggregateMetrics, type LearnerCallResult, type LearnerMetrics } from '@quest/shared';
-import type { ChildJob, ChildReply } from './protocol.js';
+import { isChildStarted, type ChildJob, type ChildReply } from './protocol.js';
 
 /** child.js sits next to this file when built; under vitest (TS sources) fall back to the built copy. */
 export function childEntryPath(): string {
@@ -21,7 +21,9 @@ const MAX_CAPTURE = 64 * 1024;
 
 /**
  * Run one job in a fresh `node --max-old-space-size=256` child. The parent never imports learner code.
- * Hard kill at `killAfterMs` (spec: timeoutMs + 1000).
+ * Hard kill after `killAfterMs` (spec: timeoutMs + 1000). The clock runs from the spawn until the child says the
+ * learner's code is starting, and afresh from that moment: an import that never returns is still ended, and a
+ * child that was slow to boot is not killed before the learner's own timeout can answer.
  */
 export function runInChild(job: ChildJob, killAfterMs: number): Promise<ExecOutcome> {
   return new Promise((resolve) => {
@@ -52,12 +54,18 @@ export function runInChild(job: ChildJob, killAfterMs: number): Promise<ExecOutc
       resolve({ reply, crash: reply ? undefined : crash, logs });
     };
 
-    const timer = setTimeout(() => {
+    const kill = (): void => {
       killed = true;
       child.kill('SIGKILL');
-    }, killAfterMs);
+    };
+    let timer = setTimeout(kill, killAfterMs);
 
-    child.once('message', (m) => {
+    child.on('message', (m) => {
+      if (isChildStarted(m)) {
+        clearTimeout(timer);
+        timer = setTimeout(kill, killAfterMs);
+        return;
+      }
       reply = m as ChildReply;
     });
     child.once('error', (err) => finish({ name: 'ChildProcessError', message: err.message }));

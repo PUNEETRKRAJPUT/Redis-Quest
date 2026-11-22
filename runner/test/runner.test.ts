@@ -89,17 +89,47 @@ describe('runner HTTP API', () => {
   });
 
   test('/run hangs.js: TimeoutError within the limit', async () => {
-    const t = performance.now();
     const { body } = await post('/run', { module: '_examples/hangs.js', timeoutMs: 1000 });
-    expect(performance.now() - t).toBeLessThan(2500);
     expect(body.results[0].error.name).toBe('TimeoutError');
+    expect(body.runError).toBeUndefined();
+    // The limit is the call's own clock, measured inside the child. How long the child took to start is not the
+    // learner's time: on a busy CI machine that alone has been close to a second.
+    expect(body.results[0].ms).toBeGreaterThanOrEqual(950);
+    expect(body.results[0].ms).toBeLessThan(1500);
+  });
+
+  test('/run: a child that is slow to start still answers TimeoutError, not KilledError', async () => {
+    // The hard kill comes timeoutMs + 1000 after the learner's code STARTS. It used to be counted from the spawn,
+    // so whatever the child spent booting, connecting and importing came out of that one second, and a slow start
+    // turned a polite timeout into "the process was killed" (seen on a hosted CI runner, 2026-11-22). The import
+    // below waits 1.1 s on purpose: with the old clock the kill at 3.0 s always beat the timeout at 3.1 s or later.
+    const local = buildServer(
+      { port: 0, workspaceDir: scratch, redisUrl, databaseUrl },
+      pino({ level: 'silent' }),
+    );
+    await writeFile(
+      path.join(scratch, 'slow-start.js'),
+      'await new Promise((r) => setTimeout(r, 1100));\nexport default async () => {\n  await new Promise(() => {});\n};\n',
+    );
+    const res = (
+      await local.inject({
+        method: 'POST',
+        url: '/run',
+        payload: { module: 'slow-start.js', timeoutMs: 2000 },
+      })
+    ).json();
+    await local.close();
+    expect(res.results[0].error.name).toBe('TimeoutError');
+    expect(res.runError).toBeUndefined();
   });
 
   test('/run spins.js (sync infinite loop): hard-killed by timeoutMs + 1000', async () => {
     const t = performance.now();
     const { body } = await post('/run', { module: '_examples/spins.js', timeoutMs: 1000 });
     const took = performance.now() - t;
-    expect(took).toBeLessThan(3000);
+    // Killed timeoutMs + 1000 after the code started: never before two seconds, and the rest is the child's start.
+    expect(took).toBeGreaterThanOrEqual(1950);
+    expect(took).toBeLessThan(5000);
     expect(body.results[0].error.name).toBe('KilledError');
     expect(body.runError.name).toBe('KilledError');
     expect((await app.inject({ method: 'GET', url: '/health' })).statusCode).toBe(200);
