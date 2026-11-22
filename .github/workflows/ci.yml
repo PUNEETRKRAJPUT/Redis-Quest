@@ -93,8 +93,10 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f postgres/init/004-slow-by-design.sql
           psql "$DATABASE_URL" -Atc "select count(*) from users"
 
+      # --no-bail: every package's tests run even when one package fails, so one run shows every failure. The step
+      # still fails if any of them did.
       - name: Test
-        run: pnpm -r test
+        run: pnpm -r --no-bail test
 
       - name: Validate real chapters
         # The whole tree in one call: interview rebuilds (and the Finale's pools) name levels in earlier chapters,
