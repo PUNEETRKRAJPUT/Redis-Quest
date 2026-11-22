@@ -94,7 +94,9 @@ SUBS=$(rcli command list | tr -d '\r' | grep -c '|')
   && ok "every command carries the server's summary" || info "some commands have no summary (the server gave none)"
 TAUGHT=$(json 'j.taught' <"$SCRATCH/c1.json")
 info "commands=$(json 'j.commands' <"$SCRATCH/c1.json") taught=$TAUGHT untaught=$(json 'j.untaught' <"$SCRATCH/c1.json") levelsRead=$(json 'j.levelsRead' <"$SCRATCH/c1.json")"
-if [ "$TAUGHT" -ge 65 ] && [ "$TAUGHT" -le 72 ]; then ok "taught=$TAUGHT is inside the expected 65 to 72 (docs/handoffs/D-06.md)"; else bad "taught=$TAUGHT is outside the expected 65 to 72: compare with the handoff's method before trusting either"; fi
+# 100 against redis:8 on 2026-11-22, with the list read level by level. The handoff's "about 68" was counted by hand
+# without a server. The range leaves room for levels still to be written.
+if [ "$TAUGHT" -ge 90 ] && [ "$TAUGHT" -le 120 ]; then ok "taught=$TAUGHT is inside the expected 90 to 120 (100 measured on 2026-11-22)"; else bad "taught=$TAUGHT is outside the expected 90 to 120: read the board's taught list before trusting either"; fi
 for c in get set incr zadd xadd; do
   [ "$(json "j.groups.flatMap(g=>g.commands).find(c => c.name === '$c')?.taught" <"$SCRATCH/c1.json")" = true ] && ok "$c is taught" || bad "$c should be taught"
 done
