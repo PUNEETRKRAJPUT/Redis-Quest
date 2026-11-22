@@ -9,11 +9,13 @@ import {
   toLearnerError,
   type LearnerContext,
   type LearnerError,
+  type LearnerDeps,
   type LearnerFn,
   type LearnerRedis,
 } from '@quest/shared';
 import type pg from 'pg';
 import { SlotError } from '../errors.js';
+import { RequestTrace, traceDeps } from '../trace.js';
 import type { SlotDef } from './types.js';
 
 /** How a slot call was served, reported in `x-quest-slots` and `/app/slots`. */
@@ -46,7 +48,18 @@ export interface LoopMarker {
  */
 export class RequestScope {
   readonly served: string[] = [];
-  private constructor(private readonly ctx: LearnerContext) {}
+  /** Only present when the request carried `x-quest-trace: 1` (see trace.ts). */
+  readonly trace?: RequestTrace;
+  private readonly tracedDeps?: LearnerDeps;
+  private constructor(
+    private readonly ctx: LearnerContext,
+    trace?: RequestTrace,
+  ) {
+    if (trace) {
+      this.trace = trace;
+      this.tracedDeps = traceDeps(ctx.deps, ctx.counters, trace);
+    }
+  }
 
   static async create(opts: {
     redis: LearnerRedis;
@@ -56,6 +69,8 @@ export class RequestScope {
     redisUrl?: string;
     pool: pg.Pool;
     log: (line: string) => void;
+    /** Record every Redis command and query of this request (the phone's waterfall). Off by default. */
+    trace?: boolean;
   }): Promise<RequestScope> {
     const ctx = await createLearnerDeps({
       redisClient: opts.redis,
@@ -64,11 +79,11 @@ export class RequestScope {
       dbPool: opts.pool,
       log: opts.log,
     });
-    return new RequestScope(ctx);
+    return new RequestScope(ctx, opts.trace ? new RequestTrace() : undefined);
   }
 
-  get deps() {
-    return this.ctx.deps;
+  get deps(): LearnerDeps {
+    return this.tracedDeps ?? this.ctx.deps;
   }
 
   get counters() {
@@ -248,6 +263,7 @@ export class SlotRuntime {
       return def.baseline(scope.deps, ...args);
     }
     scope.served.push(`${name}=learner`);
+    if (scope.trace) scope.trace.by = 'learner';
     const i = this.index.get(name)!;
     const marker = this.opts.marker;
     const fn: LearnerFn = marker
@@ -256,7 +272,12 @@ export class SlotRuntime {
           return loaded.fn(deps, ...a);
         }
       : loaded.fn;
-    const r = await callLearner(fn, scope.deps, args, { timeoutMs: this.opts.timeoutMs });
+    let r: Awaited<ReturnType<typeof callLearner>>;
+    try {
+      r = await callLearner(fn, scope.deps, args, { timeoutMs: this.opts.timeoutMs });
+    } finally {
+      if (scope.trace) scope.trace.by = 'builtin';
+    }
     if (!r.ok)
       throw new SlotError(name, r.error ?? { name: 'Error', message: 'unknown learner error' });
     return r.value;

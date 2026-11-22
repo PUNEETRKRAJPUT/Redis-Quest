@@ -6,6 +6,7 @@ import type { MetricsRecorder } from './metrics.js';
 import type { RedisTarget } from './redis.js';
 import { registerRoutes } from './routes.js';
 import { RequestScope, type SlotRuntime } from './slots/runtime.js';
+import { TRACE_HEADER } from './trace.js';
 import type { OpsHook } from './workers/ops.js';
 import type { TickerSubscriber } from './workers/ticker.js';
 
@@ -50,6 +51,7 @@ export function buildServer(ctx: AppContext): FastifyInstance {
       ...ctx.redis.learner,
       pool: ctx.pool,
       log: (line) => ctx.log.info({ learner: true, route: url }, line),
+      trace: req.headers[TRACE_HEADER] === '1',
     });
   });
 
@@ -58,6 +60,7 @@ export function buildServer(ctx: AppContext): FastifyInstance {
     reply.header('x-quest-instance', ctx.instance);
     if (req.scope && req.scope.served.length > 0)
       reply.header('x-quest-slots', req.scope.served.join(', '));
+    if (req.scope?.trace) reply.header(TRACE_HEADER, req.scope.trace.header());
     return payload;
   });
 
