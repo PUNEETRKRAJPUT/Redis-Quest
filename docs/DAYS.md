@@ -116,6 +116,10 @@ mismatches, 62 are skipped by design (ops, traffic and random-pool levels).
 **The owner then started his own game** (`./scripts/start`, 20:01 that evening): preflight clean, image from the
 cache, every container up, his save loaded (160 XP, 9 levels passed, on ch1-05).
 
+**Pull request 1 was merged that night** (`41566bc`, task G-04): the arm64 workflow `stack` now runs on every
+push to `main`. Two tests that failed now and then on slow machines were fixed first (`6e20a28` in the runner,
+a real fault; `67edc1f` in an app test). `docs/handoffs/G-04.md` says what the runner can and cannot prove.
+
 ## Merged on 2026-11-22, without pull requests
 One merge commit per day, in this order (least risky first), starting from `ecf3925`:
 D-10, D-01 (documents and workflows), D-03, D-04, D-08 (screens), D-05 then D-06 (the level loader changes),
