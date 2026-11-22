@@ -1,0 +1,4 @@
+# Counts to three, never expires.
+INCR canteen:tokens:today
+INCR canteen:tokens:today
+INCR canteen:tokens:today

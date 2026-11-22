@@ -154,7 +154,7 @@ function issueToErrors(issue: Issue, source: YamlSource, data: unknown): LevelEr
   }
 }
 
-function zodErrors(error: z.ZodError, source: YamlSource, data: unknown): LevelError[] {
+export function zodErrors(error: z.ZodError, source: YamlSource, data: unknown): LevelError[] {
   return error.issues.flatMap((i) => issueToErrors(i, source, data));
 }
 
@@ -180,7 +180,7 @@ function templateProblems(value: string): { start: number; needle: string; messa
 }
 
 /** Template problems in every string of a YAML file, positioned on the variable when it can be found verbatim. */
-function yamlTemplateErrors(source: YamlSource): LevelError[] {
+export function yamlTemplateErrors(source: YamlSource): LevelError[] {
   const errors: LevelError[] = [];
   for (const s of stringScalars(source)) {
     let searchFrom = s.range[0];
@@ -195,7 +195,7 @@ function yamlTemplateErrors(source: YamlSource): LevelError[] {
   return errors;
 }
 
-function textTemplateErrors(file: string, text: string, path: string): LevelError[] {
+export function textTemplateErrors(file: string, text: string, path: string): LevelError[] {
   return templateProblems(text).map((p) => {
     const pos = textPosition(text, p.start);
     return { file, line: pos.line, col: pos.col, path, message: p.message };
@@ -503,6 +503,8 @@ async function findChapterDirs(dir: string, errors: LevelError[]): Promise<strin
   for (const e of entries) {
     if (e.isDirectory()) {
       if (e.name.startsWith('_') || e.name.startsWith('.') || e.name === 'node_modules') continue;
+      // D-05: levels/community/<pack>/ are community packs, loaded by community.ts: never campaign chapters.
+      if (e.name === 'community') continue;
       out.push(...(await findChapterDirs(join(dir, e.name), errors)));
     } else if (e.isFile() && (e.name.endsWith('.yaml') || e.name.endsWith('.yml'))) {
       errors.push(fileError(join(dir, e.name), `YAML file outside a chapter directory (no ${CHAPTER_FILE} next to it)`));

@@ -1,0 +1,13 @@
+# The sample community pack, written "by the house" so the community path (loader, /api/community, /community,
+# the level screen) is exercised by a real level. Copy this directory to start a pack of your own.
+id: house
+title: "From the house"
+incident:
+  - from: roommate
+    time: "12:40"
+    text: "yaar the canteen wants a token counter for lunch. resets every hour, nothing fancy"
+  - from: you
+    time: "12:42"
+    text: "one key, one counter. give me five minutes"
+levels:
+  - house-01-canteen-tokens

@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# level-new: scaffold a community level in the same files the level studio writes. It asks nothing; everything is a flag.
+#
+#   scripts/level-new --pack <pack> --id <NN-slug> [--mode cli|decision] [--author "Your Name"] [--github handle]
+#
+# Creates levels/community/<pack>/ (with a chapter.yaml when the pack is new), the level file, and for a cli level the
+# solution scripts. Every text is a placeholder that already passes the validator's shape rules but says TODO: replace
+# them, then run `pnpm --filter @quest/shared levels:validate levels/community/<pack>`.
+# bash 3.2 and BSD tools only.
+set -eu
+
+usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; }
+
+PACK="" ID="" MODE="cli" AUTHOR="Your Name" GITHUB=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --pack) PACK="${2:-}"; shift 2 ;;
+    --id) ID="${2:-}"; shift 2 ;;
+    --mode) MODE="${2:-}"; shift 2 ;;
+    --author) AUTHOR="${2:-}"; shift 2 ;;
+    --github) GITHUB="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "level-new: unknown option $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+KEBAB='^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+[ -n "$PACK" ] && echo "$PACK" | grep -Eq "$KEBAB" || { echo "level-new: --pack must be kebab-case (lowercase letters, digits, single dashes), e.g. my-pack" >&2; exit 2; }
+echo "$ID" | grep -Eq '^[0-9][0-9]-[a-z0-9]+(-[a-z0-9]+)*$' || { echo "level-new: --id must be NN-slug, e.g. 01-my-level" >&2; exit 2; }
+case "$MODE" in cli|decision) ;; *) echo "level-new: --mode is cli or decision (the community accepts those two for now)" >&2; exit 2 ;; esac
+case "$PACK" in
+  ch0|ch1|ch2|ch3|ch4|ch4b|ch5|finale|example-*) echo "level-new: $PACK is a campaign chapter id; pick another pack name" >&2; exit 2 ;;
+esac
+case "$AUTHOR" in *'"'*|*'\'*) echo "level-new: --author may not contain quotes or backslashes" >&2; exit 2 ;; esac
+if [ -n "$GITHUB" ]; then
+  echo "$GITHUB" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9-]{0,38})$' || { echo "level-new: --github is a user name without the @" >&2; exit 2; }
+fi
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DIR="$ROOT/levels/community/$PACK"
+NN="${ID%%-*}"
+SLUG="${ID#*-}"
+LEVEL_ID="$PACK-$ID"
+FILE="$DIR/$ID.yaml"
+[ -e "$FILE" ] && { echo "level-new: $FILE already exists" >&2; exit 1; }
+mkdir -p "$DIR"
+
+if [ ! -f "$DIR/chapter.yaml" ]; then
+  cat > "$DIR/chapter.yaml" <<YAML
+id: $PACK
+title: "TODO: the name of your pack"
+incident:
+  - from: roommate
+    time: "12:40"
+    text: "TODO: the message that starts the story"
+  - from: you
+    time: "12:42"
+    text: "TODO: your reply"
+levels:
+  - $LEVEL_ID
+YAML
+  echo "created levels/community/$PACK/chapter.yaml"
+else
+  # Add the level to the pack's manifest when "levels:" is the last block of the file; otherwise say so.
+  if awk '/^levels:/{f=1;next} f&&/^  - /{ok=1;next} f&&NF{ok=0} END{exit !(f&&ok)}' "$DIR/chapter.yaml"; then
+    printf '  - %s\n' "$LEVEL_ID" >> "$DIR/chapter.yaml"
+    echo "added $LEVEL_ID to levels/community/$PACK/chapter.yaml"
+  else
+    echo "NOTE: add \"  - $LEVEL_ID\" to the levels list in levels/community/$PACK/chapter.yaml (levels are listed in file-number order)"
+  fi
+fi
+
+AUTHOR_YAML="author:
+  name: \"$AUTHOR\""
+[ -n "$GITHUB" ] && AUTHOR_YAML="$AUTHOR_YAML
+  github: \"$GITHUB\""
+
+if [ "$MODE" = cli ]; then
+  mkdir -p "$DIR/solutions"
+  cat > "$FILE" <<YAML
+id: $LEVEL_ID
+chapter: $PACK
+title: "TODO: a short in-world title"
+mode: cli
+$AUTHOR_YAML
+
+story: |
+  TODO: two or three sentences that put the player in the scene.
+
+brainstorm:
+  prompt: "TODO: a question the player answers before any teaching."
+  options:
+    - { id: idea-a, label: "TODO: the sensible guess", is_reasonable: true }
+    - { id: idea-b, label: "TODO: a tempting wrong guess", is_reasonable: false }
+    - { id: not-redis, label: "Not Redis at all", is_reasonable: false }
+
+teach: |
+  TODO: the command or two the player needs, and a worked example on a different key than the task uses.
+
+task: |
+  TODO: exactly what to do, with the key names. Use a key prefix of your own (not game:).
+
+setup:
+  - cmd: [DEL, "$PACK:example"]
+
+hints:
+  - "TODO: a nudge that does not give the answer away."
+
+verify:
+  - type: redis
+    checks:
+      - cmd: [EXISTS, "$PACK:example"]
+        equals: 1
+        message: "TODO: what the player should fix when this check fails."
+
+reward:
+  xp: 10
+
+solutions:
+  reference: solutions/$NN-reference.redis
+  wrong:
+    - path: solutions/$NN-wrong-1.redis
+      expect: wrong
+      because: "TODO: why this attempt is wrong."
+YAML
+  printf '# TODO: the commands that solve the level, one per line.\nSET %s:example 1\n' "$PACK" > "$DIR/solutions/$NN-reference.redis"
+  printf '# TODO: a plausible wrong attempt; it must fail the checks.\nPING\n' > "$DIR/solutions/$NN-wrong-1.redis"
+else
+  cat > "$FILE" <<YAML
+id: $LEVEL_ID
+chapter: $PACK
+title: "TODO: a short in-world title"
+mode: decision
+$AUTHOR_YAML
+
+story: |
+  TODO: two or three sentences that put the player in the scene.
+
+brainstorm:
+  prompt: "TODO: a question the player answers before any teaching."
+  options:
+    - { id: idea-a, label: "TODO: the sensible guess", is_reasonable: true }
+    - { id: idea-b, label: "TODO: a tempting wrong guess", is_reasonable: false }
+    - { id: not-redis, label: "Not Redis at all", is_reasonable: false }
+
+teach: |
+  TODO: the idea the question rests on, with a worked example that is not the answer.
+
+task: |
+  TODO: answer the question below.
+
+verify:
+  - type: quiz
+    question: "TODO: the question."
+    options:
+      - { id: q1-a, label: "TODO: the right answer" }
+      - { id: q1-b, label: "TODO: the tempting wrong answer" }
+    correct: q1-a
+    explanation: "TODO: why the right answer is right."
+
+reward:
+  xp: 10
+
+solutions:
+  reference: [q1-a]
+  wrong:
+    - option: q1-b
+      expect: wrong
+      because: "TODO: why this answer is wrong."
+YAML
+fi
+echo "created levels/community/$PACK/$ID.yaml ($MODE)"
+echo
+echo "next: edit the TODOs, then validate:"
+echo "  pnpm --filter @quest/shared levels:validate levels/community/$PACK"
+echo "(the level studio at /studio checks and play-tests the same files against the real engine)"

@@ -682,6 +682,17 @@ export function interviewBlankStart(iv: Pick<Interview, 'pool' | 'blank_start'>)
   return iv.blank_start ?? iv.pool !== undefined;
 }
 
+/**
+ * D-05. Who wrote a community level. Optional in the schema (the campaign has no author line); the community
+ * loader (community.ts) requires it for everything under `levels/community/`.
+ */
+export const AUTHOR_GITHUB = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
+export const authorSchema = z.strictObject({
+  name: text.refine((s) => s.trim().length <= 80, { message: 'must be at most 80 characters' }),
+  github: z.string().regex(AUTHOR_GITHUB, 'must be a GitHub user name (letters, digits and single dashes, no @)').optional(),
+});
+export type Author = z.output<typeof authorSchema>;
+
 const levelBase = {
   id: levelId,
   chapter: chapterId,
@@ -708,6 +719,7 @@ const levelBase = {
     .regex(/^\d+\.\d+(?:\.\d+)?$/, 'must be a version like "8.4" or "8.4.0"')
     .optional(),
   reward: z.strictObject({ xp: z.number().int().positive(), badge: text.optional() }),
+  author: authorSchema.optional(),
 };
 
 const fileModeLevel = <M extends Exclude<LevelMode, 'decision' | 'code'>>(mode: M) =>

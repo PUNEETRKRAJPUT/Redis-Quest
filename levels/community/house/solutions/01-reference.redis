@@ -1,0 +1,5 @@
+# One string key is the whole counter; the expiry resets it.
+INCR canteen:tokens:today
+INCR canteen:tokens:today
+INCR canteen:tokens:today
+EXPIRE canteen:tokens:today 3600
