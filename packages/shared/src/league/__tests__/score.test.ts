@@ -4,6 +4,9 @@ import { parseHole } from '../loader.js';
 import { keysNamedBy, scoreEntry, type HoleRef } from '../score.js';
 import { fakeRedis } from './fake-redis.js';
 
+// The last check reads `leftover`, a key no setup step and no entry writes: it holds only because the scorer empties
+// the database first (one test plants it beforehand). It must not be the key the setup makes (`stale`), which is
+// still there when the checks run: the first CI run of this file failed on exactly that.
 const HOLE_YAML = `
 title: Stock the shelves
 task: Put apples in stock:a and pears in stock:b.
@@ -16,7 +19,7 @@ checks:
   - cmd: [GET, stock:b]
     equals: pears
     message: stock:b must hold pears
-  - cmd: [GET, stale]
+  - cmd: [GET, leftover]
     equals: null
 `;
 
@@ -88,7 +91,9 @@ describe('scoreEntry', () => {
     const redis = fakeRedis();
     await redis.run(['SET', 'leftover', 'x']);
     redis.log.length = 0;
-    await scoreEntry(hole(), entry('SET stock:a apples\nSET stock:b pears'), redis.run);
+    const r = await scoreEntry(hole(), entry('SET stock:a apples\nSET stock:b pears'), redis.run);
+    // the check on `leftover` passes only if the database was emptied before the setup ran
+    expect(r).toMatchObject({ ok: true });
     const names = redis.log.map((c) => c.join(' '));
     expect(names.slice(0, 3)).toEqual(['CLIENT INFO', 'FLUSHDB', 'SET stale old']);
     // emptied again at the end
