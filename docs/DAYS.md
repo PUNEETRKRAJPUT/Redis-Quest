@@ -75,15 +75,17 @@ D-07, D-09 (they send commands to Redis), D-02 last (it changes how the game sta
 - One fix came with it (`cb87d77`): `ci.yml` and `pr-verdict.yml` passed every folder under `levels/` to the
   validator and the grader as a campaign chapter, which now would include `levels/community` (D-05). Both skip
   it, as the loader does.
-- CI then needed four fixes before it went green, each its own commit:
-  - `f53f055`, `6db8dde` (D-06): **three engine source files had never been committed.** The root `.gitignore`
-    rule `coverage/`, meant for test coverage reports, matched `engine/src/coverage/`, so git, the linter and the
-    formatter all skipped it; the day's own type check passed because the files were on its disk. They were
-    recovered from the day's worktree. The rule and the lint config now except that folder.
-  - `690c816`, `c1da20e` (D-07) and `12bfc03` (D-08): three test expectations that were wrong and had never run
-    (a sample hole no entry could pass; a tie the test did not expect; a note one character too short for the
-    arcade's own rule). No product code changed.
-  - `a03082f`: CI now runs every package's tests even when one package fails, so one run shows every failure.
+- CI then found four problems before it went green:
+  - D-06 (`f53f055`, formatted in `6db8dde`): **three engine source files had never been committed.** The root
+    `.gitignore` rule `coverage/`, meant for test coverage reports, matched `engine/src/coverage/`, so git, the
+    linter and the formatter all skipped it; the day's own type check passed because the files were on its disk.
+    They were recovered from the day's worktree. The rule and the lint config now except that folder.
+  - D-07 (`690c816`): the scorer test's sample hole could not be passed by any entry.
+  - D-07 (`c1da20e`): the route test expected no tie where the attempt equals a committed entry.
+  - D-08 (`12bfc03`): one note was a character too short for the arcade's own rule.
+
+  The last three are test expectations that were wrong and had never run; no product code changed. Along the
+  way (`a03082f`) CI's test step got `--no-bail`, so one run shows every package's failures.
 - To take one day back out: `git revert -m 1 <its merge commit>` and push. D-06 is built on D-05, so D-06 goes
   first. Bringing a day back later means reverting that revert, not merging its branch again.
 - The ten branches are still on GitHub, and their worktrees are in `~/personal-repo/Redis-Quest.worktrees/`.
