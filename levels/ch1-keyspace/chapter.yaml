@@ -7,12 +7,20 @@ incident:
   - from: you
     time: "17:54"
     text: "ready is a strong word. names, OTPs, points, all of it needs a home first"
+    choices:
+      - "ready is a strong word. names, OTPs, points, all of it needs a home first"
+      - "ready bada shabd hai yaar. naam, OTP, points, sabko pehle ek ghar chahiye"
+      - "abhi ready nahi hai bhai. naam, OTP, points ke liye pehle jagah banani padegi"
   - from: roommate
     time: "17:58"
     text: "bhai what if we just put everything in one big JSON file. users, points, feeds. ONE file. so simple"
   - from: you
     time: "17:59"
     text: "and when two people register in the same second?"
+    choices:
+      - "and when two people register in the same second?"
+      - "aur agar do log ek hi second mein register karein toh?"
+      - "aur same second mein do registrations aa gaye toh kya hoga?"
   - from: roommate
     time: "18:03"
     text: "... we add a queue? 😅"
@@ -25,6 +33,10 @@ incident:
   - from: you
     time: "19:41"
     text: "noted, Warden Sir. one small thing at a time"
+    choices:
+      - "noted, Warden Sir. one small thing at a time"
+      - "noted, Warden Sir. ek-ek cheez, chhoti chhoti"
+      - "samajh gaya, Warden Sir. pehle ek chhota kaam, phir agla"
 levels:
   - ch1-01-a-name-and-an-otp
   - ch1-02-points-that-cannot-be-lost

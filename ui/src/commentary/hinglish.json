@@ -1,0 +1,47 @@
+{
+  "pass": [
+    "Seedha boundary! Kya shot tha, bhai.",
+    "Not out, yaar. Poori crowd khadi ho gayi.",
+    "Bat ke beech mein aaya, bilkul clean timing.",
+    "Ek ball, ek shot, ek muskaan. Shabaash.",
+    "Stadium mein taali hi taali. Chalo, agla over."
+  ],
+  "fail": [
+    "Stumps udd gaye, bhai. Koi baat nahi, next ball.",
+    "Clean bowled. Wapas crease pe chalo, scoreboard dekho.",
+    "Wicket gaya, par match abhi baaki hai.",
+    "Pehli ball pe out hona bhi khel ka hissa hai, yaar.",
+    "Third umpire ne ungli utha di. Ek aur try karte hain."
+  ],
+  "works_but_wrong": [
+    "Run toh bana, par no-ball tha, yaar.",
+    "Edge laga aur boundary chali gayi. Aaj chalega, final mein nahi.",
+    "Scoreboard chal raha hai, par umpire ko kuch khatak raha hai.",
+    "Jeet gaye, par jis tareeke se, coach ne bhaunh uthayi.",
+    "Gully cricket mein chalta hai, league match mein nahi."
+  ],
+  "chapter_done": [
+    "Innings khatam. Dressing room mein chai!",
+    "Poora chapter jeet liya, bhai. Taali!",
+    "Stumps ho gaye is session ke. Kal naya match.",
+    "Poori team ne saath mein trophy uthayi. Shabaash."
+  ],
+  "dangerous": [
+    "Yeh toh bina helmet ke bouncer khelna hai, bhai.",
+    "Umpire ne warning di. Dhyan se khelo.",
+    "Ungli utha ke warning, yaar. Asli match mein mat karna.",
+    "Boundary rope ke bahar jaake shot maar rahe ho."
+  ],
+  "stack_down": [
+    "Baarish aa gayi, bhai. Covers lag gaye.",
+    "Floodlights gul ho gayi. Thoda intezaar karo.",
+    "Rain delay. Chai pi lo, match jaldi shuru hoga.",
+    "Play roka gaya hai, kuch der ke liye."
+  ],
+  "stack_back": [
+    "Covers hat gaye. Play shuru!",
+    "Floodlights wapas on. Chalo, khelte hain.",
+    "Baarish ruk gayi, match wapas shuru.",
+    "Wapas aa gaye, jaise kuch hua hi nahi."
+  ]
+}

@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Redis Quest is starting</title>
+    <!-- Without JavaScript the page reloads itself; the proxy sends the game as soon as it answers. -->
+    <noscript><meta http-equiv="refresh" content="5" /></noscript>
+    <style>
+      :root {
+        color-scheme: dark;
+        --night-950: #070a12;
+        --night-900: #0b1020;
+        --night-800: #111833;
+        --night-700: #1a2344;
+        --night-600: #27325c;
+        --chalk: #eef2fa;
+        --chalk-dim: #a9b4cc;
+        --flood: #ffb347;
+        --flood-deep: #ff9a1f;
+        --turf: #2ee281;
+        --wicket: #ff5468;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+      body {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px 16px;
+        color: var(--chalk);
+        font:
+          16px/1.6 system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+        background:
+          radial-gradient(120% 70% at 50% -10%, rgb(255 154 31 / 0.16), transparent 62%),
+          radial-gradient(80% 50% at 100% 100%, rgb(92 200 255 / 0.07), transparent 70%),
+          var(--night-900);
+      }
+      main {
+        width: 100%;
+        max-width: 34rem;
+        border: 1px solid var(--night-600);
+        border-radius: 14px;
+        background: rgb(17 24 51 / 0.86);
+        padding: 28px 24px;
+        box-shadow: 0 18px 50px -20px rgb(0 0 0 / 0.7);
+      }
+      .brand {
+        margin: 0;
+        font:
+          700 0.8125rem/1 system-ui,
+          sans-serif;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--flood);
+      }
+      h1 {
+        margin: 10px 0 6px;
+        font:
+          700 clamp(1.6rem, 6vw, 2.2rem) / 1.1 'Arial Narrow',
+          system-ui,
+          sans-serif;
+        letter-spacing: 0.02em;
+      }
+      .lede {
+        margin: 0 0 22px;
+        color: var(--chalk-dim);
+      }
+      ol {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 10px;
+      }
+      li {
+        display: grid;
+        grid-template-columns: 1.5rem 1fr;
+        column-gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid var(--night-600);
+        border-radius: 10px;
+        background: var(--night-800);
+        color: var(--chalk-dim);
+      }
+      li .dot {
+        grid-row: 1 / span 2;
+        width: 1.5rem;
+        height: 1.5rem;
+        margin-top: 2px;
+        border-radius: 50%;
+        border: 2px solid var(--night-600);
+      }
+      li .name {
+        font-weight: 600;
+      }
+      li .how {
+        grid-column: 2;
+        font-size: 0.875rem;
+        line-height: 1.45;
+      }
+      li[data-state='done'] {
+        color: var(--chalk);
+      }
+      li[data-state='done'] .dot {
+        border-color: var(--turf);
+        background: var(--turf);
+      }
+      li[data-state='now'] {
+        color: var(--chalk);
+        border-color: rgb(255 154 31 / 0.55);
+        box-shadow: 0 0 0 1px rgb(255 154 31 / 0.2);
+      }
+      li[data-state='now'] .dot {
+        border-color: var(--flood-deep);
+        border-top-color: transparent;
+        animation: spin 1s linear infinite;
+      }
+      li[data-state='failed'] {
+        color: var(--chalk);
+        border-color: rgb(255 84 104 / 0.6);
+      }
+      li[data-state='failed'] .dot {
+        border-color: var(--wicket);
+        background: var(--wicket);
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        li[data-state='now'] .dot {
+          animation: none;
+          border-top-color: var(--flood-deep);
+          background: rgb(255 154 31 / 0.35);
+        }
+      }
+      #status {
+        margin: 20px 0 0;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--night-600);
+        background: var(--night-950);
+      }
+      #status[data-tone='bad'] {
+        border-color: rgb(255 84 104 / 0.6);
+      }
+      #status strong {
+        color: var(--chalk);
+      }
+      code {
+        font:
+          0.875rem ui-monospace,
+          'SF Mono',
+          Menlo,
+          monospace;
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: var(--night-700);
+        color: var(--flood);
+      }
+      .foot {
+        margin: 18px 0 0;
+        font-size: 0.8125rem;
+        color: var(--chalk-dim);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="brand">Redis Quest</p>
+      <h1 id="title">The floodlights are warming up</h1>
+      <p class="lede" id="lede">
+        The game is being set up on your Mac. This page opens the game by itself the moment it is
+        ready.
+      </p>
+
+      <ol id="steps" aria-label="Start-up steps">
+        <li data-step="preflight" data-state="now">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="name">Checking your Mac</span>
+          <span class="how"
+            >Docker, memory, disk space and ports. This takes a few seconds. <span class="t"></span
+          ></span>
+        </li>
+        <li data-step="building" data-state="todo">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="name">Building the game</span>
+          <span class="how"
+            >The first start downloads images and builds the game: give it a few minutes. Later
+            starts are quicker when nothing has changed. <span class="t"></span
+          ></span>
+        </li>
+        <li data-step="starting" data-state="todo">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="name">Starting the services</span>
+          <span class="how"
+            >The database, the engine and the screens come up. The first time it also loads the
+            sample league, so give it about a minute. <span class="t"></span
+          ></span>
+        </li>
+        <li data-step="ready" data-state="todo">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="name">Ready</span>
+          <span class="how">The game opens here by itself.</span>
+        </li>
+      </ol>
+
+      <p id="status" role="status" aria-live="polite">
+        <strong id="status-line">Waiting for the start script.</strong>
+        <span id="status-detail"
+          >If you have not started the game yet, open a terminal in the Redis Quest folder and run
+          <code>./scripts/start</code>.</span
+        >
+      </p>
+      <p class="foot">
+        Total time so far: <span id="total">just started</span>. Nothing here leaves your Mac.
+      </p>
+    </main>
+
+    <script>
+      (function () {
+        'use strict';
+        var ORDER = ['preflight', 'building', 'starting', 'ready'];
+        var STAGE_URL = '/_starting/stage.json';
+        var POLL_MS = 2000;
+        var steps = document.getElementById('steps');
+        var title = document.getElementById('title');
+        var lede = document.getElementById('lede');
+        var line = document.getElementById('status-line');
+        var detail = document.getElementById('status-detail');
+        var statusBox = document.getElementById('status');
+        var total = document.getElementById('total');
+        var last = null; // the last stage file that parsed
+        var readyAt = null; // when this page first saw "ready" while the game still did not answer
+
+        function fmt(sec) {
+          sec = Math.max(0, Math.round(sec));
+          var m = Math.floor(sec / 60);
+          var s = sec % 60;
+          return m > 0 ? m + ' min ' + (s < 10 ? '0' : '') + s + ' s' : s + ' s';
+        }
+
+        function setState(id, state, text) {
+          var li = steps.querySelector('[data-step="' + id + '"]');
+          if (!li) return;
+          li.setAttribute('data-state', state);
+          var t = li.querySelector('.t');
+          if (t) t.textContent = text || '';
+        }
+
+        function say(headline, more, bad) {
+          line.textContent = headline;
+          detail.textContent = more ? ' ' + more : '';
+          statusBox.setAttribute('data-tone', bad ? 'bad' : 'ok');
+        }
+
+        function render() {
+          var now = Date.now() / 1000;
+          if (!last || typeof last.stage !== 'string') return;
+          var idx = ORDER.indexOf(last.stage);
+          var failed = last.stage === 'failed';
+          // After a failure the file keeps the stage that was running in `failedAt`.
+          if (failed && typeof last.failedAt === 'string') idx = ORDER.indexOf(last.failedAt);
+          ORDER.forEach(function (id, i) {
+            var state = 'todo';
+            var text = '';
+            if (i < idx) state = 'done';
+            else if (i === idx) {
+              state = failed ? 'failed' : last.stage === 'ready' ? 'done' : 'now';
+              if (!failed && last.stage !== 'ready' && last.stageStartedAt)
+                text = '(' + fmt(now - last.stageStartedAt) + ' so far)';
+            }
+            setState(id, state, text);
+          });
+          if (last.startedAt) total.textContent = fmt(now - last.startedAt);
+
+          if (failed) {
+            title.textContent = 'The start did not finish';
+            lede.textContent = 'Read the last lines in your terminal first: they say what to fix.';
+            say(
+              'The start stopped' + (last.detail ? ': ' + last.detail : '.'),
+              'Fix what the terminal says, then run ./scripts/start again.',
+              true,
+            );
+          } else if (last.stage === 'ready') {
+            if (readyAt === null) readyAt = now;
+            if (now - readyAt > 20) {
+              title.textContent = 'The game is not answering';
+              say(
+                'The services are not answering right now.',
+                'They may have been stopped. Run ./scripts/start again; your save file is kept.',
+                true,
+              );
+            } else {
+              title.textContent = 'Taking the field';
+              say('Ready. Opening the game.', '');
+            }
+          } else {
+            readyAt = null;
+            title.textContent = 'The floodlights are warming up';
+            say(
+              {
+                preflight: 'Checking your Mac.',
+                building: 'Building the game.',
+                starting: 'Starting the services.',
+              }[last.stage] || 'Working on it.',
+              last.detail || 'You can leave this tab open.',
+            );
+          }
+        }
+
+        function poll() {
+          fetch(STAGE_URL, { cache: 'no-store' })
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (j) {
+              if (j) {
+                last = j;
+                render();
+              }
+            })
+            .catch(function () {});
+        }
+
+        // The game answers 200 on / once its own service is up. Until then the proxy answers with this page.
+        function probe() {
+          fetch('/', { method: 'HEAD', cache: 'no-store' })
+            .then(function (r) {
+              if (r.status === 200) location.reload();
+            })
+            .catch(function () {});
+        }
+
+        poll();
+        setInterval(poll, POLL_MS);
+        setInterval(probe, POLL_MS + 500);
+        setInterval(render, 1000);
+      })();
+    </script>
+  </body>
+</html>

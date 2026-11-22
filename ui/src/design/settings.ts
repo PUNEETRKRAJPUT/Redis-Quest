@@ -5,6 +5,9 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 export type ReducedMotionSetting = 'system' | 'on' | 'off';
+/** The cricket commentary line under some plain messages (D-02): a language, or off. */
+export type CommentarySetting = 'hinglish' | 'english' | 'off';
+export const COMMENTARY_SETTINGS: readonly CommentarySetting[] = ['hinglish', 'english', 'off'];
 
 export type SettingsState = {
   /** Off until the player turns it on (the brief: onboarding asks once). */
@@ -13,10 +16,13 @@ export type SettingsState = {
   volume: number;
   /** `system` follows the OS, `on` always reduces, `off` always animates. */
   reducedMotion: ReducedMotionSetting;
+  /** `hinglish` and `english` pick the language of the commentary lines, `off` hides them everywhere. */
+  commentary: CommentarySetting;
   setSound: (sound: boolean) => void;
   toggleSound: () => void;
   setVolume: (volume: number) => void;
   setReducedMotion: (value: ReducedMotionSetting) => void;
+  setCommentary: (value: CommentarySetting) => void;
 };
 
 export const SETTINGS_KEY = 'rq:settings';
@@ -24,6 +30,7 @@ export const DEFAULT_SETTINGS = {
   sound: false,
   volume: 0.6,
   reducedMotion: 'system' as ReducedMotionSetting,
+  commentary: 'hinglish' as CommentarySetting,
 };
 
 const memory = (): StateStorage => {
@@ -63,13 +70,19 @@ export function createSettingsStore(storage: () => StateStorage = browserStorage
         toggleSound: () => set((s) => ({ sound: !s.sound })),
         setVolume: (volume) => set({ volume: clampVolume(volume) }),
         setReducedMotion: (reducedMotion) => set({ reducedMotion }),
+        setCommentary: (commentary) => set({ commentary }),
       }),
       {
         name: SETTINGS_KEY,
         version: 1,
         storage: createJSONStorage(storage),
         skipHydration: true,
-        partialize: (s) => ({ sound: s.sound, volume: s.volume, reducedMotion: s.reducedMotion }),
+        partialize: (s) => ({
+          sound: s.sound,
+          volume: s.volume,
+          reducedMotion: s.reducedMotion,
+          commentary: s.commentary,
+        }),
         merge: (persisted, current) => {
           const p = (persisted ?? {}) as Partial<SettingsState>;
           return {
@@ -80,6 +93,9 @@ export function createSettingsStore(storage: () => StateStorage = browserStorage
               p.reducedMotion === 'on' || p.reducedMotion === 'off' || p.reducedMotion === 'system'
                 ? p.reducedMotion
                 : current.reducedMotion,
+            commentary: COMMENTARY_SETTINGS.includes(p.commentary as CommentarySetting)
+              ? (p.commentary as CommentarySetting)
+              : current.commentary,
           };
         },
       },

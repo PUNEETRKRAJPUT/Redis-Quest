@@ -34,7 +34,10 @@ services:
     image: caddy:2-alpine
     platform: linux/arm64
     ports: ["127.0.0.1:${PROXY_PORT:-3000}:3000"]
-    volumes: ["./docker/Caddyfile:/etc/caddy/Caddyfile:ro", "./logs:/logs"]
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/starting:/srv/starting:ro
+      - ./logs:/logs
     mem_limit: 64m
 
   engine:

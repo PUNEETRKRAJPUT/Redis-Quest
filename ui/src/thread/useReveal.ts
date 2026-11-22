@@ -3,21 +3,25 @@
 // Timing comes from logic.ts; this file only schedules it and keeps React state.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { play, useReducedMotion } from '../design';
-import type { ThreadMessage } from '../types';
 import {
   MAX_REVEAL_MS,
   MIN_TYPING_MS,
   contentHash,
+  needsChoice,
   planReveal,
+  readPicks,
   readSeen,
   shouldPlay,
   shouldPlayCue,
+  writePicks,
   writeSeen,
   type AnimateMode,
+  type ChoiceMessage,
+  type Picks,
 } from './logic';
 
 export type RevealOptions = {
-  messages: ThreadMessage[];
+  messages: ChoiceMessage[];
   mode: AnimateMode;
   maxMs?: number;
   /** Remember a finished arrival in localStorage (default true). */
@@ -31,6 +35,12 @@ export type Reveal = {
   playing: boolean;
   /** Index of the message whose typing dots are showing, or null. */
   typingIndex: number | null;
+  /** Index of the player's message that is waiting for a pick (its chips are showing), or null. */
+  askIndex: number | null;
+  /** What the player picked so far (message index to choice index). Skipped messages have no entry. */
+  picks: Picks;
+  /** Pick choice `choice` of the message at `index`: remembers it and lets the arrival go on. */
+  choose: (index: number, choice: number) => void;
   /** Messages after this index arrived live and animate in; earlier ones were there from the start. */
   live: boolean;
   reduced: boolean;
@@ -59,10 +69,17 @@ export function useReveal({
   const [live, setLive] = useState(false);
   const [typingAt, setTypingAt] = useState<number | null>(null);
   const [visible, setVisible] = useState(false);
+  // The player's own lines can carry choices: the arrival waits at such a line until one is picked. Picks come back
+  // from localStorage after mount (the server render shows each line's first choice, which is its own text).
+  const [picks, setPicks] = useState<Picks>({});
+  const [askAt, setAskAt] = useState<number | null>(null);
   const lastCue = useRef<number | null>(null);
   const onRevealedRef = useRef(onRevealed);
+  // The latest messages, for effects that must not restart just because the caller passed a new array.
+  const messagesRef = useRef(messages);
   useEffect(() => {
     onRevealedRef.current = onRevealed;
+    messagesRef.current = messages;
   });
 
   // Decide once per thread content (and again if the player turns on reduced motion mid-way).
@@ -72,12 +89,15 @@ export function useReveal({
     setPlaying(go);
     setShown(go ? 0 : count);
     setTypingAt(null);
+    setAskAt(null);
+    setPicks(persist ? readPicks(hash, messagesRef.current) : {});
   }, [hash, mode, reduced, count, persist]);
 
   const finish = useCallback(() => {
     setShown(count);
     setPlaying(false);
     setTypingAt(null);
+    setAskAt(null);
     if (persist && mode !== 'never') writeSeen(hash);
     onRevealedRef.current?.();
   }, [count, hash, mode, persist]);
@@ -107,6 +127,11 @@ export function useReveal({
     }
     const step = plan.steps[shown];
     if (!step) return;
+    if (needsChoice(messagesRef.current, shown, picks)) {
+      // The player's turn: a quiet beat, then the chips. No typing dots and no timer for the message itself.
+      const ask = window.setTimeout(() => setAskAt(shown), step.gapMs);
+      return () => window.clearTimeout(ask);
+    }
     const showDots = step.typingMs >= MIN_TYPING_MS;
     const t1 = window.setTimeout(() => {
       if (showDots) setTypingAt(shown);
@@ -123,7 +148,7 @@ export function useReveal({
       window.clearTimeout(t1);
       window.clearTimeout(t2);
     };
-  }, [playing, visible, shown, count, plan, finish]);
+  }, [playing, visible, shown, count, plan, finish, picks]);
 
   // Escape reveals everything. Only listens while an arrival is running, and never swallows the key.
   useEffect(() => {
@@ -144,10 +169,25 @@ export function useReveal({
     setPlaying(true);
   }, [reduced, count]);
 
+  const choose = useCallback(
+    (index: number, choice: number) => {
+      setPicks((prev) => {
+        const next = { ...prev, [index]: choice };
+        if (persist) writePicks(hash, next);
+        return next;
+      });
+      setAskAt(null);
+    },
+    [hash, persist],
+  );
+
   return {
     shown,
     playing,
     typingIndex: playing && typingAt === shown ? shown : null,
+    askIndex: playing && askAt !== null && askAt === shown ? shown : null,
+    picks,
+    choose,
     live,
     reduced,
     skip: finish,

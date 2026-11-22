@@ -3,25 +3,61 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
+# The start page. http://localhost:PORT shows how far this script has got while the game is still coming up:
+# the proxy serves docker/starting/index.html whenever the UI service does not answer, and the page reads the
+# stage file written here (logs/start/stage.json, which the proxy already mounts). Writing it must never be able
+# to stop a start, so every step of it ignores its own errors. Stages: preflight, building, starting, ready, failed.
+STAGE_DIR=""
+STAGE_NOW=""
+STAGE_SINCE=0
+START_EPOCH="$(date +%s)"
+write_stage() { # stage [detail] [failed-at]; the detail is plain ASCII without quotes or backslashes
+  [ -n "$STAGE_DIR" ] || return 0
+  local now stage="$1" detail="${2:-}" failed_at="${3:-}" extra=""
+  now="$(date +%s)"
+  if [ "$stage" != "$STAGE_NOW" ]; then STAGE_NOW="$stage"; STAGE_SINCE="$now"; fi
+  [ -n "$failed_at" ] && extra=",\"failedAt\":\"$failed_at\""
+  printf '{"stage":"%s","startedAt":%s,"stageStartedAt":%s,"updatedAt":%s,"detail":"%s"%s}\n' \
+    "$stage" "$START_EPOCH" "$STAGE_SINCE" "$now" "$detail" "$extra" \
+    > "$STAGE_DIR/stage.json.tmp" 2>/dev/null && mv -f "$STAGE_DIR/stage.json.tmp" "$STAGE_DIR/stage.json" 2>/dev/null
+  return 0
+}
+# Anything that ends this script before "ready" (a failed step, Ctrl-C) leaves a "failed" stage the page can show.
+STAGE_DONE=0
+on_exit() {
+  if [ "$STAGE_DONE" -ne 1 ] && [ -n "$STAGE_NOW" ] && [ "$STAGE_NOW" != "failed" ]; then
+    write_stage failed "The start stopped before the game was ready. Read the terminal." "$STAGE_NOW"
+  fi
+}
+trap on_exit EXIT
+
+# Same precedence as compose: process environment, then .env, then defaults. A check script that runs this against an
+# isolated project passes its own env file in ENV_FILE (scripts/preflight.sh reads the same variable).
+ENV_PATH="${ENV_FILE:-.env}"
+envval() {
+  local v
+  eval "v=\${$1:-}"
+  [ -z "$v" ] && [ -f "$ENV_PATH" ] && v="$(grep -E "^$1=" "$ENV_PATH" | tail -n 1 | sed 's/^[^=]*=//')"
+  printf '%s' "${v:-$2}"
+}
+# The logs folder the proxy mounts (an isolated check project mounts its own, named by QUEST_CHECK_LOGS).
+LOGS_DIR="$(envval QUEST_CHECK_LOGS ./logs)"
+if mkdir -p "$LOGS_DIR/start" 2>/dev/null; then STAGE_DIR="$LOGS_DIR/start"; fi
+
+write_stage preflight "Docker, memory, disk and ports."
 scripts/preflight.sh || { echo; echo "Not starting: fix the FAIL lines above first."; exit 1; }
 
 [ -f .env ] || { cp .env.example .env; echo "Created .env from .env.example"; }
 # postgres/init is mounted read-only into the database container; make sure it exists.
 mkdir -p logs .progress workspace postgres/init
-
-# Same precedence as compose: process environment, then .env, then defaults.
-envval() {
-  local v
-  eval "v=\${$1:-}"
-  [ -z "$v" ] && v="$(grep -E "^$1=" .env | tail -n 1 | sed 's/^[^=]*=//')"
-  printf '%s' "${v:-$2}"
-}
 PROXY_PORT="$(envval PROXY_PORT 3000)"
 INSIGHT_PORT="$(envval INSIGHT_PORT 5540)"
 REDIS_PORT="$(envval REDIS_PORT 6379)"
 PG_PORT="$(envval PG_PORT 5432)"
 
-docker compose up -d --build || { echo "docker compose up failed"; exit 1; }
+# The proxy comes up first, before the slow part, so http://localhost:PORT can already say what is happening.
+write_stage building "Downloading images and building the game."
+docker compose up -d proxy || { echo "docker compose up failed (proxy)"; exit 1; }
 
 # The proxy reads docker/Caddyfile once, when its container starts, and compose does not recreate a container
 # because a bind-mounted file changed. After an update that changes the routes (the UI moving to its own service,
@@ -37,6 +73,24 @@ if [ -n "$proxy_cid" ]; then
     docker compose restart proxy >/dev/null 2>&1 || echo "could not restart the proxy (docker compose restart proxy)"
   fi
 fi
+
+# Open the start page once, as soon as the proxy answers, unless the game is already up (then there is nothing to
+# wait for) or the caller asked for no browser (QUEST_NO_OPEN=1, or CI). macOS `open`; a failure is ignored.
+if [ -z "${QUEST_NO_OPEN:-}" ] && [ -z "${CI:-}" ]; then
+  i=0
+  while [ "$i" -lt 15 ]; do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://localhost:${PROXY_PORT}/_starting/stage.json" 2>/dev/null)"
+    [ -n "$code" ] && [ "$code" != "000" ] && break
+    sleep 1; i=$((i + 1))
+  done
+  if [ -n "$code" ] && [ "$code" != "000" ] && [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://localhost:${PROXY_PORT}/" 2>/dev/null)" != "200" ]; then
+    open "http://localhost:${PROXY_PORT}" >/dev/null 2>&1 || true
+  fi
+fi
+
+docker compose build || { echo "docker compose build failed"; exit 1; }
+write_stage starting "The database, the engine and the screens are coming up."
+docker compose up -d || { echo "docker compose up failed"; exit 1; }
 
 wait_healthy() { # service
   local i=0 cid st
@@ -66,8 +120,10 @@ done
 
 echo
 if [ "$API_UP" -eq 1 ] && [ "$UI_UP" -eq 1 ]; then
+  write_stage ready "The game is ready."
   echo "Game:           http://localhost:${PROXY_PORT}"
 else
+  write_stage starting "Taking longer than usual. In a terminal: docker compose logs engine ui"
   [ "$API_UP" -eq 1 ] || echo "Engine:         not answering on http://localhost:${PROXY_PORT}/health yet (docker compose logs engine)"
   [ "$UI_UP" -eq 1 ] || echo "UI:             not answering on http://localhost:${PROXY_PORT}/ yet (docker compose logs ui)"
   echo "Game:           http://localhost:${PROXY_PORT} may answer 502 for a little longer while the services start."
@@ -75,3 +131,4 @@ fi
 echo "Redis Insight:  http://localhost:${INSIGHT_PORT}"
 echo "Redis:          127.0.0.1:${REDIS_PORT}    Postgres: 127.0.0.1:${PG_PORT} (user/password/db: quest)"
 echo "Stop:           scripts/stop"
+STAGE_DONE=1

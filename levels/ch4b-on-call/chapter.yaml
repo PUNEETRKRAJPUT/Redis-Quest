@@ -7,6 +7,10 @@ incident:
   - from: you
     time: "02:06"
     text: "do not touch anything. nothing is down, so it is not an outage yet. what does the page say?"
+    choices:
+      - "do not touch anything. nothing is down, so it is not an outage yet. what does the page say?"
+      - "kuch mat chhedna. kuch down nahi hai, toh abhi outage nahi hai. page pe kya likha hai?"
+      - "haath mat lagana. kuch bhi down nahi hai, matlab abhi outage nahi. page kya bol raha hai?"
   - from: rival-college
     time: "02:11"
     text: "Still awake? So are we. Your Redis looks a little tired from here 😏"
@@ -16,6 +20,10 @@ incident:
   - from: you
     time: "02:14"
     text: "good, that is the whole job. we do not guess and we do not restart. first look, then name it, then fix it. one page at a time"
+    choices:
+      - "good, that is the whole job. we do not guess and we do not restart. first look, then name it, then fix it. one page at a time"
+      - "sahi, yahi poora kaam hai. andaaza nahi, restart nahi. pehle dekho, phir naam do, phir theek karo. ek baar mein ek page"
+      - "badiya, bas yahi kaam hai. na guess, na restart. pehle dekho, naam rakho, phir fix. ek time pe ek page"
   - from: roommate
     time: "02:17"
     text: "writing that on a mess token. Mukul just sent: 'your Redis looks well fed, bhai'. he KNOWS something"

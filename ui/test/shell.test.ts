@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { useSettings } from '../src/design/settings';
 import { createCollapser, describeDanger, describeEvent, humanize } from '../src/shell/eventToasts';
 import { NAV, isActive } from '../src/shell/nav';
 import { paletteScore } from '../src/shell/paletteScore';
@@ -70,6 +71,7 @@ describe('event toasts', () => {
       'verify_finished',
     ])
       expect(describeEvent({ kind: 'custom', name })).toBeNull();
+    useSettings.setState({ commentary: 'off' }); // D-02: with commentary on, these two carry a line
     expect(describeEvent({ kind: 'redis_disconnect' })).toBeNull();
     expect(describeEvent({ kind: 'redis_reconnect' })).toBeNull();
     expect(describeEvent({ kind: 'custom' })).toBeNull();

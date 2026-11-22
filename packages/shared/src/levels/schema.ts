@@ -863,12 +863,44 @@ export const chapterSchema = z
           from: z.string().regex(/^[a-z][a-z0-9-]*$/, 'must be a cast slug like roommate or you'),
           time: z.string({ error: 'must be a quoted 24-hour time like "19:31"' }).regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'must be a 24-hour time like "19:31"'),
           text: text,
+          /** Two or three ways for the player to say `text`; only on the player's own messages (checked below). */
+          choices: z
+            .array(text)
+            .min(2, 'choices needs two or three lines (or remove it)')
+            .max(3, 'choices takes at most three lines')
+            .optional(),
         }),
       )
       .min(1, 'the incident thread needs at least one message'),
     levels: z.array(levelId).min(1, 'a chapter lists at least one level'),
   })
   .superRefine((c, ctx) => {
+    c.incident.forEach((m, i) => {
+      if (m.choices === undefined) return;
+      if (m.from !== 'you') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['incident', i, 'choices'],
+          message: `only the player's own messages (from: you) can carry choices, this one is from ${m.from}`,
+        });
+        return;
+      }
+      if (m.choices[0] !== m.text) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['incident', i, 'choices', 0],
+          message: "the first choice must be the message's own text, word for word",
+        });
+      }
+      const seenChoice = new Set<string>();
+      m.choices.forEach((choice, j) => {
+        const key = choice.trim().toLowerCase();
+        if (seenChoice.has(key)) {
+          ctx.addIssue({ code: 'custom', path: ['incident', i, 'choices', j], message: 'choices must all be different' });
+        }
+        seenChoice.add(key);
+      });
+    });
     const seen = new Set<string>();
     c.levels.forEach((id, i) => {
       if (seen.has(id)) ctx.addIssue({ code: 'custom', path: ['levels', i], message: `${id} is listed twice` });
