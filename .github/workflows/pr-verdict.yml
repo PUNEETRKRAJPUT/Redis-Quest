@@ -161,12 +161,13 @@ jobs:
           curl -s -m 5 "$origin/health"; echo
           curl -s -m 5 "$origin/app/health"; echo
 
-          # Every chapter directory except the ones that start with an underscore, in name order (as ci.yml does).
+          # Every campaign chapter directory, in name order (as ci.yml does): not the ones that start with an
+          # underscore, and not levels/community, whose packs have their own loader and rules (D-05).
           dirs=""
           n=0
           for dir in levels/*/; do
             dir="${dir%/}"
-            case "$(basename "$dir")" in _*) continue ;; esac
+            case "$(basename "$dir")" in _*|community) continue ;; esac
             dirs="$dirs $dir"
             n=$((n + 1))
           done

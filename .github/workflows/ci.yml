@@ -105,7 +105,8 @@ jobs:
           n=0
           for dir in levels/*/; do
             dir=${dir%/}
-            case "$(basename "$dir")" in _*) continue ;; esac
+            # levels/community holds community packs, which have their own loader and rules (D-05): never chapters.
+            case "$(basename "$dir")" in _*|community) continue ;; esac
             dirs="$dirs $dir"
             n=$((n + 1))
           done
