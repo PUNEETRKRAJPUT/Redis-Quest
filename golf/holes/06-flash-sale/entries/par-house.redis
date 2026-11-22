@@ -1,0 +1,9 @@
+# House entry: create each key, then give it a time to live. Two commands per deal, eight in all. Par.
+SET deal:1 live
+EXPIRE deal:1 60
+SET deal:2 live
+EXPIRE deal:2 60
+SET deal:3 live
+EXPIRE deal:3 60
+SET deal:4 live
+EXPIRE deal:4 60

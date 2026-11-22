@@ -1,0 +1,5 @@
+# House entry: the totals are known, so write each one. Four commands. Par.
+ZADD lb:all 10 amit
+ZADD lb:all 25 binu
+ZADD lb:all 7 chet
+ZADD lb:all 3 dev

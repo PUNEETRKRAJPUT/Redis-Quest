@@ -1,0 +1,32 @@
+title: Add up the two zones
+task: |
+  Two zones keep their own points tables, already loaded:
+
+  - `lb:north`: amit 10, binu 20
+  - `lb:south`: binu 5, chet 7, dev 3
+
+  Build `lb:all`, a sorted set that holds every player once, with the points from both zones added together
+  (binu played in both). Leave the two zone tables as they are.
+par: 4
+setup:
+  - cmd: [ZADD, "lb:north", 10, amit]
+  - cmd: [ZADD, "lb:north", 20, binu]
+  - cmd: [ZADD, "lb:south", 5, binu]
+  - cmd: [ZADD, "lb:south", 7, chet]
+  - cmd: [ZADD, "lb:south", 3, dev]
+checks:
+  - cmd: [ZSCORE, "lb:all", amit]
+    equals: 10
+  - cmd: [ZSCORE, "lb:all", binu]
+    equals: 25
+    message: binu played in both zones, so the points are added
+  - cmd: [ZSCORE, "lb:all", chet]
+    equals: 7
+  - cmd: [ZSCORE, "lb:all", dev]
+    equals: 3
+  - cmd: [ZCARD, "lb:all"]
+    equals: 4
+  - cmd: [ZCARD, "lb:north"]
+    equals: 2
+  - cmd: [ZCARD, "lb:south"]
+    equals: 3

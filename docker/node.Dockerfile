@@ -78,6 +78,8 @@ COPY --from=build /ui-standalone ui-standalone
 COPY fiction/cast.json fiction/cast.json
 COPY CONTRIBUTORS.md ./
 COPY levels levels
+# The Economy League reads its holes and entries from here (D-07).
+COPY golf golf
 COPY scenarios scenarios
 
 USER node

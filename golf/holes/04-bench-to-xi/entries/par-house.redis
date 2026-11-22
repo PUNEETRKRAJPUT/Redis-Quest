@@ -1,0 +1,5 @@
+# House entry: move the players one at a time, so four commands. Par.
+SMOVE squad:bench squad:xi p1
+SMOVE squad:bench squad:xi p2
+SMOVE squad:bench squad:xi p3
+SMOVE squad:bench squad:xi p4

@@ -1,0 +1,6 @@
+# House entry: one command per shelf, so five commands. Par.
+SET kit:bat 12
+SET kit:ball 30
+SET kit:pads 8
+SET kit:gloves 10
+SET kit:helmet 6

@@ -1,0 +1,25 @@
+title: Stock the kit room
+task: |
+  The kit room has five shelves and each shelf is one key. Fill them so that every key holds its count:
+
+  | key          | count |
+  | ------------ | ----- |
+  | `kit:bat`    | 12    |
+  | `kit:ball`   | 30    |
+  | `kit:pads`   | 8     |
+  | `kit:gloves` | 10    |
+  | `kit:helmet` | 6     |
+
+  Each key is a plain string holding the count.
+par: 5
+checks:
+  - cmd: [GET, kit:bat]
+    equals: 12
+  - cmd: [GET, kit:ball]
+    equals: 30
+  - cmd: [GET, kit:pads]
+    equals: 8
+  - cmd: [GET, kit:gloves]
+    equals: 10
+  - cmd: [GET, kit:helmet]
+    equals: 6

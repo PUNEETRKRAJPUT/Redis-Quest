@@ -1,0 +1,26 @@
+title: Sixty-second deals
+task: |
+  Four deals go live for one minute. Create `deal:1`, `deal:2`, `deal:3` and `deal:4`, each holding the text `live`,
+  each set to expire in 60 seconds. The checks accept a time to live of 55 to 60 seconds.
+par: 8
+checks:
+  - cmd: [GET, "deal:1"]
+    equals: live
+  - cmd: [GET, "deal:2"]
+    equals: live
+  - cmd: [GET, "deal:3"]
+    equals: live
+  - cmd: [GET, "deal:4"]
+    equals: live
+  - cmd: [TTL, "deal:1"]
+    between: [55, 60]
+    message: deal:1 must expire in about 60 seconds
+  - cmd: [TTL, "deal:2"]
+    between: [55, 60]
+    message: deal:2 must expire in about 60 seconds
+  - cmd: [TTL, "deal:3"]
+    between: [55, 60]
+    message: deal:3 must expire in about 60 seconds
+  - cmd: [TTL, "deal:4"]
+    between: [55, 60]
+    message: deal:4 must expire in about 60 seconds

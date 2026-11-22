@@ -10,3 +10,6 @@ export * from './levels/index.js';
 
 // Learner-code runtime: deps injection, counting proxies, loader, caller, metrics (P0-08).
 export * from './learner/index.js';
+
+// The Economy League: hole and entry formats, loader, scorer and ranking (D-07).
+export * from './league/index.js';

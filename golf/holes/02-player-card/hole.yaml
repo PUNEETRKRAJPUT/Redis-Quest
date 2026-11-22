@@ -1,0 +1,20 @@
+title: Write a player card
+task: |
+  Create one hash, `player:7`, with exactly these four fields:
+
+  | field     | value        |
+  | --------- | ------------ |
+  | `name`    | Meera Rao    |
+  | `team`    | Hostel Hawks |
+  | `runs`    | 412          |
+  | `wickets` | 9            |
+
+  The hash must hold those four fields and no others.
+par: 4
+checks:
+  - cmd: [HMGET, "player:7", name, team, runs, wickets]
+    equals: [Meera Rao, Hostel Hawks, 412, 9]
+    message: player:7 must hold name, team, runs and wickets with these values
+  - cmd: [HLEN, "player:7"]
+    equals: 4
+    message: player:7 must hold exactly four fields
